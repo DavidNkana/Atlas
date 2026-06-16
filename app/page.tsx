@@ -5,7 +5,8 @@ import {
   SignInButton,
   SignUpButton,
   UserButton,
-  Show,
+  SignedIn,
+  SignedOut,
 } from "@clerk/nextjs";
 
 /**
@@ -101,7 +102,7 @@ export default function HomePage() {
           </span>
         </h1>
         <div className="flex items-center gap-3">
-          <Show when="signed-in">
+          <SignedIn>
             <a
               href="/dashboard"
               className="rounded-md border border-atlas-border bg-atlas-surface px-3 py-1.5 text-xs font-medium text-atlas-text transition-colors hover:border-atlas-accent hover:text-atlas-accent"
@@ -109,8 +110,8 @@ export default function HomePage() {
               Dashboard
             </a>
             <UserButton afterSignOutUrl="/" />
-          </Show>
-          <Show when="signed-out">
+          </SignedIn>
+          <SignedOut>
             <SignInButton mode="modal">
               <button
                 type="button"
@@ -127,7 +128,7 @@ export default function HomePage() {
                 Sign up
               </button>
             </SignUpButton>
-          </Show>
+          </SignedOut>
         </div>
       </header>
 
