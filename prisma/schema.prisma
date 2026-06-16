@@ -1,0 +1,23 @@
+// Prisma schema for Atlas Day 2
+// Database: Supabase Postgres (direct connection)
+// Run: pnpm prisma generate (after DATABASE_URL is set in .env.local)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Question {
+  id           String   @id @default(cuid())
+  userId       String
+  vertical     String
+  questionText String   @db.Text
+  responseJson Json
+  createdAt    DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
