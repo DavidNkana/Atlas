@@ -170,3 +170,26 @@ That is it. No new product code. No new UI. The same prompt box, the same engine
 ## License
 
 Proprietary. © David Nkana. All rights reserved.
+
+
+## Environment Variables
+
+Atlas needs these env vars to run on Vercel. Set them in the Vercel project
+settings (Settings → Environment Variables). Never commit real values to the
+repo. `.env.example` documents placeholder values only.
+
+| Variable | Source | Purpose |
+|---|---|---|
+| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | [Clerk Dashboard](https://dashboard.clerk.com/) → API Keys | Public Clerk key for client-side auth UI |
+| `CLERK_SECRET_KEY` | Clerk Dashboard → API Keys | Server-side Clerk secret (NEVER expose to client) |
+| `NEXT_PUBLIC_SUPABASE_URL` | [Supabase Project Settings](https://supabase.com/dashboard) → API → Project URL | Supabase project URL for client-side use |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Supabase → API → Publishable key (new 2025+ format) | Client-side Supabase key |
+| `SUPABASE_SECRET_KEY` | Supabase → API → Secret key (new 2025+ format) | Server-side Supabase key (NEVER expose to client) |
+| `DATABASE_URL` | Supabase → Settings → Database → Connection string (Direct) | Postgres connection string for Prisma |
+
+Day 3+ will add:
+
+| Variable | Source | Purpose |
+|---|---|---|
+| `MINIMAX_API_KEY` | MiniMax dashboard | AI planner (Day 3) |
+| `NEXT_PUBLIC_MAPBOX_TOKEN` | [Mapbox account](https://account.mapbox.com/access-tokens/) | Map rendering (Day 4) |
