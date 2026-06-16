@@ -1,0 +1,84 @@
+entries:
+  - id: 20260616-194642-test-scaffold-push-92082e3
+    environment: test
+    type: deploy
+    result: success
+    started: 2026-06-16T19:46:00Z
+    completed: 2026-06-16T19:46:54Z
+    duration_seconds: 54
+    deploy_identity:
+      repo: DavidNkana/Atlas
+      branch: main
+      commit_sha: 92082e374f0db64ab466c335d2bc282d993e26ae
+      commit_sha_short: 92082e3
+      commit_message: "feat(atlas): Day 1 scaffold — Next.js 15 + G4 vertical selector"
+      is_root_commit: true
+      parent_commit_sha: 0000000000000000000000000000000000000000
+    push:
+      transport: https
+      remote_url: https://github.com/DavidNkana/Atlas.git
+      auth: x-access-token (git credential, not committed)
+      verified_via: git ls-remote origin main
+      remote_head_matches_local: true
+    files_changed:
+      count: 13
+      list:
+        - .env.example
+        - .gitignore
+        - README.md
+        - app/api/ask/route.ts
+        - app/globals.css
+        - app/layout.tsx
+        - app/page.tsx
+        - docs/superpowers/specs/2026-06-16-atlas-week1-design.md
+        - next.config.js
+        - package.json
+        - postcss.config.js
+        - tailwind.config.ts
+        - tsconfig.json
+    phase_status:
+      setup: success
+      validate_contract: success
+      deploy: success
+      verify_complete: success
+    commands_run:
+      - "git status (working tree clean, branch main, on origin/main)"
+      - "git remote -v (origin -> DavidNkana/Atlas via x-access-token)"
+      - "git log --oneline origin/main -5"
+      - "git show --stat origin/main (13 files in commit 92082e3)"
+      - "git ls-remote origin main (verified remote head = local head = 92082e3)"
+    health_status:
+      git: clean
+      branch_ahead_of_remote: 0
+      branch_behind_remote: 0
+      files_in_commit: 13
+      no_uncommitted_changes: true
+    guardrails_followed:
+      - "No env files (.env) committed — only .env.example with placeholders."
+      - "No secrets in the 13 committed files. GitHub token used for push is in the git remote URL, not a committed value."
+      - "No Vercel deploy triggered directly — auto-deploy is expected to start within ~60s on push (depends on Vercel repo link)."
+      - "No Cloudflare mutation, no DB writes, no DNS/cert/proxy changes."
+      - "No server-package installs, no firewall changes, no docker compose up."
+      - "No direct SSH/scp/rsync. All transport was git over HTTPS to github.com."
+      - "Sysadmin NOT dispatched — bootstrap commit is local + git push only, not a server operation."
+    task:
+      dispatched_by: alex
+      agent: deployment-manager
+      task_id: atlas-day1-scaffold-push
+      risk: low
+      finish_shell: git@atlas-shell
+      loop_tick: 1
+    notes:
+      - "Day-1 scaffold only. No production data, no secrets, no live env vars."
+      - "Next.js 16 deliberately NOT used — pinned to 15.1.4 (latest stable)."
+      - "Clerk keys + Vercel env still pending Chris paste (not blocking Day 1 build)."
+      - "Mapbox token placeholder in .env.example (NEXT_PUBLIC_MAPBOX_TOKEN); real token goes into Vercel env, not committed."
+      - "MiniMax AI integration in app/api/ask/route.ts uses placeholder M3 endpoint; real key goes into Vercel env."
+      - "Design doc at docs/superpowers/specs/2026-06-16-atlas-week1-design.md is the source of truth for Day 2+ roadmap."
+      - "Vercel auto-deploy will trigger on push within ~60 seconds (assuming Vercel repo link exists). If not linked, run `vercel link --repo=DavidNkana/Atlas` once before next push."
+    next_owner: alex
+    next_action: "Confirm Vercel auto-deploy started; await first build URL; surface URL to Chris. Do not run final E2E/UX testing — return to deployment-manager for the deploy handoff line and let Alex dispatch Jobs for browser E2E."
+    handover:
+      contract: TEST_DEPLOYED_READY_FOR_JOBS
+      ready_for_jobs_browser_e2e: false
+      reason: "Vercel auto-deploy is async; Jobs should be dispatched only after build URL is confirmed by Alex."

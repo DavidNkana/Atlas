@@ -2,7 +2,7 @@
   "name": "atlas",
   "version": "0.1.0",
   "private": true,
-  "description": "Project Atlas — An AI-powered Intelligence Engine",
+  "description": "Project Atlas \u2014 An AI-powered Intelligence Engine",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -13,7 +13,8 @@
   "dependencies": {
     "next": "^15.4.0",
     "react": "19.0.0",
-    "react-dom": "19.0.0"
+    "react-dom": "19.0.0",
+    "@clerk/nextjs": "^6.0.0"
   },
   "devDependencies": {
     "@types/node": "22.10.5",
