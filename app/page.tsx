@@ -288,14 +288,25 @@ export default function HomePage() {
 
   // Extracted so the "Ask anyway" override on the vertical-mismatch
   // modal can also call it after the user dismisses the warning.
-  async function doSubmit() {
+  //
+  // Optional `override` argument lets the caller pass fresh values
+  // that should be used INSTEAD of the closed-over state. This
+  // matters for the "Switch to {suggested}" one-click flow: when
+  // the user clicks Switch we update state, but the closure inside
+  // this same handler still has the OLD values. Passing the new
+  // values explicitly here avoids a stale-state submit and a
+  // potential auth race that we were seeing.
+  async function doSubmit(override?: { vertical?: string; question?: string }) {
+    const v = override?.vertical ?? vertical;
+    const q = (override?.question ?? question).trim();
+
     try {
       const res = await fetch("/api/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          vertical,
-          question: question.trim(),
+          vertical: v,
+          question: q,
           model: modelId,
         }),
       });
@@ -345,12 +356,33 @@ export default function HomePage() {
             setMismatchOpen(false);
             setMismatchData(null);
           }}
-          onUseVertical={(v) => {
-            // The suggestion comes from VERTICAL_KEYWORDS and matches
-            // one of our BuiltinVertical values.
-            setVertical(v as any);
+          onUseExample={(newVertical, exampleQuestion) => {
+            // One-click flow: switch vertical, fill the question with
+            // a worked example, then immediately submit. This avoids
+            // the broken intermediate state where the user has to
+            // click a vertical chip AND click Ask again — that path
+            // was hitting an auth race condition where the second
+            // fetch lost the session cookie.
+            //
+            // We update React state AND pass the new values directly
+            // to doSubmit() so the submit doesn't read the stale
+            // closure. Without the explicit override, doSubmit
+            // would POST the OLD vertical/question and then a render
+            // cycle would happen, leaving the UI out of sync with
+            // what the server processed.
+            setVertical(newVertical as any);
+            setQuestion(exampleQuestion);
             setMismatchOpen(false);
             setMismatchData(null);
+            setError(null);
+            setLoading(true);
+            // Fire submit with the explicit new values. The state
+            // setters above are committed before the next render;
+            // doSubmit reads from the override first.
+            void doSubmit({
+              vertical: newVertical,
+              question: exampleQuestion,
+            });
           }}
           onUseCustom={() => {
             setVertical("custom:hospital" as any); // placeholder, opens input

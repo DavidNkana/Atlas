@@ -140,14 +140,26 @@ export function VerticalMismatchModal({
   question,
   currentVertical,
   onClose,
-  onUseVertical,
+  onUseExample,
   onUseCustom,
   onOverride,
 }: {
   question: string;
   currentVertical: string;
   onClose: () => void;
-  onUseVertical: (v: string) => void;
+  /**
+   * Switch to a different vertical AND auto-fill the question with
+   * a worked example. The page sets `vertical = newVertical`,
+   * `question = example`, closes the modal, and immediately calls
+   * doSubmit() so the user gets a one-click flow.
+   *
+   * One-click flow avoids the broken intermediate state where the
+   * user has to manually click the new vertical chip AND click Ask
+   * — that path was hitting an auth race condition where the second
+   * fetch lost the session cookie. Auto-firing the submit right
+   * after the vertical switch keeps the session context intact.
+   */
+  onUseExample: (vertical: string, example: string) => void;
   onUseCustom: () => void;
   onOverride: () => void;
 }) {
@@ -211,6 +223,11 @@ export function VerticalMismatchModal({
     ],
   };
   const examples = examplePrompts[suggested] ?? [];
+  // The default example for the Switch to button. Falls back to the
+  // user's original question text if we don't have a tailored example
+  // for the suggested vertical (very unlikely with the table above,
+  // but defensive).
+  const defaultExample = examples[0] ?? question;
 
   return (
     <div
@@ -301,7 +318,7 @@ export function VerticalMismatchModal({
                 <li key={i}>
                   <button
                     type="button"
-                    onClick={() => onUseVertical(suggested)}
+                    onClick={() => onUseExample(suggested, ex)}
                     className="w-full rounded-md border border-atlas-border bg-atlas-bg px-3 py-2 text-left text-xs text-atlas-text transition-colors hover:border-atlas-accent hover:bg-atlas-surface2"
                   >
                     {ex}
@@ -329,7 +346,7 @@ export function VerticalMismatchModal({
           </button>
           <button
             type="button"
-            onClick={() => onUseVertical(suggested)}
+            onClick={() => onUseExample(suggested, defaultExample)}
             className="rounded-md bg-atlas-accent px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-atlas-accent2"
           >
             Switch to {suggestedLabel}
