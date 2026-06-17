@@ -8,21 +8,19 @@ import {
   SignedIn,
   SignedOut,
 } from "@clerk/nextjs";
+import { MODEL_INFO } from "@/lib/models/registry";
 
 /**
- * Day 2: G4 prompt box + Clerk auth UI in header.
+ * Day 3: G4 prompt box + Clerk auth UI in header + model picker.
  *
- * The user picks a vertical (gas station / restaurant / warehouse / retail),
- * types a question, and clicks Submit. The form POSTs to /api/ask.
+ * The user picks a model + vertical, types a question, and clicks Submit.
+ * The form POSTs to /api/ask with { model, vertical, question }.
  *
  * If signed out: header shows Sign in / Sign up buttons (top-right).
  * If signed in: header shows UserButton (top-right) and Dashboard link.
  *
- * Day 3 will wire the response into a real MiniMax call.
  * Day 4 will render the response on a Mapbox map.
  * Day 5 will fire a real connector.
- *
- * For now: the response is a stub JSON rendered in a <pre> block.
  */
 
 const VERTICALS = [
@@ -37,6 +35,13 @@ type Vertical = (typeof VERTICALS)[number]["value"];
 type AskResponse = {
   id?: string;
   status: string;
+  model?: {
+    id: string;
+    displayName: string;
+    provider: string;
+    free: boolean;
+    fallbackUsed: boolean;
+  };
   vertical: string;
   question: string;
   echo: string;
@@ -51,6 +56,7 @@ type AskResponse = {
 
 export default function HomePage() {
   const [vertical, setVertical] = useState<Vertical>("gas_station");
+  const [modelId, setModelId] = useState<string>(MODEL_INFO[0]?.id ?? "gemini-flash");
   const [question, setQuestion] = useState<string>("Where in Sandton?");
   const [response, setResponse] = useState<AskResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
@@ -66,7 +72,7 @@ export default function HomePage() {
       const res = await fetch("/api/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ vertical, question: question.trim() }),
+        body: JSON.stringify({ vertical, question: question.trim(), model: modelId }),
       });
 
       if (res.status === 401) {
@@ -140,6 +146,29 @@ export default function HomePage() {
         <form onSubmit={onSubmit} className="space-y-4">
           <div>
             <label
+              htmlFor="model"
+              className="mb-1 block text-xs font-medium text-atlas-muted"
+            >
+              Model
+            </label>
+            <select
+              id="model"
+              value={modelId}
+              onChange={(e) => setModelId(e.target.value)}
+              className="w-full rounded-md border border-atlas-border bg-atlas-surface2 px-3 py-2 text-sm text-atlas-text focus:border-atlas-accent focus:outline-none"
+            >
+              {MODEL_INFO.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.displayName} · {m.provider}{" "}
+                  <span className="text-atlas-muted">
+                    {m.free ? "(free)" : "(paid)"}
+                  </span>
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label
               htmlFor="vertical"
               className="mb-1 block text-xs font-medium text-atlas-muted"
             >
@@ -209,7 +238,7 @@ export default function HomePage() {
       {/* Footer */}
       <footer className="mt-auto pt-12 text-center text-xs text-atlas-muted">
         <p>
-          Atlas · Week 1 Day 2 · Auth live · {new Date().getFullYear()}
+          Atlas · Week 1 Day 3 · Model registry live · {new Date().getFullYear()}
         </p>
       </footer>
     </main>
