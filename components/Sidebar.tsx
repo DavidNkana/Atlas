@@ -387,19 +387,38 @@ export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boole
         title="Delete this question?"
         body={
           deleteTarget
-            ? `This will remove "${truncate(deleteTarget.questionText, 60)}" from your history. The question is still saved in the database and can be restored later.`
+            ? `This will permanently remove "${truncate(deleteTarget.questionText, 60)}" from your history. This cannot be undone.`
             : ""
         }
         confirmLabel="Delete"
         danger
-        onConfirm={() => {
+        onConfirm={async () => {
           if (deleteTarget) {
-            setHiddenIds((prev) => [...prev, deleteTarget.id]);
-            // Also unpin if it was pinned
-            if (pins.isPinned(deleteTarget.id)) {
-              pins.unpin(deleteTarget.id);
-            }
+            const id = deleteTarget.id;
+            // Optimistic: hide the row from local state immediately so
+            // the UI feels instant. If the server call fails, we add
+            // the id back and show an error.
+            setHiddenIds((prev) => [...prev, id]);
+            if (pins.isPinned(id)) pins.unpin(id);
             setDeleteTarget(null);
+
+            try {
+              const res = await fetch(`/api/questions/${id}`, {
+                method: "DELETE",
+              });
+              if (!res.ok) {
+                // Roll back the optimistic hide on failure
+                setHiddenIds((prev) => prev.filter((x) => x !== id));
+                console.warn(
+                  `[atlas] delete failed: server returned ${res.status}`
+                );
+              }
+            } catch (e) {
+              setHiddenIds((prev) => prev.filter((x) => x !== id));
+              console.warn(
+                `[atlas] delete failed: ${e instanceof Error ? e.message : String(e)}`
+              );
+            }
           }
         }}
         onCancel={() => setDeleteTarget(null)}
