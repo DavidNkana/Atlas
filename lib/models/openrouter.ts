@@ -32,10 +32,21 @@ function makeOpenRouterModel(
   id: string,
   hardcodedDisplayName: string,
   description: string,
-  upstreamModelId: string
+  upstreamModelId: string,
+  brandColor: string,
+  logoPath: string
 ): Model {
   return {
-    info: { id, displayName: hardcodedDisplayName, provider: 'openrouter', free: true, description },
+    info: {
+      id,
+      displayName: hardcodedDisplayName,
+      shortName: hardcodedDisplayName,
+      provider: 'openrouter',
+      free: true,
+      description,
+      brandColor,
+      logoPath,
+    },
     isAvailable: () => !!process.env.OPENROUTER_API_KEY,
     call: async (req: ModelRequest): Promise<ModelResponse> => {
       try {
@@ -106,12 +117,20 @@ export const llamaFree: Model = makeOpenRouterModel(
   'llama-free',
   'Llama 3.3 70B (free)',
   'Meta Llama 3.3 70B Instruct via OpenRouter free tier. Dynamically discovers currently-free models so slugs do not go stale.',
-  'meta-llama/llama-3.3-70b-instruct:free'
+  'meta-llama/llama-3.3-70b-instruct:free',
+  // Meta blue
+  '#0866FF',
+  // Simplified Meta infinity mark
+  'M5.5 12C5.5 8.4 8.4 5.5 12 5.5C15.6 5.5 18.5 8.4 18.5 12C18.5 15.6 15.6 18.5 12 18.5C8.4 18.5 5.5 15.6 5.5 12ZM2 12C2 17.5 6.5 22 12 22C17.5 22 22 17.5 22 12C22 6.5 17.5 2 12 2C6.5 2 2 6.5 2 12Z'
 );
 
 export const mistralFree: Model = makeOpenRouterModel(
   'mistral-free',
   'Qwen 2.5 72B (free)',
   'Qwen 2.5 72B Instruct via OpenRouter free tier. Dynamically discovers currently-free models so slugs do not go stale.',
-  'qwen/qwen-2.5-72b-instruct:free'
+  'qwen/qwen-2.5-72b-instruct:free',
+  // Qwen purple-ish
+  '#7C3AED',
+  // Simplified Qwen / Mistral flame
+  'M12 2C12 2 5 9 5 14C5 17.9 8.1 21 12 21C15.9 21 19 17.9 19 14C19 9 12 2 12 2Z'
 );

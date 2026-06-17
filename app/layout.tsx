@@ -7,7 +7,9 @@ export const metadata: Metadata = {
   description:
     "Atlas blends multiple data sources, models, and live signals to help land developers, property investors, and builders find the right plot in 30 seconds instead of 6 weeks.",
   icons: {
-    icon: "/favicon.ico",
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+    ],
   },
 };
 

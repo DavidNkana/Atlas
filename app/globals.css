@@ -15,6 +15,15 @@ body {
   min-height: 100%;
 }
 
+/* Day 8 redesign: light mode preview. Triggered by the Settings drawer
+   when the user picks "light" or "system" + OS preference is light. The
+   palette mirrors the dark theme but with white surfaces. */
+html.atlas-light,
+html.atlas-light body {
+  background: #fafafa;
+  color: #18181b;
+}
+
 /* Subtle focus ring, Atlas brand color */
 :focus-visible {
   outline: 2px solid #6366f1;

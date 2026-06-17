@@ -52,9 +52,14 @@ export const curatedStub: Model = {
   info: {
     id: 'curated-stub',
     displayName: 'Curated stub (no API)',
+    shortName: 'Curated stub',
     provider: 'stub',
     free: true,
     description: 'Hand-crafted demonstration response. Works without any API key.',
+    brandColor: '#6366F1',
+    // Simplified Atlas compass mark
+    logoPath:
+      'M12 2L20 12L12 22L4 12L12 2ZM12 6.5L7.5 12L12 17.5L16.5 12L12 6.5Z',
   },
   isAvailable: () => true,
   call: async (req: ModelRequest): Promise<StubModelResponse> => {

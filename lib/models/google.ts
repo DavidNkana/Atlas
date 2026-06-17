@@ -16,10 +16,15 @@ function buildPrompt(req: ModelRequest): string {
 export const geminiFlash: Model = {
   info: {
     id: 'gemini-flash',
-    displayName: 'Gemini 3.5 Flash',
+    displayName: 'Gemini 3.5 Flash (free)',
+    shortName: 'Gemini 3.5 Flash',
     provider: 'google',
     free: true,
     description: 'Google Gemini 3.5 Flash. Free tier: 15 RPM / 1500 RPD. Best free default.',
+    brandColor: '#4285F4',
+    // Simplified Gemini sparkle mark
+    logoPath:
+      'M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z M19 14L19.7 16.3L22 17L19.7 17.7L19 20L18.3 17.7L16 17L18.3 16.3L19 14Z M5 14L5.5 15.5L7 16L5.5 16.5L5 18L4.5 16.5L3 16L4.5 15.5L5 14Z',
   },
   isAvailable: () => !!process.env.GEMINI_API_KEY,
   call: async (req: ModelRequest): Promise<ModelResponse> => {

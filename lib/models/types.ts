@@ -34,9 +34,22 @@ export type ModelResponse =
 export interface ModelInfo {
   id: string;
   displayName: string;
+  /** Short label used in compact UI (e.g. the command-bar picker). */
+  shortName: string;
   provider: 'google' | 'openai' | 'openrouter' | 'stub';
   free: boolean;
   description: string;
+  /**
+   * Brand color hex (#rrggbb). Used by the model icon + picker chip.
+   * Atlas brand uses indigo for the default stub.
+   */
+  brandColor: string;
+  /**
+   * Inline SVG path data for the model's brand icon, drawn on a 24x24
+   * viewBox. We inline the SVG so we don't need any image hosting, CDN,
+   * or external requests. Each provider supplies a simplified mark.
+   */
+  logoPath: string;
 }
 
 export interface Model {
