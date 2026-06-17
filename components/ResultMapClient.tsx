@@ -296,11 +296,57 @@ export default function ResultMapClient({
             </p>
           )}
         </div>
+        {/* Analysis summary — quick stats about the question/answer */}
         <div>
-          <h3 className="mb-2 text-xs font-medium text-zinc-100">About</h3>
-          <p className="text-xs text-zinc-300">
-            Click any site in the list to fly the map to it. Click a marker to
-            open its rationale popup. The map auto-fits to include every
+          <h3 className="mb-2 text-xs font-medium text-zinc-100">Analysis</h3>
+          <div className="grid grid-cols-2 gap-2 text-[11px]">
+            <div className="rounded-md border border-zinc-800 bg-zinc-800 px-2.5 py-2">
+              <div className="text-[9px] font-semibold uppercase tracking-wider text-zinc-500">
+                Sites ranked
+              </div>
+              <div className="mt-0.5 font-mono text-sm font-semibold text-zinc-100">
+                {rankedSites.length}
+              </div>
+            </div>
+            <div className="rounded-md border border-zinc-800 bg-zinc-800 px-2.5 py-2">
+              <div className="text-[9px] font-semibold uppercase tracking-wider text-zinc-500">
+                On the map
+              </div>
+              <div className="mt-0.5 font-mono text-sm font-semibold text-zinc-100">
+                {rankedSites.length - missingCoords}
+                <span className="ml-1 text-[10px] font-normal text-zinc-500">
+                  / {rankedSites.length}
+                </span>
+              </div>
+            </div>
+            <div className="rounded-md border border-zinc-800 bg-zinc-800 px-2.5 py-2">
+              <div className="text-[9px] font-semibold uppercase tracking-wider text-zinc-500">
+                Signals used
+              </div>
+              <div className="mt-0.5 font-mono text-sm font-semibold text-zinc-100">
+                {rankedSites.reduce(
+                  (acc, s) => acc + (s.signals?.length ?? 0),
+                  0
+                )}
+              </div>
+            </div>
+            <div className="rounded-md border border-zinc-800 bg-zinc-800 px-2.5 py-2">
+              <div className="text-[9px] font-semibold uppercase tracking-wider text-zinc-500">
+                Avg confidence
+              </div>
+              <div className="mt-0.5 font-mono text-sm font-semibold text-zinc-100">
+                {rankedSites.length > 0
+                  ? (
+                      rankedSites.reduce((acc, s) => acc + s.confidence, 0) /
+                      rankedSites.length
+                    ).toFixed(2)
+                  : "—"}
+              </div>
+            </div>
+          </div>
+          <p className="mt-3 text-[10px] leading-relaxed text-zinc-500">
+            Click any site to fly the map to it. Click a marker to see the
+            AI&apos;s rationale. The map auto-fits to include every
             marker.
           </p>
         </div>
