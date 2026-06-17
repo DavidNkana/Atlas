@@ -2,11 +2,11 @@ import type { Model, ModelRequest, ModelResponse, RankedSite, Vertical } from '.
 
 const STUB_RESPONSES: Record<Vertical, RankedSite[]> = {
   gas_station: [
-    { rank: 1, name: 'Sandton City precinct', score: 0.87, confidence: 0.74, rationale: 'High-density office corridor with strong weekday traffic; existing fuel stations at capacity. [curated stub]' },
-    { rank: 2, name: 'Rosebank Mall area', score: 0.81, confidence: 0.71, rationale: 'Mixed retail and Gautrain feeder traffic; recent commercial uplift. [curated stub]' },
-    { rank: 3, name: 'Midrand N1 corridor', score: 0.78, confidence: 0.69, rationale: 'Logistics and commuter traffic on the N1 highway. [curated stub]' },
-    { rank: 4, name: 'Fourways Crossing', score: 0.74, confidence: 0.66, rationale: 'Growing residential catchment with limited in-fill fuel supply. [curated stub]' },
-    { rank: 5, name: 'Randburg CBD', score: 0.69, confidence: 0.62, rationale: 'Under-served relative to through-traffic density. [curated stub]' },
+    { rank: 1, name: 'Great East Road, East Park Mall Area', score: 0.95, confidence: 0.9, rationale: 'High daily traffic volumes; main artery connecting the CBD to the airport and affluent residential zones. [curated stub]', lat: -15.3875, lng: 28.3228 },
+    { rank: 2, name: 'Kafue Road, Makeni Area', score: 0.92, confidence: 0.88, rationale: 'Critical southern transit corridor with high volumes of local commuters and heavy freight. [curated stub]', lat: -15.4082, lng: 28.2866 },
+    { rank: 3, name: 'Leopards Hill Road, New Kasama', score: 0.87, confidence: 0.85, rationale: 'Rapidly growing high-income residential area with high vehicle ownership but sparse fuel options. [curated stub]', lat: -15.3691, lng: 28.3514 },
+    { rank: 4, name: 'Lumumba Road, Industrial Area', score: 0.84, confidence: 0.8, rationale: 'Highly active industrial artery with steady B2B fueling demand from commercial fleets. [curated stub]', lat: -15.4102, lng: 28.3175 },
+    { rank: 5, name: 'Great North Road, Kabangwe', score: 0.81, confidence: 0.82, rationale: 'Primary route to the Copperbelt province; captures long-distance travelers and northern commuter traffic. [curated stub]', lat: -15.3589, lng: 28.2645 },
   ],
   restaurant: [
     { rank: 1, name: 'Maboneng Precinct', score: 0.84, confidence: 0.72, rationale: 'High foot traffic, cultural anchor, evening economy momentum. [curated stub]' },

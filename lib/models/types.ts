@@ -6,6 +6,8 @@ export interface RankedSite {
   score: number;
   confidence: number;
   rationale: string;
+  lat?: number;
+  lng?: number;
 }
 
 export interface ModelRequest {
