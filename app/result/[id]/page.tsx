@@ -87,6 +87,10 @@ type ResponseBody = {
   plan?: Plan;
   connectorsRun?: ConnectorRun[];
   connectorsError?: string;
+  // Day 6 — city-aware stub metadata surfaced for the banner.
+  city?: string;
+  country?: string;
+  stubReason?: string;
 };
 
 function statusBorder(status: string): string {
@@ -120,6 +124,11 @@ export default async function ResultPage({
     : [];
   const connectorsError = responseBody.connectorsError;
   const plan = responseBody.plan;
+  // Day 6 — stub_demo banner surfaces the detected city + reason.
+  const responseStatus = responseBody.status;
+  const stubCity = responseBody.city;
+  const stubCountry = responseBody.country;
+  const stubReason = responseBody.stubReason;
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
@@ -153,6 +162,23 @@ export default async function ResultPage({
             </strong>{" "}
             <span className="text-amber-400">
               {responseBody.model.modelError}
+            </span>
+          </div>
+        )}
+
+        {responseStatus === "stub_demo" && (
+          <div
+            role="alert"
+            data-testid="atlas-stub-demo-banner"
+            className="mb-6 rounded-md border border-amber-800 bg-amber-950 px-4 py-3 text-xs text-amber-200"
+          >
+            <strong className="font-semibold text-amber-100">
+              Demo placeholder
+              {stubCity ? ` — ${stubCity}${stubCountry ? `, ${stubCountry}` : ""}` : ""}:
+            </strong>{" "}
+            <span className="text-amber-200">
+              {stubReason ??
+                "AI models are currently overloaded. This is a city-specific demo placeholder. Try a real model in a few minutes."}
             </span>
           </div>
         )}
@@ -207,7 +233,13 @@ export default async function ResultPage({
         )}
 
         <section className="mb-6">
-          <ResultMapClient rankedSites={rankedSites} />
+          <ResultMapClient
+            rankedSites={rankedSites}
+            status={responseStatus}
+            city={stubCity}
+            country={stubCountry}
+            stubReason={stubReason}
+          />
         </section>
 
         <section>

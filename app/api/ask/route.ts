@@ -3,7 +3,7 @@ import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/db";
 import { getModel, MODEL_INFO, ALL_MODELS } from "@/lib/models/registry";
 import type { Model } from "@/lib/models/types";
-import { curatedStub } from "@/lib/models/stub";
+import { curatedStub, type StubPayload } from "@/lib/models/stub";
 import type { Vertical, ModelInfo } from "@/lib/models/types";
 import { getConnector } from "@/lib/connectors/registry";
 import type { Signal } from "@/lib/connectors/types";
@@ -137,6 +137,12 @@ type AskResponse = {
   connectorsRun?: ConnectorRun[];
   /** Day 5 — set when every connector failed (UI shows amber banner). */
   connectorsError?: string;
+  /** Day 6 — when status === "stub_demo", the city we detected. */
+  city?: string;
+  /** Day 6 — when status === "stub_demo", the country we detected. */
+  country?: string;
+  /** Day 6 — human-readable explanation of why the stub fired. */
+  stubReason?: string;
 };
 
 const SUPPORTED_VERTICALS = new Set<Vertical>([
@@ -256,7 +262,11 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   let activeModel: Model;
   let activeInfo: ModelInfo;
   let fallbackUsed = false;
-  let responseStatus: "ok" | "stub_fallback" = "ok";
+  let responseStatus: "ok" | "stub_fallback" | "stub_demo" = "ok";
+  // Day 6 — populated when the stub returns its __stub payload. The UI
+  // banner uses these to tell the user "this is a city-specific demo
+  // placeholder" and to render the city + country.
+  let stubMeta: StubPayload | null = null;
 
   // Day 5 hotfix — track every model id we attempted so the user sees
   // exactly what was tried in the response.
@@ -314,7 +324,10 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   // error } for the fallback chain.
   const callModel = async (
     m: Model,
-  ): Promise<{ ok: true; sites: RankedSite[]; raw?: string } | { ok: false; error: string }> => {
+  ): Promise<
+    | { ok: true; sites: RankedSite[]; raw?: string; __stub?: StubPayload }
+    | { ok: false; error: string }
+  > => {
     let result;
     try {
       result = await withTimeout(
@@ -338,7 +351,12 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
       return { ok: false, error: `model:${m.info.id} ${r.error}` };
     }
     if (r.ok === true && Array.isArray(r.ranked_sites)) {
-      return { ok: true, sites: r.ranked_sites, raw: r.raw };
+      return {
+        ok: true,
+        sites: r.ranked_sites,
+        raw: r.raw,
+        __stub: r.__stub,
+      };
     }
     // Legacy shape (no ok flag) — support existing callers that still
     // return { ranked_sites } without ok:true.
@@ -355,6 +373,13 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
         if (result.ok) {
           rankedSites = result.sites;
           raw = result.raw;
+          // Day 6 — the stub tags its result with __stub. We capture it
+          // so the response can surface status:"stub_demo" + city +
+          // country + stubReason. Real models never set __stub.
+          if (result.__stub) {
+            stubMeta = result.__stub;
+            responseStatus = "stub_demo";
+          }
           return;
         }
         // Primary model returned { ok: false, error } — no exception,
@@ -390,6 +415,10 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
             activeModel = fallback;
             fallbackUsed = true;
             cascaded = true;
+            if (fbResult.__stub) {
+              stubMeta = fbResult.__stub;
+              responseStatus = "stub_demo";
+            }
             console.log(
               `[/api/ask] fallback chain served by ${fallback.info.id} after ${activeInfo.id} failed`
             );
@@ -413,6 +442,13 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
           if (stubResult.ok) {
             rankedSites = stubResult.sites;
             raw = stubResult.raw;
+            // Day 6 — promote status to "stub_demo" and capture city
+            // metadata. This is the path that fires when every real
+            // model is unavailable (Gemini 500, OpenRouter rate limit).
+            if (stubResult.__stub) {
+              stubMeta = stubResult.__stub;
+              responseStatus = "stub_demo";
+            }
           } else {
             // Should never happen — stub is pure. Defensive fallback.
             console.error("[/api/ask] curated-stub failed (should never happen):", stubResult.error);
@@ -422,7 +458,9 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
           activeInfo = curatedStub.info;
           activeModel = curatedStub;
           fallbackUsed = true;
-          responseStatus = "stub_fallback";
+          if (responseStatus !== "stub_demo") {
+            responseStatus = "stub_fallback";
+          }
         }
 
         // Surface every error in the chain (newline-separated) for debugging.
@@ -442,11 +480,17 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
         if (stubResult.ok) {
           rankedSites = stubResult.sites;
           raw = stubResult.raw;
+          if (stubResult.__stub) {
+            stubMeta = stubResult.__stub;
+            responseStatus = "stub_demo";
+          }
         }
         activeInfo = curatedStub.info;
         activeModel = curatedStub;
         fallbackUsed = true;
-        responseStatus = "stub_fallback";
+        if (responseStatus !== "stub_demo") {
+          responseStatus = "stub_fallback";
+        }
         modelError = `unexpected_step_a_error: ${msg}`;
       }
     })(), STEP_A_TIMEOUT_MS, "step_a");
@@ -604,6 +648,17 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
     // connector error. Both are surfaced so the UI can show the amber
     // banner without throwing.
     responseBody.connectorsError = connectorsError;
+  }
+
+  // Day 6 — surface the city-aware stub metadata so the UI can show
+  // a clear "AI overloaded, here's a city-specific demo placeholder"
+  // banner. The map and sidebar still render the ranked_sites as
+  // normal — this is purely informational metadata on top.
+  if (stubMeta) {
+    const sm: StubPayload = stubMeta;
+    responseBody.city = sm.city;
+    responseBody.country = sm.country;
+    responseBody.stubReason = sm.stubReason;
   }
 
   // 7. Persist to Supabase via Prisma (best-effort).

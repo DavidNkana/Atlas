@@ -74,8 +74,16 @@ function statusColor(status: string): string {
 
 export default function ResultMapClient({
   rankedSites,
+  status,
+  city,
+  country,
+  stubReason,
 }: {
   rankedSites: RankedSite[];
+  status?: string;
+  city?: string;
+  country?: string;
+  stubReason?: string;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -185,6 +193,22 @@ export default function ResultMapClient({
 
   return (
     <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-3 text-zinc-100">
+      {status === "stub_demo" && (
+        <div
+          role="alert"
+          data-testid="atlas-stub-demo-banner"
+          className="mb-3 rounded-md border border-amber-800 bg-amber-950 px-3 py-2 text-xs text-amber-200"
+        >
+          <strong className="font-semibold text-amber-100">
+            Demo placeholder
+            {city ? ` — ${city}${country ? `, ${country}` : ""}` : ""}:
+          </strong>{" "}
+          <span className="text-amber-200">
+            {stubReason ??
+              "AI models are currently overloaded. This is a city-specific demo placeholder. Try a real model in a few minutes."}
+          </span>
+        </div>
+      )}
       {tokenMissing && (
         <div
           role="alert"
