@@ -8,10 +8,10 @@ function buildPrompt(req: ModelRequest): string {
 export const geminiFlash: Model = {
   info: {
     id: 'gemini-flash',
-    displayName: 'Gemini 1.5 Flash',
+    displayName: 'Gemini 2.0 Flash',
     provider: 'google',
     free: true,
-    description: 'Google Gemini 1.5 Flash. Free tier: 15 RPM / 1500 RPD. Best free default.',
+    description: 'Google Gemini 2.0 Flash. Free tier: 15 RPM / 1500 RPD. Best free default.',
   },
   isAvailable: () => !!process.env.GEMINI_API_KEY,
   call: async (req: ModelRequest): Promise<ModelResponse> => {
@@ -19,7 +19,7 @@ export const geminiFlash: Model = {
     if (!key) throw new Error('GEMINI_API_KEY not set');
     const genAI = new GoogleGenerativeAI(key);
     const model = genAI.getGenerativeModel({
-      model: 'gemini-1.5-flash',
+      model: 'gemini-2.0-flash',
       generationConfig: { responseMimeType: 'application/json' },
     });
     try {
