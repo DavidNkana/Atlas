@@ -148,11 +148,24 @@ export default function HomePage() {
         </div>
       </header>
 
+      {/* Hero */}
+      <section className="mb-8">
+        <h2 className="mb-2 text-3xl font-semibold tracking-tight text-atlas-text">
+          Atlas
+        </h2>
+        <p className="mb-1 text-sm text-atlas-muted">
+          AI answers where to build, where to invest, where to grow.
+        </p>
+        <p className="text-xs text-atlas-muted">
+          Atlas blends multiple data sources, models, and live signals into one answer.
+        </p>
+      </section>
+
       {/* Prompt box (G4) */}
       <section className="rounded-lg border border-atlas-border bg-atlas-surface p-6">
-        <h2 className="mb-4 text-sm font-medium text-atlas-muted">
-          Ask Atlas
-        </h2>
+        <h3 className="mb-4 text-sm font-medium text-atlas-muted">
+          What are you looking for?
+        </h3>
         <form onSubmit={onSubmit} className="space-y-4">
           <div>
             <label
@@ -219,7 +232,7 @@ export default function HomePage() {
             disabled={loading || !question.trim()}
             className="w-full rounded-md bg-atlas-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-atlas-accent2 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {loading ? "Asking Atlas…" : "Ask Atlas"}
+            {loading ? "Atlas is thinking…" : "Ask Atlas"}
           </button>
         </form>
       </section>
@@ -247,8 +260,21 @@ export default function HomePage() {
 
       {/* Footer */}
       <footer className="mt-auto pt-12 text-center text-xs text-atlas-muted">
-        <p>
-          Atlas · Week 1 Day 3 · Model registry live · {new Date().getFullYear()}
+        <p className="mb-2">
+          Atlas · Intelligence for African Real Estate · {new Date().getFullYear()}
+        </p>
+        <p className="space-x-3">
+          <a href="/land" className="hover:text-atlas-accent">
+            Land
+          </a>
+          <span aria-hidden="true">·</span>
+          <a href="/demo" className="hover:text-atlas-accent">
+            For investors
+          </a>
+          <span aria-hidden="true">·</span>
+          <a href="/dashboard" className="hover:text-atlas-accent">
+            Dashboard
+          </a>
         </p>
       </footer>
     </main>

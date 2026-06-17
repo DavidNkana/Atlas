@@ -3,8 +3,9 @@ import { ClerkProvider } from "@clerk/nextjs";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Atlas — Intelligence Engine",
-  description: "An AI-powered Intelligence Engine for complex real-world questions.",
+  title: "Atlas — Intelligence for African Real Estate",
+  description:
+    "Atlas blends multiple data sources, models, and live signals to help land developers, property investors, and builders find the right plot in 30 seconds instead of 6 weeks.",
   icons: {
     icon: "/favicon.ico",
   },
