@@ -3,7 +3,7 @@
 > A horizontal AI engine that answers complex real-world questions by combining structured APIs, browser automation, and AI reasoning.
 
 **Repo:** [DavidNkana/Atlas](https://github.com/DavidNkana/Atlas)
-**Status:** Week 1, Day 1 (scaffold live)
+**Status:** Week 1, Day 3 (model registry live)
 **Owner:** Chris + Alex
 
 ---
@@ -29,9 +29,9 @@ The only thing that changes is which connectors the planner selects and how the 
 
 | Day | Deliverable | What it proves |
 |---|---|---|
-| **Day 1 (today)** | A page with a prompt box that talks to a Next.js route handler returning stub JSON | The deploy pipeline works |
+| **Day 1** | A page with a prompt box that talks to a Next.js route handler returning stub JSON | The deploy pipeline works |
 | **Day 2** | Sign-in (Clerk) + Postgres (Supabase) — questions persist | Auth + database are wired |
-| **Day 3** | Prompt box calls MiniMax, real AI answer back | The AI integration works |
+| **Day 3** | Pluggable model registry: Gemini + OpenRouter (Llama, Mistral) + curated stub | The AI integration is vendor-agnostic |
 | **Day 4** | Result page renders a Mapbox map | The map integration works |
 | **Day 5** | A real connector stub fires, returns a `Signal`, scoring engine ranks it | The horizontal engine is real and demoable |
 | **Days 6–7** | Polish, real-data experiments, E2E test, Christopher-facing demo | The pipeline is production-grade |
@@ -45,7 +45,7 @@ The only thing that changes is which connectors the planner selects and how the 
 - **Frontend:** Next.js 15 (App Router), React 19, TypeScript, Tailwind CSS, shadcn/ui (Week 2)
 - **Backend:** Next.js Route Handlers, Prisma ORM (Day 2), PostgreSQL via Supabase (Day 2)
 - **Caching:** Upstash Redis (Week 2)
-- **AI:** MiniMax 3 (Day 3), stronger reasoning models for premium tier (Week 2+)
+- **AI:** Pluggable model registry (Day 3) — Google Gemini (free default), OpenRouter (Llama, Mistral, free), curated stub (zero-config), OpenAI (paid tier, Week 2+)
 - **Browser automation:** Browse AI (Week 2) + Playwright (Week 2+)
 - **Auth:** Clerk (Day 2)
 - **Maps:** Mapbox GL JS (Day 4)
@@ -167,6 +167,53 @@ That is it. No new product code. No new UI. The same prompt box, the same engine
 
 ---
 
+## Model registry (Day 3)
+
+Atlas uses a **pluggable model registry** — the same prompt interface for every vendor, swappable per request. Adding a new AI vendor means dropping one file in `lib/models/` and registering it in `lib/models/registry.ts`. No route handler changes. No UI changes.
+
+### Models shipped in Day 3
+
+| Model id | Display name | Vendor | Free? | Rate limit | Env var |
+|---|---|---|---|---|---|
+| `gemini-flash` | Gemini 1.5 Flash | Google AI Studio | ✅ | 15 RPM / 1500 RPD | `GEMINI_API_KEY` |
+| `llama-free` | Llama 3.1 8B (free) | OpenRouter | ✅ | 20 RPM / 50 RPD | `OPENROUTER_API_KEY` |
+| `mistral-free` | Mistral 7B (free) | OpenRouter | ✅ | 20 RPM / 50 RPD | `OPENROUTER_API_KEY` |
+| `curated-stub` | Curated stub (no API) | Atlas (hand-crafted) | ✅ unlimited | none | _(none)_ |
+
+### Default + fallback behavior
+
+- **Default model**: `gemini-flash` — best free tier (15 RPM is plenty for a Week 1 demo).
+- **Fallback chain**: if the requested model throws (rate limit, network error, missing key, bad JSON), `/api/ask` silently falls back to `curated-stub` and sets `response.status = "stub_fallback"` + `response.model.fallbackUsed = true`. The user never sees a 500.
+- **Stub fallback also triggers when**: the requested model id is unknown, or the env var for the requested model is not set in Vercel.
+- **`curated-stub` always works**: no env var required, used for demos and for the curl smoke tests below.
+
+### Adding a new vendor (e.g. OpenAI Week 2+)
+
+The pattern is mechanical:
+
+1. **Create `lib/models/<vendor>.ts`** — export a `Model` object implementing the interface from `lib/models/types.ts`:
+   ```ts
+   import type { Model, ModelRequest, ModelResponse } from './types';
+   export const myNewModel: Model = {
+     info: { id: 'my-model', displayName: 'My Model', provider: 'openai', free: false, description: '...' },
+     isAvailable: () => !!process.env.MY_VENDOR_API_KEY,
+     call: async (req: ModelRequest): Promise<ModelResponse> => { ... },
+   };
+   ```
+2. **Register in `lib/models/registry.ts`** — add it to the `ALL_MODELS` array.
+3. **Add env var to `.env.example`** — `MY_VENDOR_API_KEY=..._REPLACE_ME`.
+4. **Done.** The dropdown auto-includes it (driven by `MODEL_INFO`), the fallback chain auto-protects it, and the registry handles unknown-id errors.
+
+### Why this matters
+
+A pluggable registry means:
+
+- Atlas never locks into one AI vendor. If Google raises Gemini prices, swap defaults in 30 seconds.
+- Premium tier (Week 2+) becomes a one-liner: "if user clicked Premium, use `gpt-4o`, otherwise `gemini-flash`". The `/api/ask` route already takes a `model` parameter.
+- Cost ceilings are enforceable: drop a vendor that's too expensive from `ALL_MODELS`, the UI just stops offering it.
+
+---
+
 ## License
 
 Proprietary. © David Nkana. All rights reserved.
@@ -191,5 +238,7 @@ Day 3+ will add:
 
 | Variable | Source | Purpose |
 |---|---|---|
-| `MINIMAX_API_KEY` | MiniMax dashboard | AI planner (Day 3) |
+| `GEMINI_API_KEY` | [Google AI Studio](https://aistudio.google.com/apikey) | Gemini 1.5 Flash — default free model. Free tier, no card required. |
+| `OPENROUTER_API_KEY` | [OpenRouter](https://openrouter.ai/keys) | Llama 3.1 8B (free) + Mistral 7B (free) entries in the dropdown. Free credits on signup. |
+| `OPENAI_API_KEY` | [OpenAI dashboard](https://platform.openai.com/api-keys) | `gpt-4o-mini` and `gpt-4o` (Week 2+, paid tier). |
 | `NEXT_PUBLIC_MAPBOX_TOKEN` | [Mapbox account](https://account.mapbox.com/access-tokens/) | Map rendering (Day 4) |
