@@ -3,7 +3,8 @@
 // Run: pnpm prisma generate (after DATABASE_URL is set in .env.local)
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
 datasource db {
