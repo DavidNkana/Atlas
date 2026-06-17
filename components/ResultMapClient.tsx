@@ -38,6 +38,7 @@ export default function ResultMapClient({
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
   const [missingCoords, setMissingCoords] = useState<number>(0);
+  const [tokenMissing, setTokenMissing] = useState<boolean>(false);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -46,6 +47,7 @@ export default function ResultMapClient({
       console.warn(
         "[ResultMapClient] NEXT_PUBLIC_MAPBOX_TOKEN is not set; map will not initialize."
       );
+      setTokenMissing(true);
       return;
     }
     mapboxgl.accessToken = token;
@@ -140,6 +142,19 @@ export default function ResultMapClient({
 
   return (
     <div className="rounded-lg border border-atlas-border bg-atlas-surface p-3">
+      {tokenMissing && (
+        <div
+          role="alert"
+          data-testid="atlas-map-token-missing"
+          className="mb-3 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200"
+        >
+          <strong className="font-semibold">Mapbox token missing.</strong>{" "}
+          Add <code className="rounded bg-amber-500/20 px-1 py-0.5 text-[11px]">NEXT_PUBLIC_MAPBOX_TOKEN</code>{" "}
+          in Vercel → Project → Settings → Environment Variables, then redeploy.
+          The map and sidebar fly-to need this token to work; the ranked_sites
+          JSON above is still valid.
+        </div>
+      )}
       <div
         ref={containerRef}
         className="h-[480px] w-full rounded-md"
