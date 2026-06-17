@@ -9,15 +9,23 @@
 import type { Connector } from "./types";
 import { overpassConnector } from "./overpass";
 import { realEstateListingsConnector } from "./real_estate_listings";
+import { statsSAConnector } from "./stats_sa";
+import { googlePlacesConnector } from "./google_places";
 
 /**
  * The full list of connectors Atlas will consider running. Order matters:
  * the planner iterates this list. Today every plan runs every connector;
  * the planner is the place that will later learn to skip or fan-out.
+ *
+ * Day 8 added StatsSA demographics and Google Places POI density. Each
+ * connector gracefully degrades to [] if its data source is unavailable,
+ * so the API route always returns an answer.
  */
 export const ALL_CONNECTORS: Connector[] = [
   overpassConnector,
   realEstateListingsConnector,
+  statsSAConnector,
+  googlePlacesConnector,
 ];
 
 /** O(1) lookup by connector id. Throws if unknown so callers fail loudly. */
