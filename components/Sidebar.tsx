@@ -297,12 +297,22 @@ export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boole
               )}
             </div>
           ) : (
-            <Link
-              href="/sign-in"
-              className="block rounded-md bg-atlas-accent px-3 py-1.5 text-center text-xs font-medium text-white transition-colors hover:bg-atlas-accent2"
-            >
-              {collapsed ? "↳" : "Sign in"}
-            </Link>
+            <div className={collapsed ? "flex justify-center" : "space-y-1.5"}>
+              <Link
+                href="/sign-in"
+                className="block rounded-md bg-atlas-accent px-3 py-1.5 text-center text-xs font-medium text-white transition-colors hover:bg-atlas-accent2"
+              >
+                {collapsed ? "↳" : "Sign in"}
+              </Link>
+              {!collapsed && (
+                <Link
+                  href="/sign-up"
+                  className="block rounded-md border border-atlas-border bg-atlas-bg px-3 py-1.5 text-center text-xs font-medium text-atlas-text transition-colors hover:border-atlas-accent"
+                >
+                  Create account
+                </Link>
+              )}
+            </div>
           )}
         </div>
       </aside>

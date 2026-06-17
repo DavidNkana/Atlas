@@ -2,6 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/db";
 import { notFound, redirect } from "next/navigation";
 import ResultMapClient from "@/components/ResultMapClient";
+import { Sidebar } from "@/components/Sidebar";
 
 /**
  * Day 4 commit 1 + Day 5 commit 4:
@@ -131,31 +132,34 @@ export default async function ResultPage({
   const stubReason = responseBody.stubReason;
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100">
-      <div className="mx-auto flex min-h-screen max-w-5xl flex-col px-6 py-8">
-        <header className="mb-6 flex items-center justify-between border-b border-zinc-800 pb-4">
-          <div>
-            <h1 className="text-xl font-semibold tracking-tight text-zinc-100">
-              <span className="text-indigo-400">Atlas</span>{" "}
-              <span className="text-zinc-400 text-sm font-normal">Result</span>
+    <div className="flex min-h-screen bg-atlas-bg text-atlas-text">
+      <Sidebar />
+
+      <main className="flex min-w-0 flex-1 flex-col">
+        <header className="flex items-center justify-between border-b border-atlas-border px-6 py-4">
+          <div className="min-w-0">
+            <h1 className="text-lg font-semibold tracking-tight text-atlas-text">
+              Result
             </h1>
-            <p className="mt-1 text-sm text-zinc-300">
+            <p className="mt-0.5 truncate text-sm text-atlas-muted">
               {question.questionText}
             </p>
           </div>
           <a
             href="/"
-            className="rounded-md border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-100 transition-colors hover:border-indigo-500 hover:text-indigo-400"
+            className="shrink-0 rounded-md border border-atlas-border bg-atlas-surface px-3 py-1.5 text-xs font-medium text-atlas-text transition-colors hover:border-atlas-accent"
           >
-            ← Back to prompt
+            ← New
           </a>
         </header>
+
+        <div className="flex-1 px-6 py-6">
 
         {responseBody.model?.modelError && (
           <div
             role="alert"
             data-testid="atlas-model-error"
-            className="mb-6 rounded-md border border-amber-900 bg-zinc-900 px-4 py-3 text-xs text-amber-400"
+            className="mb-6 rounded-md border border-amber-900 bg-atlas-surface px-4 py-3 text-xs text-amber-400"
           >
             <strong className="font-semibold text-amber-300">
               Model warning:
@@ -202,10 +206,10 @@ export default async function ResultPage({
 
         {connectorsRun.length > 0 && (
           <section
-            className="mb-6 rounded-md border border-zinc-800 bg-zinc-900 p-4"
+            className="mb-6 rounded-md border border-atlas-border bg-atlas-surface p-4"
             data-testid="atlas-connectors-row"
           >
-            <h2 className="mb-2 text-xs font-medium text-zinc-100">Connectors</h2>
+            <h2 className="mb-2 text-xs font-medium text-atlas-text">Connectors</h2>
             <div className="flex flex-wrap gap-2">
               {connectorsRun.map((c) => (
                 <span
@@ -215,16 +219,16 @@ export default async function ResultPage({
                   )}`}
                 >
                   <span className="font-medium">{c.id}</span>
-                  <span className="text-zinc-400">·</span>
+                  <span className="text-atlas-muted">·</span>
                   <span>{c.signalCount} signals</span>
-                  <span className="text-zinc-400">·</span>
+                  <span className="text-atlas-muted">·</span>
                   <span className="font-mono text-[10px] uppercase tracking-wide">
                     {c.status}
                   </span>
                 </span>
               ))}
               {plan && (
-                <span className="inline-flex items-center gap-1 rounded-full border border-zinc-700 bg-zinc-800 px-2.5 py-1 text-[11px] text-zinc-300">
+                <span className="inline-flex items-center gap-1 rounded-full border border-atlas-border bg-atlas-surface2 px-2.5 py-1 text-[11px] text-atlas-muted">
                   plan · {plan.steps.length} step{plan.steps.length === 1 ? "" : "s"} · {plan.vertical}
                 </span>
               )}
@@ -243,20 +247,21 @@ export default async function ResultPage({
         </section>
 
         <section>
-          <h2 className="mb-3 text-sm font-medium text-zinc-100">
+          <h2 className="mb-3 text-sm font-medium text-atlas-text">
             Raw response
           </h2>
-          <pre className="overflow-x-auto rounded-md border border-zinc-800 bg-zinc-900 p-4 text-xs text-zinc-100">
+          <pre className="overflow-x-auto rounded-md border border-atlas-border bg-atlas-surface p-4 text-xs text-atlas-text">
             {JSON.stringify(responseBody, null, 2)}
           </pre>
         </section>
 
-        <footer className="mt-auto pt-12 text-center text-xs text-zinc-400">
+        <footer className="mt-auto pt-12 text-center text-xs text-atlas-muted">
           <p>
-            Atlas · Week 1 Day 5 · Connectors + scoring · {new Date().getFullYear()}
+            Atlas · {new Date().getFullYear()}
           </p>
         </footer>
-      </div>
+        </div>
+      </main>
     </div>
   );
 }

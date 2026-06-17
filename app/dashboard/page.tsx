@@ -2,17 +2,17 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/db";
+import { Sidebar } from "@/components/Sidebar";
+import { AtlasLogo } from "@/components/AtlasLogo";
 
 /**
  * Atlas Dashboard — user's question history.
  *
- * Server Component: queries Prisma directly, no client-side data fetching.
- *
- * Lists the signed-in user's last 20 questions, ordered by createdAt desc.
- * Each row shows vertical (as badge), question text (truncated to 80 chars),
- * createdAt as relative time, and a link to view the full JSON.
- *
- * If user is not signed in, redirect to /sign-in (Clerk's default page).
+ * Day 8 polish: now uses the shared Sidebar so the chrome matches the
+ * home page. The empty state is a proper illustration + CTA (not a
+ * one-line "no questions yet" message). If user is not signed in, we
+ * redirect to /sign-in — Clerk's dedicated sign-in route that we own
+ * (app/sign-in/[[...sign-in]]/page.tsx).
  */
 
 const VERTICAL_LABELS: Record<string, string> = {
@@ -20,7 +20,23 @@ const VERTICAL_LABELS: Record<string, string> = {
   restaurant: "Restaurant",
   warehouse: "Warehouse",
   retail_shop: "Retail shop",
+  residential_land: "Residential land",
+  commercial_land: "Commercial land",
+  agricultural_land: "Agricultural land",
+  industrial_land: "Industrial land",
+  mixed_use_land: "Mixed-use land",
 };
+
+function humanVertical(value: string): string {
+  if (value.startsWith("custom:")) {
+    const id = value.slice("custom:".length);
+    return id
+      .split("_")
+      .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
+      .join(" ");
+  }
+  return VERTICAL_LABELS[value] ?? value;
+}
 
 function relativeTime(date: Date): string {
   const now = Date.now();
@@ -53,81 +69,99 @@ export default async function DashboardPage() {
   });
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-4xl flex-col px-6 py-8">
-      {/* Header */}
-      <header className="mb-8 flex items-center justify-between border-b border-atlas-border pb-4">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">
-            <Link href="/" className="text-atlas-accent">
-              Atlas
-            </Link>{" "}
-            <span className="text-atlas-muted text-sm font-normal">
+    <div className="flex min-h-screen bg-atlas-bg text-atlas-text">
+      <Sidebar />
+
+      <main className="flex min-w-0 flex-1 flex-col">
+        {/* Header */}
+        <header className="flex items-center justify-between border-b border-atlas-border px-6 py-4">
+          <div className="flex items-center gap-3">
+            <AtlasLogo size={24} />
+            <h1 className="text-lg font-semibold tracking-tight text-atlas-text">
               Dashboard
+            </h1>
+            <span className="text-xs text-atlas-muted">
+              · {questions.length} question{questions.length === 1 ? "" : "s"} on file
             </span>
-          </h1>
-        </div>
-        <div className="flex items-center gap-3">
+          </div>
           <Link
             href="/"
-            className="rounded-md border border-atlas-border bg-atlas-surface px-3 py-1.5 text-xs font-medium text-atlas-text transition-colors hover:border-atlas-accent"
+            className="rounded-md bg-atlas-accent px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-atlas-accent2"
           >
-            Ask Atlas
+            + Ask Atlas
           </Link>
-        </div>
-      </header>
+        </header>
 
-      {/* Question list */}
-      <section>
-        <h2 className="mb-4 text-sm font-medium text-atlas-muted">
-          Your last 20 questions
-        </h2>
-        {questions.length === 0 ? (
-          <div className="rounded-lg border border-atlas-border bg-atlas-surface p-8 text-center text-sm text-atlas-muted">
-            No questions yet.{" "}
-            <Link href="/" className="text-atlas-accent hover:underline">
-              Ask Atlas
-            </Link>{" "}
-            to start.
-          </div>
-        ) : (
-          <ul className="space-y-2">
-            {questions.map((q) => (
-              <li
-                key={q.id}
-                className="rounded-lg border border-atlas-border bg-atlas-surface p-4 transition-colors hover:border-atlas-accent"
-              >
-                <div className="mb-2 flex items-center gap-3">
-                  <span className="inline-flex items-center rounded-md border border-atlas-border bg-atlas-surface2 px-2 py-0.5 text-xs font-medium text-atlas-accent">
-                    {VERTICAL_LABELS[q.vertical] ?? q.vertical}
-                  </span>
-                  <span className="text-xs text-atlas-muted">
-                    {relativeTime(new Date(q.createdAt))}
-                  </span>
-                </div>
-                <p className="mb-2 text-sm text-atlas-text">
-                  {q.questionText.length > 80
-                    ? q.questionText.slice(0, 80) + "…"
-                    : q.questionText}
-                </p>
-                <Link
-                  href={`/dashboard/${q.id}`}
-                  className="text-xs text-atlas-accent hover:underline"
+        {/* Question list */}
+        <section className="flex-1 px-6 py-6">
+          <h2 className="mb-4 text-[10px] font-semibold uppercase tracking-wider text-atlas-muted">
+            Your last 20 questions
+          </h2>
+          {questions.length === 0 ? (
+            <div className="mx-auto flex max-w-md flex-col items-center justify-center rounded-xl border border-atlas-border bg-atlas-surface px-6 py-16 text-center">
+              <div className="mb-5 inline-flex h-16 w-16 items-center justify-center rounded-full bg-atlas-accent/10">
+                <svg
+                  width="32"
+                  height="32"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="text-atlas-accent"
                 >
-                  View response →
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      {/* Footer */}
-      <footer className="mt-auto pt-12 text-center text-xs text-atlas-muted">
-        <p>
-          Atlas · Dashboard · {questions.length}{" "}
-          question{questions.length === 1 ? "" : "s"} on file
-        </p>
-      </footer>
-    </main>
+                  <circle cx="11" cy="11" r="8" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+              </div>
+              <h3 className="mb-2 text-lg font-semibold text-atlas-text">
+                No question history yet
+              </h3>
+              <p className="mb-6 text-sm text-atlas-muted">
+                Ask Atlas anything — from site selection to land investment.
+                Your questions will show up here so you can revisit them
+                anytime.
+              </p>
+              <Link
+                href="/"
+                className="rounded-md bg-atlas-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-atlas-accent2"
+              >
+                Ask your first question
+              </Link>
+            </div>
+          ) : (
+            <ul className="space-y-2">
+              {questions.map((q) => (
+                <li
+                  key={q.id}
+                  className="rounded-lg border border-atlas-border bg-atlas-surface p-4 transition-colors hover:border-atlas-accent"
+                >
+                  <div className="mb-2 flex items-center gap-3">
+                    <span className="inline-flex items-center rounded-md border border-atlas-border bg-atlas-surface2 px-2 py-0.5 text-xs font-medium text-atlas-accent">
+                      {humanVertical(q.vertical)}
+                    </span>
+                    <span className="text-xs text-atlas-muted">
+                      {relativeTime(new Date(q.createdAt))}
+                    </span>
+                  </div>
+                  <p className="mb-2 text-sm text-atlas-text">
+                    {q.questionText.length > 80
+                      ? q.questionText.slice(0, 80) + "…"
+                      : q.questionText}
+                  </p>
+                  <Link
+                    href={`/dashboard/${q.id}`}
+                    className="text-xs text-atlas-accent hover:underline"
+                  >
+                    View response →
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </main>
+    </div>
   );
 }
