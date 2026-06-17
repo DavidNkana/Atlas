@@ -212,7 +212,7 @@ export default function DemoPage() {
           than they do today.
         </p>
         <a
-          href="mailto:chris@atlas.local?subject=Atlas%20demo%20request"
+          href="mailto:david@atlas.local?subject=Atlas%20demo%20request"
           className="inline-block rounded-md bg-atlas-accent px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-atlas-accent2"
         >
           Get a demo
@@ -223,7 +223,7 @@ export default function DemoPage() {
       <section className="mt-16 grid grid-cols-1 gap-4 md:grid-cols-2">
         <div className="rounded-md border border-atlas-border bg-atlas-surface p-4">
           <div className="text-sm font-semibold text-atlas-text">
-            Chris Naudé
+            David Nkana
           </div>
           <div className="text-xs text-atlas-muted">Founder</div>
           <div className="mt-2 text-xs text-atlas-text">

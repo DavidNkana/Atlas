@@ -4,7 +4,7 @@
 
 **Repo:** [DavidNkana/Atlas](https://github.com/DavidNkana/Atlas)
 **Status:** Week 1, Day 5 (Overpass connector + scoring engine + planner live)
-**Owner:** Chris + Alex
+**Owner:** David Nkana + Alex
 
 ---
 
