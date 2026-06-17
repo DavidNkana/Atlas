@@ -22,9 +22,14 @@ export const geminiFlash: Model = {
       model: 'gemini-1.5-flash',
       generationConfig: { responseMimeType: 'application/json' },
     });
-    const result = await model.generateContent(buildPrompt(req));
-    const text = result.response.text();
-    const parsed = JSON.parse(text);
-    return { ranked_sites: parsed.ranked_sites, raw: text };
+    try {
+      const result = await model.generateContent(buildPrompt(req));
+      const text = result.response.text();
+      const parsed = JSON.parse(text);
+      return { ranked_sites: parsed.ranked_sites, raw: text };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(`Gemini call failed: ${msg}`);
+    }
   },
 };

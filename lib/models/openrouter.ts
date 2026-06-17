@@ -13,14 +13,19 @@ function makeOpenRouterModel(id: string, displayName: string, description: strin
       const key = process.env.OPENROUTER_API_KEY;
       if (!key) throw new Error('OPENROUTER_API_KEY not set');
       const client = new OpenAI({ apiKey: key, baseURL: 'https://openrouter.ai/api/v1' });
-      const completion = await client.chat.completions.create({
-        model: upstreamModelId,
-        messages: [{ role: 'user', content: buildPrompt(req) }],
-        response_format: { type: 'json_object' },
-      });
-      const text = completion.choices[0]?.message?.content || '{}';
-      const parsed = JSON.parse(text);
-      return { ranked_sites: parsed.ranked_sites, raw: text };
+      try {
+        const completion = await client.chat.completions.create({
+          model: upstreamModelId,
+          messages: [{ role: 'user', content: buildPrompt(req) }],
+          response_format: { type: 'json_object' },
+        });
+        const text = completion.choices[0]?.message?.content || '{}';
+        const parsed = JSON.parse(text);
+        return { ranked_sites: parsed.ranked_sites, raw: text };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new Error(`OpenRouter call failed (${upstreamModelId}): ${msg}`);
+      }
     },
   };
 }
