@@ -22,6 +22,7 @@ import { useRouter } from "next/navigation";
 import { useUser, UserButton } from "@clerk/nextjs";
 import { AtlasLogo } from "./AtlasLogo";
 import { usePins } from "@/lib/hooks/usePins";
+import { ConfirmDialog } from "./ConfirmDialog";
 import {
   SettingsDrawer,
   readPrefs,
@@ -63,6 +64,11 @@ function relativeTime(iso: string): string {
   return `${Math.floor(day / 30)}mo`;
 }
 
+function truncate(s: string, n: number): string {
+  if (!s) return "";
+  return s.length > n ? s.slice(0, n - 1) + "…" : s;
+}
+
 export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boolean }) {
   const router = useRouter();
   const { user, isLoaded } = useUser();
@@ -70,6 +76,10 @@ export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boole
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
   const [prefs, setPrefs] = useState<AtlasPrefs>(DEFAULT_PREFS);
+  const [deleteTarget, setDeleteTarget] = useState<HistoryItem | null>(null);
+  // Per-item hide list — questions the user has confirmed to delete.
+  // Local-only for v1; Day 30+ will move to a server-side DELETE.
+  const [hiddenIds, setHiddenIds] = useState<string[]>([]);
   const pins = usePins();
 
   // Restore collapsed preference from localStorage
@@ -120,7 +130,10 @@ export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boole
         if (!res.ok) return;
         const data = await res.json();
         if (!cancelled && Array.isArray(data.items)) {
-          setHistory(data.items);
+          // Filter out items the user has deleted in this session
+          setHistory(
+            data.items.filter((it: HistoryItem) => !hiddenIds.includes(it.id))
+          );
         }
       } catch {
         // Silent — sidebar is a passive surface. If the endpoint is down
@@ -131,7 +144,7 @@ export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boole
     return () => {
       cancelled = true;
     };
-  }, [isLoaded, user]);
+  }, [isLoaded, user, hiddenIds]);
 
   // When fully collapsed, the sidebar is 0px wide — only the expand
   // button floats over the main content. When expanded, it's the full
@@ -232,6 +245,7 @@ export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boole
                       isPinned
                       onNavigate={() => router.push(`/result/${h.id}`)}
                       onTogglePin={() => pins.unpin(h.id)}
+                      onRequestDelete={() => setDeleteTarget(h)}
                     />
                   ))}
                   {pinnedItems.length > 0 && unpinned.length > 0 && !collapsed && (
@@ -271,6 +285,7 @@ export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boole
                       isPinned={false}
                       onNavigate={() => router.push(`/result/${h.id}`)}
                       onTogglePin={() => pins.pin(h.id)}
+                      onRequestDelete={() => setDeleteTarget(h)}
                     />
                   ))}
                 </>
@@ -366,6 +381,29 @@ export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boole
         prefs={prefs}
         onChange={setPrefs}
       />
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title="Delete this question?"
+        body={
+          deleteTarget
+            ? `This will remove "${truncate(deleteTarget.questionText, 60)}" from your history. The question is still saved in the database and can be restored later.`
+            : ""
+        }
+        confirmLabel="Delete"
+        danger
+        onConfirm={() => {
+          if (deleteTarget) {
+            setHiddenIds((prev) => [...prev, deleteTarget.id]);
+            // Also unpin if it was pinned
+            if (pins.isPinned(deleteTarget.id)) {
+              pins.unpin(deleteTarget.id);
+            }
+            setDeleteTarget(null);
+          }
+        }}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </>
   );
 }
@@ -414,12 +452,14 @@ function HistoryRow({
   isPinned,
   onNavigate,
   onTogglePin,
+  onRequestDelete,
 }: {
   item: HistoryItem;
   collapsed: boolean;
   isPinned: boolean;
   onNavigate: () => void;
   onTogglePin: () => void;
+  onRequestDelete: () => void;
 }) {
   return (
     <div
@@ -485,15 +525,10 @@ function HistoryRow({
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              // v1: just hide from the list (no server delete). Day 30+
-              // will wire a /api/questions/:id DELETE endpoint.
-              const el = (e.currentTarget as HTMLElement).closest(
-                ".group"
-              ) as HTMLElement | null;
-              if (el) el.style.display = "none";
+              onRequestDelete();
             }}
-            title="Hide from history"
-            aria-label="Hide from history"
+            title="Delete from history"
+            aria-label="Delete from history"
             className="rounded p-1 text-atlas-muted transition-colors hover:bg-atlas-surface2 hover:text-red-300"
           >
             <svg
