@@ -22,3 +22,24 @@ model Question {
 
   @@index([userId, createdAt])
 }
+
+// Day 9: waitlist signups for the paid plan. We store a minimal
+// record so we can track interest, segment by vertical, and
+// follow up. No PII beyond name + email + vertical — the user
+// gives consent at signup time.
+model WaitlistSignup {
+  id        String   @id @default(cuid())
+  email     String
+  name      String?
+  vertical  String
+  plan      String   // "free" | "pro" | "team"
+  // What the user told us they want. Free-form text, capped at 500 chars.
+  message   String?
+  // Soft "I'm interested" flag — separate from the join itself.
+  // Lets us segment "ready to pay" vs "just curious".
+  userType  String?  // "land_developer" | "property_investor" | "residential_builder" | "other"
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([plan])
+}

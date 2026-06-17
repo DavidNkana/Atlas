@@ -294,7 +294,7 @@ export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boole
           </nav>
         </div>
 
-        {/* Settings + User pill at the bottom */}
+        {/* Settings + Admin + User pill at the bottom */}
         <div className="border-t border-atlas-border p-3">
           <button
             type="button"
@@ -308,6 +308,31 @@ export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boole
             </svg>
             {!collapsed && <span>Settings</span>}
           </button>
+
+          {/* Admin link — only for signed-in users, only when expanded.
+              v1: any signed-in user sees this. Day 30+ we'll gate it on
+              Clerk publicMetadata.role === "admin". */}
+          {isLoaded && user && !collapsed && (
+            <Link
+              href="/admin"
+              className="mb-2 flex w-full items-center gap-2 rounded-md border border-amber-900/40 bg-amber-500/5 px-2 py-1.5 text-xs font-medium text-amber-200 transition-colors hover:border-amber-700 hover:bg-amber-500/10"
+              title="Admin dashboard"
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z" />
+              </svg>
+              <span>Admin</span>
+            </Link>
+          )}
 
           {isLoaded && user ? (
             <div className="flex items-center gap-2">

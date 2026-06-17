@@ -294,6 +294,9 @@ export default function HomePage() {
           <a href="/land" className="hover:text-atlas-accent">
             Land
           </a>
+          <a href="/pricing" className="hover:text-atlas-accent">
+            Pricing
+          </a>
           <a href="/demo" className="hover:text-atlas-accent">
             For investors
           </a>
