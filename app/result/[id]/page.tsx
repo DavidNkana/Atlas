@@ -156,7 +156,11 @@ export default async function ResultPage({
 
         <div className="flex-1 px-6 py-6">
 
-        {responseBody.model?.modelError && (
+        {/* Model warning banner — only when NOT in stub_demo mode.
+            In stub_demo mode, the stub banner below already says
+            "AI models are currently overloaded" and the detailed
+            model errors are noise on top of that one clear message. */}
+        {responseBody.model?.modelError && responseStatus !== "stub_demo" && (
           <div
             role="alert"
             data-testid="atlas-model-error"
@@ -171,6 +175,9 @@ export default async function ResultPage({
           </div>
         )}
 
+        {/* Demo placeholder banner — fires when Atlas answered with
+            the curated stub (all real AIs were down or unavailable).
+            This is the single source of truth for "AI is overloaded". */}
         {responseStatus === "stub_demo" && (
           <div
             role="alert"

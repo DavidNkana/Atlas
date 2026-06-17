@@ -193,22 +193,9 @@ export default function ResultMapClient({
 
   return (
     <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-3 text-zinc-100">
-      {status === "stub_demo" && (
-        <div
-          role="alert"
-          data-testid="atlas-stub-demo-banner"
-          className="mb-3 rounded-md border border-amber-800 bg-amber-950 px-3 py-2 text-xs text-amber-200"
-        >
-          <strong className="font-semibold text-amber-100">
-            Demo placeholder
-            {city ? ` — ${city}${country ? `, ${country}` : ""}` : ""}:
-          </strong>{" "}
-          <span className="text-amber-200">
-            {stubReason ??
-              "AI models are currently overloaded. This is a city-specific demo placeholder. Try a real model in a few minutes."}
-          </span>
-        </div>
-      )}
+      {/* The stub_demo banner is shown ONCE on the result page (top of
+          the content area). Showing it again inside the map would
+          duplicate the same message. The map just renders the sites. */}
       {tokenMissing && (
         <div
           role="alert"
