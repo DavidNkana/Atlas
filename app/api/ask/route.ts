@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/db";
-import { getModel, MODEL_INFO } from "@/lib/models/registry";
+import { getModel, MODEL_INFO, ALL_MODELS } from "@/lib/models/registry";
 import { curatedStub } from "@/lib/models/stub";
 import type { Vertical, ModelInfo } from "@/lib/models/types";
 
@@ -161,20 +161,84 @@ export async function POST(req: NextRequest) {
     rankedSites = result.ranked_sites;
     raw = result.raw;
   } catch (modelErr) {
-    // Model call failed — fall back to curated stub so the user never sees a 500.
-    // Capture the error so the response surfaces WHY fallback fired.
-    const errMsg = modelErr instanceof Error ? modelErr.message : String(modelErr);
-    console.error(`[/api/ask] model ${activeInfo.id} call failed, falling back to curated-stub:`, modelErr);
-    modelError = `${activeInfo.id} call failed: ${errMsg}`;
-    const stubResult = await curatedStub.call({
-      vertical: vertical as Vertical,
-      question: trimmedQuestion,
-    });
-    rankedSites = stubResult.ranked_sites;
-    raw = stubResult.raw;
-    activeInfo = curatedStub.info;
-    fallbackUsed = true;
-    responseStatus = "stub_fallback";
+    // Primary model failed. Day 3 fix 3: try EVERY other live model in the
+    // registry (excluding the one that just failed and excluding the curated
+    // stub) before giving up to the stub. This way if the user picks
+    // gemini-flash and Gemini's quota is 0, we still try the OpenRouter
+    // models instead of going straight to the curated stub.
+    const primaryErrMsg =
+      modelErr instanceof Error ? modelErr.message : String(modelErr);
+    console.error(
+      `[/api/ask] model ${activeInfo.id} call failed, trying fallback chain:`,
+      modelErr
+    );
+
+    const errorChain: string[] = [
+      `${activeInfo.id} call failed: ${primaryErrMsg}`,
+    ];
+
+    // Build fallback chain: every model in the registry except the one that
+    // just failed and except the curated-stub. Only live (isAvailable) ones.
+    const fallbackChain = ALL_MODELS.filter(
+      (m) =>
+        m.info.id !== activeInfo.id &&
+        m.info.id !== "curated-stub" &&
+        m.isAvailable()
+    );
+
+    let cascaded = false;
+    for (const fallback of fallbackChain) {
+      try {
+        const fallbackResult = await fallback.call({
+          vertical: vertical as Vertical,
+          question: trimmedQuestion,
+        });
+        rankedSites = fallbackResult.ranked_sites;
+        raw = fallbackResult.raw;
+        activeInfo = fallback.info;
+        activeModel = fallback;
+        fallbackUsed = true;
+        cascaded = true;
+        console.log(
+          `[/api/ask] fallback chain served by ${fallback.info.id} after ${activeInfo.id} failed`
+        );
+        break;
+      } catch (fallbackErr) {
+        const fbMsg =
+          fallbackErr instanceof Error
+            ? fallbackErr.message
+            : String(fallbackErr);
+        errorChain.push(`${fallback.info.id} call failed: ${fbMsg}`);
+        console.error(
+          `[/api/ask] fallback model ${fallback.info.id} also failed:`,
+          fallbackErr
+        );
+        continue;
+      }
+    }
+
+    if (!cascaded) {
+      // All fallbacks failed (or there were none available). Use curated stub
+      // so the user never sees a 500. modelError captures every failure in
+      // the chain so we can see why the stub fired.
+      const stubResult = await curatedStub.call({
+        vertical: vertical as Vertical,
+        question: trimmedQuestion,
+      });
+      rankedSites = stubResult.ranked_sites;
+      raw = stubResult.raw;
+      activeInfo = curatedStub.info;
+      activeModel = curatedStub;
+      fallbackUsed = true;
+      responseStatus = "stub_fallback";
+    }
+
+    // Surface every error in the chain (newline-separated) for debugging.
+    // If we successfully cascaded to another live model, the primary error
+    // alone is enough — the user got a real answer, just not from their pick.
+    modelError = cascaded
+      ? errorChain[0]
+      : errorChain.join("\n");
   }
 
   // 5. Build response body (sans id; id comes from prisma row)
