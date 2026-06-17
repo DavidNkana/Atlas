@@ -25,6 +25,13 @@ import { sanitizeForJson } from "@/lib/util/json-sanitize";
  */
 const HANDLER_TIMEOUT_MS = 50_000;
 
+// Force dynamic evaluation. Without this, Next.js 15 may treat the
+// route as a Server Component endpoint and try to evaluate it at
+// build time, where `auth()` returns null because there's no
+// request context. With this export, every POST runs the handler
+// fresh against the live request — no caching, no build-time eval.
+export const dynamic = "force-dynamic";
+
 /**
  * Day 5 hotfix v2 — per-step budgets.
  *
