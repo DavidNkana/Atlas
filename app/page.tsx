@@ -56,6 +56,7 @@ type AskResponse = {
 };
 
 export default function HomePage() {
+  const router = useRouter();
   const [vertical, setVertical] = useState<Vertical>("gas_station");
   const [modelId, setModelId] = useState<string>(MODEL_INFO[0]?.id ?? "gemini-flash");
   const [question, setQuestion] = useState<string>("Where in Sandton?");
@@ -90,6 +91,14 @@ export default function HomePage() {
       }
 
       const data: AskResponse = await res.json();
+      // Day 4 commit 4: if /api/ask persisted a Question row, jump to the
+      // dedicated result page (server component, Mapbox map). Fall back to
+      // the in-page <pre> preview if there is no id (e.g. stub responses
+      // from older prompts before persistence was wired).
+      if (data.id) {
+        router.push("/result/" + data.id);
+        return;
+      }
       setResponse(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
