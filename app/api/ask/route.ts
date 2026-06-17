@@ -145,6 +145,14 @@ type AskResponse = {
   stubReason?: string;
 };
 
+/**
+ * The wire type for /api/ask: either one of the 4 builtin verticals or
+ * a custom value matching /custom:[a-z0-9_]+/. We keep the runtime cast
+ * (`as Vertical` in a few places) for downstream type compatibility
+ * with lib/models/types.ts but accept any string at the edge.
+ */
+type AskVertical = Vertical | `custom:${string}`;
+
 const SUPPORTED_VERTICALS = new Set<Vertical>([
   "gas_station",
   "restaurant",
@@ -152,6 +160,22 @@ const SUPPORTED_VERTICALS = new Set<Vertical>([
   "retail_shop",
 ]);
 
+/**
+ * Custom verticals are user-defined (e.g. "residential_land", "office_block").
+ * They are opaque tokens the API forwards through to the model and the
+ * scoring engine — neither knows how to score them, so the connectors
+ * gracefully degrade to the cross-vertical query and the stub returns
+ * generic templates. The user gets an answer, just not a vertical-tuned one.
+ */
+const CUSTOM_VERTICAL_RE = /^custom:[a-z][a-z0-9_]{1,39}$/;
+
+/**
+ * Custom verticals are user-defined (e.g. "residential_land", "office_block").
+ * They are opaque tokens the API forwards through to the model and the
+  * scoring engine — neither knows how to score them, so the connectors
+  * gracefully degrade to the cross-vertical query and the stub returns
+  * generic templates. The user gets an answer, just not a vertical-tuned one.
+ */
 function modelInfoToBlock(info: ModelInfo, fallbackUsed: boolean, modelError?: string, attemptedChain?: string[]): ModelBlock {
   const block: ModelBlock = {
     id: info.id,
@@ -244,16 +268,25 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
       { status: 401 }
     );
   }
-  if (!SUPPORTED_VERTICALS.has(vertical as Vertical)) {
+  if (!SUPPORTED_VERTICALS.has(vertical as Vertical) && !CUSTOM_VERTICAL_RE.test(vertical)) {
     return NextResponse.json(
       {
         error: `Unsupported vertical: ${vertical}. Supported: ${Array.from(
           SUPPORTED_VERTICALS
-        ).join(", ")}`,
+        ).join(", ")}, or a custom value matching /${CUSTOM_VERTICAL_RE.source}/`,
       },
       { status: 401 }
     );
   }
+
+  // For downstream code, narrow custom verticals to a generic "fallback"
+  // behaviour: connectors fire with their default radius / query and the
+  // stub generator uses generic town-centre templates. The user's custom
+  // value is preserved in the response.vertical field so the UI can
+  // display it correctly.
+  const effectiveVertical: Vertical =
+    (SUPPORTED_VERTICALS.has(vertical as Vertical) ? vertical : "retail_shop") as Vertical;
+  const isCustom = !SUPPORTED_VERTICALS.has(vertical as Vertical);
 
   const trimmedQuestion = question.trim();
 
@@ -332,7 +365,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
     try {
       result = await withTimeout(
         m.call({
-          vertical: vertical as Vertical,
+          vertical: effectiveVertical,
           question: trimmedQuestion,
         }),
         MODEL_TIMEOUT_MS,
@@ -518,7 +551,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   try {
     await withTimeout((async () => {
       const location = deriveLocation(rankedSites);
-      const builtPlan: Plan = buildPlan(vertical as Vertical, location, rankedSites);
+      const builtPlan: Plan = buildPlan(effectiveVertical, location, rankedSites);
 
       // Run every plan step. We map index → site.id so we can rebuild
       // signalsForSite[siteId] without re-reading the plan.
@@ -537,7 +570,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
             return Promise.resolve<Signal[]>([]);
           }
           const ctx = {
-            vertical: vertical as Vertical,
+            vertical: effectiveVertical,
             location,
             site: {
               id: String(site.rank),
@@ -596,7 +629,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
         const breakdown = combine(
           { id: siteId, score: site.score },
           signals,
-          vertical as Vertical,
+          effectiveVertical,
         );
         site.score = breakdown.confidence;
         site.signals = signals;

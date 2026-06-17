@@ -19,7 +19,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { MODEL_INFO, getAvailableModels } from "@/lib/models/registry";
+import { MODEL_INFO } from "@/lib/models/registry";
 import { ModelIcon } from "./ModelIcon";
 import { AtlasLogo } from "./AtlasLogo";
 
@@ -43,7 +43,15 @@ export function readPrefs(): AtlasPrefs {
     const raw = window.localStorage.getItem("atlas:prefs");
     if (!raw) return DEFAULT_PREFS;
     const parsed = JSON.parse(raw) as Partial<AtlasPrefs>;
-    return { ...DEFAULT_PREFS, ...parsed };
+    const merged: AtlasPrefs = { ...DEFAULT_PREFS, ...parsed };
+    // If the stored defaultModel doesn't exist in the current registry,
+    // fall back to the first registered model. This handles upgrades where
+    // a previous-version model id is no longer in MODEL_INFO.
+    const knownIds = new Set(MODEL_INFO.map((m) => m.id));
+    if (merged.defaultModel && !knownIds.has(merged.defaultModel)) {
+      merged.defaultModel = DEFAULT_PREFS.defaultModel;
+    }
+    return merged;
   } catch {
     return DEFAULT_PREFS;
   }
@@ -156,28 +164,31 @@ export function SettingsDrawer({
             Default model
           </label>
           <div className="space-y-1">
-            {getAvailableModels().map((m) => (
-              <button
-                key={m.info.id}
-                type="button"
-                onClick={() => onChange({ ...prefs, defaultModel: m.info.id })}
-                className={`flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-left text-xs transition-colors ${
-                  prefs.defaultModel === m.info.id
-                    ? "border-atlas-accent bg-atlas-accent/10"
-                    : "border-atlas-border bg-atlas-bg hover:border-atlas-accent/50"
-                }`}
-              >
-                <ModelIcon info={m.info} size={18} />
-                <span className="flex-1 text-atlas-text">
-                  {m.info.displayName}
-                </span>
-                {m.info.free && (
-                  <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-300">
-                    FREE
+            {MODEL_INFO.map((info) => {
+              const isActive = prefs.defaultModel === info.id;
+              return (
+                <button
+                  key={info.id}
+                  type="button"
+                  onClick={() => onChange({ ...prefs, defaultModel: info.id })}
+                  className={`flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-left text-xs transition-colors ${
+                    isActive
+                      ? "border-atlas-accent bg-atlas-accent/10"
+                      : "border-atlas-border bg-atlas-bg hover:border-atlas-accent/50"
+                  }`}
+                >
+                  <ModelIcon info={info} size={18} />
+                  <span className="flex-1 text-atlas-text">
+                    {info.displayName}
                   </span>
-                )}
-              </button>
-            ))}
+                  {info.free && (
+                    <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-300">
+                      FREE
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </section>
 
@@ -206,31 +217,40 @@ export function SettingsDrawer({
 
         {/* Show thinking loader */}
         <section className="mb-1">
-          <label className="flex cursor-pointer items-center justify-between rounded-md border border-atlas-border bg-atlas-bg p-2.5">
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() =>
+              onChange({ ...prefs, showThinkingLoader: !prefs.showThinkingLoader })
+            }
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onChange({ ...prefs, showThinkingLoader: !prefs.showThinkingLoader });
+              }
+            }}
+            className="flex cursor-pointer items-center justify-between gap-3 rounded-md border border-atlas-border bg-atlas-bg p-2.5 transition-colors hover:border-atlas-accent/50"
+          >
             <div>
               <div className="text-xs text-atlas-text">Animated thinking loader</div>
               <div className="text-[10px] text-atlas-muted">
                 Show the 5-stage progress while Atlas thinks
               </div>
             </div>
-            <button
-              type="button"
+            <div
               role="switch"
               aria-checked={prefs.showThinkingLoader}
-              onClick={() =>
-                onChange({ ...prefs, showThinkingLoader: !prefs.showThinkingLoader })
-              }
-              className={`relative h-5 w-9 rounded-full transition-colors ${
+              className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
                 prefs.showThinkingLoader ? "bg-atlas-accent" : "bg-atlas-border"
               }`}
             >
               <span
-                className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${
-                  prefs.showThinkingLoader ? "translate-x-4" : "translate-x-0.5"
+                className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white transition-transform ${
+                  prefs.showThinkingLoader ? "translate-x-4" : "translate-x-0"
                 }`}
               />
-            </button>
-          </label>
+            </div>
+          </div>
         </section>
       </div>
     </div>

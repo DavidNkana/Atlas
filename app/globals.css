@@ -24,6 +24,35 @@ html.atlas-light body {
   color: #18181b;
 }
 
+/* Light theme overrides — when html.atlas-light is set, swap Atlas
+   surface tokens to light equivalents. We do this in CSS rather than
+   duplicating every component class so the design tokens stay in one
+   place. */
+html.atlas-light .bg-atlas-bg {
+  background-color: #fafafa !important;
+}
+html.atlas-light .bg-atlas-surface {
+  background-color: #ffffff !important;
+}
+html.atlas-light .bg-atlas-surface2 {
+  background-color: #f4f4f5 !important;
+}
+html.atlas-light .border-atlas-border {
+  border-color: #e4e4e7 !important;
+}
+html.atlas-light .text-atlas-text {
+  color: #18181b !important;
+}
+html.atlas-light .text-atlas-muted {
+  color: #71717a !important;
+}
+html.atlas-light .hover\:bg-atlas-surface2:hover {
+  background-color: #f4f4f5 !important;
+}
+html.atlas-light .bg-atlas-accent\/10 {
+  background-color: rgba(99, 102, 241, 0.1) !important;
+}
+
 /* Subtle focus ring, Atlas brand color */
 :focus-visible {
   outline: 2px solid #6366f1;

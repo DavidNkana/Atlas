@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
-import { MODEL_INFO, getAvailableModels } from "@/lib/models/registry";
+import { MODEL_INFO } from "@/lib/models/registry";
 import type { ModelInfo } from "@/lib/models/types";
 import { Sidebar } from "@/components/Sidebar";
 import { ThinkingLoader } from "@/components/ThinkingLoader";
@@ -26,14 +26,58 @@ import { readPrefs, DEFAULT_PREFS, type AtlasPrefs } from "@/components/Settings
  * command bar react when Settings changes the default model.
  */
 
-const VERTICALS = [
+const BUILTIN_VERTICALS = [
   { value: "gas_station", label: "Gas station" },
   { value: "restaurant", label: "Restaurant" },
   { value: "warehouse", label: "Warehouse" },
   { value: "retail_shop", label: "Retail shop" },
 ] as const;
 
-type Vertical = (typeof VERTICALS)[number]["value"];
+type BuiltinVertical = (typeof BUILTIN_VERTICALS)[number]["value"];
+type Vertical = BuiltinVertical | `custom:${string}`;
+
+const MAX_CUSTOM_VERTICAL_LEN = 40;
+const CUSTOM_VERTICAL_RE = /^[a-z][a-z0-9_]{1,39}$/;
+
+function customVerticalLabel(value: string): string {
+  // "custom:residential_land" -> "Residential land"
+  const id = value.replace(/^custom:/, "");
+  return id
+    .split("_")
+    .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
+    .join(" ");
+}
+
+function isCustomVertical(value: string): value is `custom:${string}` {
+  return value.startsWith("custom:");
+}
+
+/**
+ * A model is "available" when its required env var is set on the server.
+ * The stub is always available. The picker uses this to dim models that
+ * won't actually answer the question — but the user can still pick them
+ * and the fallback chain in route.ts will move on to the next model.
+ *
+ * Implementation: we read NEXT_PUBLIC_HAS_GEMINI / NEXT_PUBLIC_HAS_OPENROUTER
+ * which are boolean-ish public env vars the operator sets in Vercel. The
+ * real key check happens server-side in the model's isAvailable(). This
+ * way the picker can show "API key needed" without leaking the actual
+ * key value to the browser.
+ *
+ * If the operator hasn't set these yet, the picker assumes both are
+ * available — the call will fail gracefully and fall back to stub. The
+ * dim style is just a hint, not a hard block.
+ */
+function isModelAvailable(modelId: string): boolean {
+  if (modelId === "curated-stub") return true;
+  if (modelId === "gemini-flash") {
+    return process.env.NEXT_PUBLIC_HAS_GEMINI !== "false";
+  }
+  if (modelId === "llama-free" || modelId === "mistral-free") {
+    return process.env.NEXT_PUBLIC_HAS_OPENROUTER !== "false";
+  }
+  return false;
+}
 
 export default function HomePage() {
   const router = useRouter();
@@ -49,16 +93,48 @@ export default function HomePage() {
     DEFAULT_PREFS.showThinkingLoader
   );
   const [modelPickerOpen, setModelPickerOpen] = useState<boolean>(false);
+  const [customInputOpen, setCustomInputOpen] = useState<boolean>(false);
+  const [customInputValue, setCustomInputValue] = useState<string>("");
+  const [customError, setCustomError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const modelButtonRef = useRef<HTMLButtonElement | null>(null);
+  const customInputRef = useRef<HTMLInputElement | null>(null);
+
+  /**
+   * Commit the custom vertical input. Validates the format (lowercase
+   * snake_case, 2-40 chars) and switches the active vertical to the
+   * new custom value. The API route treats `custom:...` as an opaque
+   * token and the stub generator falls back to generic town-centre
+   * templates.
+   */
+  function commitCustomVertical() {
+    const raw = customInputValue.trim().toLowerCase().replace(/\s+/g, "_");
+    if (!raw) {
+      setCustomError("Enter a name");
+      return;
+    }
+    if (raw.length > MAX_CUSTOM_VERTICAL_LEN) {
+      setCustomError(`Max ${MAX_CUSTOM_VERTICAL_LEN} characters`);
+      return;
+    }
+    if (!CUSTOM_VERTICAL_RE.test(raw)) {
+      setCustomError("Use lowercase letters, numbers, underscores. Start with a letter.");
+      return;
+    }
+    const id: `custom:${string}` = `custom:${raw}`;
+    setVertical(id);
+    setCustomInputValue("");
+    setCustomError(null);
+    setCustomInputOpen(false);
+  }
 
   // On mount: read user prefs, apply default model + vertical + showThinkingLoader
   useEffect(() => {
     const p = readPrefs();
     if (p.defaultModel) setModelId(p.defaultModel);
     if (p.defaultVertical) {
-      const found = VERTICALS.find((v) => v.value === p.defaultVertical);
-      if (found) setVertical(found.value);
+      const found = BUILTIN_VERTICALS.find((v) => v.value === p.defaultVertical);
+      if (found) setVertical(found.value as BuiltinVertical);
     }
     setShowThinkingLoader(p.showThinkingLoader);
   }, []);
@@ -69,8 +145,8 @@ export default function HomePage() {
       const ce = e as CustomEvent<AtlasPrefs>;
       if (ce.detail.defaultModel) setModelId(ce.detail.defaultModel);
       if (ce.detail.defaultVertical) {
-        const found = VERTICALS.find((v) => v.value === ce.detail.defaultVertical);
-        if (found) setVertical(found.value);
+        const found = BUILTIN_VERTICALS.find((v) => v.value === ce.detail.defaultVertical);
+        if (found) setVertical(found.value as BuiltinVertical);
       }
       if (typeof ce.detail.showThinkingLoader === "boolean") {
         setShowThinkingLoader(ce.detail.showThinkingLoader);
@@ -175,7 +251,6 @@ export default function HomePage() {
   const activeModelInfo: ModelInfo | undefined = MODEL_INFO.find(
     (m) => m.id === modelId
   );
-  const availableModels = getAvailableModels();
 
   return (
     <div className="flex min-h-screen bg-atlas-bg text-atlas-text">
@@ -224,7 +299,7 @@ export default function HomePage() {
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-atlas-muted">
                     I&apos;m looking for
                   </span>
-                  {VERTICALS.map((v) => (
+                  {BUILTIN_VERTICALS.map((v) => (
                     <button
                       key={v.value}
                       type="button"
@@ -238,7 +313,92 @@ export default function HomePage() {
                       {v.label}
                     </button>
                   ))}
+                  {/* Active custom vertical pill (if any) */}
+                  {isCustomVertical(vertical) && (
+                    <button
+                      type="button"
+                      onClick={() => setCustomInputOpen(true)}
+                      className="rounded-full bg-atlas-accent px-2.5 py-0.5 text-xs text-white"
+                      title="Custom vertical — click to change"
+                    >
+                      {customVerticalLabel(vertical)}
+                    </button>
+                  )}
+                  {/* + Custom button — opens an inline input */}
+                  {!isCustomVertical(vertical) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCustomInputOpen((o) => !o);
+                        // Focus the input next tick
+                        setTimeout(() => customInputRef.current?.focus(), 50);
+                      }}
+                      className={`rounded-full border border-dashed px-2.5 py-0.5 text-xs transition-colors ${
+                        customInputOpen
+                          ? "border-atlas-accent text-atlas-text"
+                          : "border-atlas-border text-atlas-muted hover:border-atlas-accent/50 hover:text-atlas-text"
+                      }`}
+                    >
+                      + Custom
+                    </button>
+                  )}
                 </div>
+
+                {/* Inline custom vertical input */}
+                {customInputOpen && (
+                  <div className="mb-2 flex flex-wrap items-center gap-1.5 rounded-md border border-atlas-border bg-atlas-surface px-2 py-1.5">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-atlas-muted">
+                      Custom vertical
+                    </span>
+                    <input
+                      ref={customInputRef}
+                      type="text"
+                      value={customInputValue}
+                      onChange={(e) => {
+                        setCustomInputValue(e.target.value);
+                        setCustomError(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          commitCustomVertical();
+                        } else if (e.key === "Escape") {
+                          setCustomInputOpen(false);
+                          setCustomInputValue("");
+                          setCustomError(null);
+                        }
+                      }}
+                      placeholder="e.g. residential_land"
+                      maxLength={MAX_CUSTOM_VERTICAL_LEN}
+                      autoComplete="off"
+                      spellCheck={false}
+                      className="min-w-0 flex-1 rounded bg-atlas-bg px-2 py-1 text-xs text-atlas-text placeholder:text-atlas-muted focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={commitCustomVertical}
+                      className="rounded bg-atlas-accent px-2 py-1 text-xs text-white transition-colors hover:bg-atlas-accent2"
+                    >
+                      Use
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCustomInputOpen(false);
+                        setCustomInputValue("");
+                        setCustomError(null);
+                      }}
+                      className="rounded px-2 py-1 text-xs text-atlas-muted transition-colors hover:text-atlas-text"
+                    >
+                      Cancel
+                    </button>
+                    {customError && (
+                      <span className="basis-full text-[10px] text-red-300">
+                        {customError}
+                      </span>
+                    )}
+                  </div>
+                )}
 
                 {/* Command bar */}
                 <div className="rounded-xl border border-atlas-border bg-atlas-surface shadow-lg shadow-black/20 transition-colors focus-within:border-atlas-accent">
@@ -294,38 +454,51 @@ export default function HomePage() {
                             Choose a model
                           </div>
                           <ul role="listbox" className="max-h-80 overflow-y-auto py-1">
-                            {availableModels.map((m) => {
-                              const isActive = m.info.id === modelId;
+                            {MODEL_INFO.map((info) => {
+                              const isActive = info.id === modelId;
+                              // We show ALL models so the user can see what's
+                              // available. Unavailable models are dimmed and
+                              // the picker falls through to the next model at
+                              // call time (see lib/models/route.ts fallback chain).
+                              const isAvailable = isModelAvailable(info.id);
                               return (
-                                <li key={m.info.id}>
+                                <li key={info.id}>
                                   <button
                                     type="button"
                                     role="option"
                                     aria-selected={isActive}
+                                    aria-disabled={!isAvailable}
                                     onClick={() => {
-                                      setModelId(m.info.id);
+                                      setModelId(info.id);
                                       setModelPickerOpen(false);
                                     }}
                                     className={`flex w-full items-start gap-2.5 px-3 py-2 text-left transition-colors ${
                                       isActive
                                         ? "bg-atlas-accent/10"
-                                        : "hover:bg-atlas-surface2"
+                                        : isAvailable
+                                        ? "hover:bg-atlas-surface2"
+                                        : "opacity-50 hover:bg-atlas-surface2"
                                     }`}
                                   >
-                                    <ModelIcon info={m.info} size={24} />
+                                    <ModelIcon info={info} size={24} />
                                     <div className="min-w-0 flex-1">
                                       <div className="flex items-center gap-1.5">
                                         <span className="truncate text-sm font-medium text-atlas-text">
-                                          {m.info.displayName}
+                                          {info.displayName}
                                         </span>
-                                        {m.info.free && (
+                                        {info.free && (
                                           <span className="rounded bg-emerald-500/20 px-1 py-0.5 text-[9px] font-semibold text-emerald-300">
                                             FREE
                                           </span>
                                         )}
+                                        {!isAvailable && (
+                                          <span className="rounded bg-amber-500/20 px-1 py-0.5 text-[9px] font-semibold text-amber-300">
+                                            API KEY NEEDED
+                                          </span>
+                                        )}
                                       </div>
                                       <p className="mt-0.5 line-clamp-2 text-[10px] text-atlas-muted">
-                                        {m.info.description}
+                                        {info.description}
                                       </p>
                                     </div>
                                     {isActive && (

@@ -2,8 +2,14 @@ import OpenAI from 'openai';
 import type { Model, ModelRequest, ModelResponse } from './types';
 import { fetchOpenRouterFreeModelIds } from './openrouter-discovery';
 
+function humanVertical(v: string): string {
+  // "gas_station" -> "gas station", "custom:residential_land" -> "residential land"
+  const stripped = v.startsWith("custom:") ? v.slice("custom:".length) : v;
+  return stripped.replace(/_/g, " ");
+}
+
 function buildPrompt(req: ModelRequest): string {
-  return 'You are Atlas, a site-selection intelligence engine. The user wants to find the best location for a ' + req.vertical.replace('_', ' ') + ' given this question: "' + req.question + '".\n\nReturn STRICT JSON only, in this exact shape:\n{"ranked_sites":[{"rank":1,"name":"<place>","score":<0-1>,"confidence":<0-1>,"rationale":"<1-2 sentences>","lat":<decimal latitude>,"lng":<decimal longitude>}]}\n\nProvide up to 5 ranked sites.\n\nFor each site, also include "lat" and "lng" as decimal coordinates (e.g. -15.3875 for Lusaka latitude). Use real-world coordinates for the place you name.';
+  return 'You are Atlas, a site-selection intelligence engine. The user wants to find the best location for a ' + humanVertical(req.vertical) + ' given this question: "' + req.question + '".\n\nReturn STRICT JSON only, in this exact shape:\n{"ranked_sites":[{"rank":1,"name":"<place>","score":<0-1>,"confidence":<0-1>,"rationale":"<1-2 sentences>","lat":<decimal latitude>,"lng":<decimal longitude>}]}\n\nProvide up to 5 ranked sites.\n\nFor each site, also include "lat" and "lng" as decimal coordinates (e.g. -15.3875 for Lusaka latitude). Use real-world coordinates for the place you name.';
 }
 
 /**
