@@ -3,7 +3,7 @@
 > A horizontal AI engine that answers complex real-world questions by combining structured APIs, browser automation, and AI reasoning.
 
 **Repo:** [DavidNkana/Atlas](https://github.com/DavidNkana/Atlas)
-**Status:** Week 1, Day 3 (model registry live)
+**Status:** Week 1, Day 4 (Mapbox result page live)
 **Owner:** Chris + Alex
 
 ---
@@ -211,6 +211,63 @@ A pluggable registry means:
 - Atlas never locks into one AI vendor. If Google raises Gemini prices, swap defaults in 30 seconds.
 - Premium tier (Week 2+) becomes a one-liner: "if user clicked Premium, use `gpt-4o`, otherwise `gemini-flash`". The `/api/ask` route already takes a `model` parameter.
 - Cost ceilings are enforceable: drop a vendor that's too expensive from `ALL_MODELS`, the UI just stops offering it.
+
+---
+
+## Day 4 — Mapbox result page
+
+Atlas turns text answers into a map you can see. After Day 4:
+
+1. User signs in
+2. User picks a model + vertical + types a question
+3. User clicks **Ask Atlas**
+4. The prompt box redirects to `/result/<questionId>` (a server component)
+5. The result page fetches the Question row from Supabase
+6. A Mapbox GL JS dark-v11 map renders centered on Lusaka
+7. For each `ranked_site` with a `lat` + `lng`, an indigo marker drops at that coordinate
+8. Click a marker → Mapbox popup with the place name, AI rationale, score, and confidence
+9. The map auto-fits its bounds to include every marker (with 80px padding, max zoom 14, 1.5s smooth transition)
+10. The sidebar lists every site; click a list item to fly the map to that marker (1.2s) and open its popup
+
+### Files
+
+- `app/result/[id]/page.tsx` — server component. Fetches the Question from Supabase by cuid, 404s if not found, renders `<ResultMapClient>` with the parsed `ranked_sites`.
+- `components/ResultMapClient.tsx` — client component. Owns the Mapbox map lifecycle, marker array (ref-stored for HMR safety), `fitBounds`, sidebar list, and `flyTo` for sidebar clicks.
+- `app/page.tsx` — after a successful `/api/ask` that persisted a Question row, the prompt box calls `router.push("/result/" + data.id)`. The in-page `<pre>` JSON preview remains as a fallback for stub responses without an `id`.
+
+### The marker contract (lat/lng is optional)
+
+`RankedSite` is defined in `lib/models/types.ts`:
+
+```ts
+export type RankedSite = {
+  rank: number;
+  name: string;
+  score: number;
+  confidence: number;
+  rationale: string;
+  lat?: number;   // decimal degrees, optional
+  lng?: number;   // decimal degrees, optional
+};
+```
+
+Why optional: every model prompt was updated in Day 4 commit 2 to ask for `lat` + `lng`, and the curated stub seeds real Lusaka coordinates. But a model that ignores the instruction (or returns a city with no recognizable address) just yields a site with no marker — Atlas degrades gracefully instead of throwing.
+
+The Gemini model was tested with "Where in Lusaka Zambia?" and returns 5 ranked sites with coords (Great East Road ~-15.39, 28.32; etc.). When the model returns coords, markers appear. When it doesn't, the map still renders and the sidebar shows "N sites missing lat/lng".
+
+### Mapbox style
+
+The result page uses `mapbox://styles/mapbox/dark-v11` — a dark style that matches the Atlas dark theme. To switch styles, edit the `style:` option in `components/ResultMapClient.tsx` line ~46. Other public styles: `streets-v12`, `light-v11`, `satellite-v9`, `outdoors-v12`. See the [Mapbox style spec](https://docs.mapbox.com/api/maps/styles/) for the full list.
+
+### Env var
+
+`NEXT_PUBLIC_MAPBOX_TOKEN` is the only Mapbox var needed. Get a free token (50k map loads / month) at [account.mapbox.com/access-tokens](https://account.mapbox.com/access-tokens/). The `NEXT_PUBLIC_` prefix means it is bundled into the client JS — scope the token via Mapbox URL restrictions in production (allow only your Vercel domain).
+
+### How to add a new marker color, popup shape, or sidebar field
+
+- Marker color: `new mapboxgl.Marker({ color: "#6366f1" })` — change to any hex. Use the site's `score` (e.g. `0.5 + site.score * 0.5` to map 0-1 to red→green) if you want data-driven colors.
+- Popup HTML: `popupHtml` in `ResultMapClient.tsx` is built as a template string inside `map.on("load", ...)`. Escape all user-derived text via `escapeHtml()` (already defined in the same file).
+- Sidebar field: the `<ol>` in the same file maps over `rankedSites`. Add a new `<span>` block inside the `<button>` per row.
 
 ---
 
