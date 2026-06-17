@@ -185,7 +185,7 @@ repo. `.env.example` documents placeholder values only.
 | `NEXT_PUBLIC_SUPABASE_URL` | [Supabase Project Settings](https://supabase.com/dashboard) → API → Project URL | Supabase project URL for client-side use |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Supabase → API → Publishable key (new 2025+ format) | Client-side Supabase key |
 | `SUPABASE_SECRET_KEY` | Supabase → API → Secret key (new 2025+ format) | Server-side Supabase key (NEVER expose to client) |
-| `DATABASE_URL` | Supabase → Settings → Database → Connection string (Direct) | Postgres connection string for Prisma |
+| `DATABASE_URL` | Supabase → Settings → Database → Connection string (Transaction pooler, port 6543) | Postgres connection string for Prisma. **MUST include `?pgbouncer=true` to disable prepared statements. Without it, Prisma collides with PgBouncer and throws `42P05 prepared statement "s0" already exists` errors.** Supabase's transaction-mode pooler on port 6543 requires this flag; the Session pooler also works with it. |
 
 Day 3+ will add:
 
