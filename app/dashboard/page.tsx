@@ -69,7 +69,7 @@ export default async function DashboardPage() {
   });
 
   return (
-    <div className="flex min-h-screen bg-atlas-bg text-atlas-text">
+    <div className="flex min-h-screen items-start bg-atlas-bg text-atlas-text">
       <Sidebar />
 
       <main className="flex min-w-0 flex-1 flex-col">
@@ -151,7 +151,7 @@ export default async function DashboardPage() {
                       : q.questionText}
                   </p>
                   <Link
-                    href={`/dashboard/${q.id}`}
+                    href={`/result/${q.id}`}
                     className="text-xs text-atlas-accent hover:underline"
                   >
                     View response →
