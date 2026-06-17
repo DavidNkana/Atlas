@@ -3,7 +3,7 @@
 > A horizontal AI engine that answers complex real-world questions by combining structured APIs, browser automation, and AI reasoning.
 
 **Repo:** [DavidNkana/Atlas](https://github.com/DavidNkana/Atlas)
-**Status:** Week 1, Day 4 (Mapbox result page live)
+**Status:** Week 1, Day 5 (Overpass connector + scoring engine + planner live)
 **Owner:** Chris + Alex
 
 ---
@@ -33,7 +33,7 @@ The only thing that changes is which connectors the planner selects and how the 
 | **Day 2** | Sign-in (Clerk) + Postgres (Supabase) — questions persist | Auth + database are wired |
 | **Day 3** | Pluggable model registry: Gemini + OpenRouter (Llama, Mistral) + curated stub | The AI integration is vendor-agnostic |
 | **Day 4** | Result page renders a Mapbox map | The map integration works |
-| **Day 5** | A real connector stub fires, returns a `Signal`, scoring engine ranks it | The horizontal engine is real and demoable |
+| **Day 5** | A real connector fires (OpenStreetMap Overpass), returns a `Signal`, scoring engine ranks it | The horizontal engine is real and demoable |
 | **Days 6–7** | Polish, real-data experiments, E2E test, Christopher-facing demo | The pipeline is production-grade |
 
 **Day 1 status:** the prompt box is live on Vercel, the route handler returns the stub JSON, the repo is on `main`. The pipeline is alive.
@@ -268,6 +268,159 @@ The result page uses `mapbox://styles/mapbox/dark-v11` — a dark style that mat
 - Marker color: `new mapboxgl.Marker({ color: "#6366f1" })` — change to any hex. Use the site's `score` (e.g. `0.5 + site.score * 0.5` to map 0-1 to red→green) if you want data-driven colors.
 - Popup HTML: `popupHtml` in `ResultMapClient.tsx` is built as a template string inside `map.on("load", ...)`. Escape all user-derived text via `escapeHtml()` (already defined in the same file).
 - Sidebar field: the `<ol>` in the same file maps over `rankedSites`. Add a new `<span>` block inside the `<button>` per row.
+
+---
+
+## Day 5 — OpenStreetMap Overpass connector + scoring engine + planner
+
+Day 5 is the day Atlas stops being "the AI said so" and starts being "the AI
+said X, and OpenStreetMap confirms with Y POIs". The result page now shows
+per-site signals next to every site and a score breakdown
+("AI 0.85 → signals +0.09").
+
+### What was built
+
+1. **Connector abstractions** (`lib/connectors/`) — every external data
+   source Atlas talks to implements the same `Connector` interface and
+   returns `Signal[]` for a candidate site. Today there is one concrete
+   connector: `overpass`. Tomorrow there will be `google-places`,
+   `coinGecko`, `github`, etc., all registered the same way.
+2. **Scoring engine** (`lib/scoring/`) — combines the AI's per-site score
+   with the signals into a final `confidence` in `[0, 1]` and emits a
+   `ScoreBreakdown` the UI can render verbatim.
+3. **Planner** (`lib/plan/`) — the recipe of connector calls Atlas will run
+   for one question. Today it emits one `overpass` step per site. Day 60+
+   will make it smart (skip when AI confidence > 0.95, fan-out parallel
+   calls, cascade cheap→paid connectors).
+4. **Overpass connector** (`lib/connectors/overpass.ts`) — real
+   OpenStreetMap queries, per-vertical POI templates, 8-second
+   `AbortController` timeout, returns `[]` on any error so the API route
+   never stalls.
+5. **Wired into `/api/ask`** — after the AI returns, `Promise.allSettled`
+   runs every plan step in parallel, the scoring engine updates every
+   site's score + attaches signals + breakdown, and the persisted JSON
+   includes `plan`, `connectorsRun`, and `connectorsError`.
+6. **Rendered in the result UI** — the sidebar now shows the score as
+   `score 0.94` with sub-text `AI 0.85 → signals +0.09` and a row of
+   badges (`12 amenities within 1.5km`). The result page header shows a
+   **Connectors** badge row (`overpass · 12 signals · ok`) and an amber
+   banner when every connector failed.
+
+### The Signal interface
+
+```ts
+interface Signal {
+  id: string;             // `${connectorId}:${siteId}:${type}` for dedup
+  source: string;         // "overpass" today
+  type: string;           // "amenity_density" today; future: "competitor_count", "foot_traffic"
+  lat?: number;
+  lng?: number;
+  label: string;          // human sentence the UI shows verbatim: "12 amenities within 1.5km"
+  value: number;          // raw count (12)
+  weight: number;         // normalised [0..1], used directly by the scoring engine
+  fetchedAt: string;      // ISO timestamp
+}
+```
+
+### The Connector interface
+
+```ts
+interface Connector {
+  id: string;             // "overpass"
+  name: string;           // "OpenStreetMap Overpass"
+  vertical: Vertical | "all";
+  fetch: (ctx: ConnectorContext) => Promise<Signal[]>;
+}
+
+interface ConnectorContext {
+  vertical: Vertical;
+  location: { lat: number; lng: number; label?: string };
+  site: { id: string; name: string; lat: number; lng: number };
+}
+```
+
+### The Plan interface
+
+```ts
+interface PlanStep {
+  connectorId: string;
+  input: Record<string, unknown>;   // connector-specific; v1 is always { siteId }
+  reason: string;                    // human sentence
+}
+
+interface Plan {
+  vertical: Vertical;
+  location: { lat: number; lng: number; label?: string };
+  steps: PlanStep[];
+}
+```
+
+### Vertical-specific weights
+
+Each vertical weights signals differently. Defined in `lib/scoring/types.ts`:
+
+| Vertical | `amenityDensity` weight | `maxSignalBoost` |
+|---|---|---|
+| `gas_station` | 0.40 | ±0.15 |
+| `restaurant` | 0.30 | ±0.15 |
+| `warehouse` | 0.30 | ±0.15 |
+| `retail_shop` | 0.35 | ±0.15 |
+
+**Why gas_station weighs POI density highest** — competition density is
+the dominant signal for a fuel site: too many competitors nearby tanks
+margins, too few nearby means no demand. The scoring engine centres
+`sig.weight` around 0.5 so very low density subtracts, very high adds, and
+mid density is a wash.
+
+### Why Overpass (and not Google Places, Foursquare, or Here)
+
+| Source | Cost | Auth | Coverage | Rate limit |
+|---|---|---|---|---|
+| **OpenStreetMap Overpass** | Free | None | Global | Generous on public instance |
+| Google Places API | Pay-per-call + requires billing card | API key | Excellent | 1000 RPM with billing |
+| Foursquare | Free tier limited | API key | Good in US/EU, sparse in Africa | 1000/day free |
+| Here | Freemium | API key | Good | 1000/day free |
+
+Atlas is built for African markets first (Lusaka, Joburg, Nairobi). OSM has
+the best coverage where the paying users live today. No API key = no Vercel
+env var to forget, no surprise bill, no quota dashboard.
+
+API docs: https://overpass-api.de/
+
+### How to add a new connector in 4 steps
+
+1. **Create `lib/connectors/<name>.ts`** — export a `Connector` object:
+   ```ts
+   export const myConnector: Connector = {
+     id: "my-connector",
+     name: "My Connector",
+     vertical: "all",   // or a specific Vertical
+     fetch: async (ctx) => { /* return Signal[] */ },
+   };
+   ```
+2. **Append it to `ALL_CONNECTORS` in `lib/connectors/registry.ts`**.
+3. **(Optional) Add a per-vertical template in the planner** if it needs
+   special fan-out logic. v1 the planner always calls every registered
+   connector.
+4. **Done.** The API route picks it up automatically via
+   `getConnectorsForVertical(vertical)`, the result UI's connectors row
+   renders its status, and the scoring engine factors it in via
+   `signal.type`.
+
+### Files
+
+| File | Purpose |
+|---|---|
+| `lib/connectors/types.ts` | `Signal`, `Connector`, `ConnectorContext` interfaces |
+| `lib/connectors/registry.ts` | `ALL_CONNECTORS`, `getConnector(id)`, `getConnectorsForVertical(v)` |
+| `lib/connectors/overpass.ts` | OpenStreetMap Overpass connector |
+| `lib/scoring/types.ts` | `ScoreFactor`, `ScoreBreakdown`, `VERTICAL_WEIGHTS` |
+| `lib/scoring/engine.ts` | `combine(aiSite, signals, vertical)` |
+| `lib/plan/types.ts` | `PlanStep`, `Plan` |
+| `lib/plan/planner.ts` | `buildPlan(vertical, location, sites)` |
+| `app/api/ask/route.ts` | Wires `planner → connectors → scoring` between AI and persist |
+| `components/ResultMapClient.tsx` | Sidebar shows signals + AI→signals score breakdown |
+| `app/result/[id]/page.tsx` | Connectors badge row + amber banner when connectors fail |
 
 ---
 

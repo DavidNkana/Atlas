@@ -1,11 +1,163 @@
-# Project Atlas — Week 1 Design (Day 1)
+# Project Atlas — Week 1 Design
 
-**Status:** Draft for Chris approval
-**Date:** 2026-06-16
+**Status:** Day 5 complete — connector + scoring + planner live
+**Date:** 2026-06-16 (initial), updated Day 5
 **Owner:** Alex (Alex — Naudé Core Portfolio Manager)
 **Project codename:** Atlas ("An AI-powered Intelligence Engine")
 **Repo:** https://github.com/DavidNkana/Atlas
 **Target:** https://atlas-davidnkana.vercel.app (provisional, set by Vercel on first import)
+
+---
+
+## Day 5 status — ✅ COMPLETE
+
+Day 5 shipped the horizontal engine's first real connector, the scoring
+engine, and the planner. The result page now shows the AI ranking, the
+live signals that confirm or override it, and a transparent score
+breakdown ("AI 0.85 → signals +0.09").
+
+### Files shipped
+
+| Path | Purpose |
+|---|---|
+| `lib/connectors/types.ts` | `Signal`, `Connector`, `ConnectorContext` interfaces |
+| `lib/connectors/registry.ts` | `ALL_CONNECTORS`, `getConnector(id)`, `getConnectorsForVertical(v)` |
+| `lib/connectors/overpass.ts` | OpenStreetMap Overpass connector (Day 5 commit 2) |
+| `lib/scoring/types.ts` | `ScoreFactor`, `ScoreBreakdown`, `VERTICAL_WEIGHTS` |
+| `lib/scoring/engine.ts` | `combine(aiSite, signals, vertical)` |
+| `lib/plan/types.ts` | `PlanStep`, `Plan` |
+| `lib/plan/planner.ts` | `buildPlan(vertical, location, sites)` |
+| `app/api/ask/route.ts` | Updated: wires `planner → connectors → scoring` after AI |
+| `components/ResultMapClient.tsx` | Updated: sidebar shows signals + AI→signals score breakdown |
+| `app/result/[id]/page.tsx` | Updated: Connectors badge row + amber banner on connector failure |
+| `README.md` | Updated: Day 5 section with connector "how to add" guide |
+| `.env.example` | Updated: notes that Overpass is public + free, no key required |
+
+### Connector → scoring → planner → API → UI flow
+
+```
+User POSTs /api/ask { vertical, question }
+        │
+        ▼
+   ┌─────────┐    ┌───────────────────────┐
+   │  Model  │──▶│  ranked_sites (text)  │
+   └─────────┘    └───────────────────────┘
+                       │
+                       ▼
+              ┌──────────────────┐
+              │     planner      │   buildPlan(vertical, location, sites)
+              │  buildPlan()     │   → Plan { vertical, location, steps[] }
+              └──────────────────┘
+                       │
+                       ▼
+              ┌──────────────────────────────────────┐
+              │   Promise.allSettled over steps[]    │
+              │   ──────────────────────────────     │
+              │   step.connectorId = "overpass"      │
+              │   → overpassConnector.fetch(ctx)     │
+              │   → Signal[] (or [] on error)        │
+              └──────────────────────────────────────┘
+                       │
+                       ▼
+              ┌──────────────────────────────┐
+              │      scoring engine          │
+              │   combine(aiSite, signals,   │
+              │           vertical)          │
+              │   → ScoreBreakdown           │
+              └──────────────────────────────┘
+                       │
+                       ▼
+              ┌─────────────────────────────────────────────┐
+              │  Attach to each site:                       │
+              │   site.score       = breakdown.confidence   │
+              │   site.signals     = signalsForSite         │
+              │   site.scoreBreakdown = breakdown           │
+              └─────────────────────────────────────────────┘
+                       │
+                       ▼
+              ┌────────────────────────────────────┐
+              │  Response shape:                   │
+              │  {                                │
+              │    ...ranked_sites (updated),     │
+              │    plan,                          │
+              │    connectorsRun:                 │
+              │      [{ id, status, signalCount }]│
+              │    connectorsError?: "..."        │
+              │  }                                │
+              └────────────────────────────────────┘
+                       │
+                       ▼
+       prisma.question.update({ responseJson })
+                       │
+                       ▼
+              /result/[id] page
+              ├─ Connectors badge row (overpass · 12 signals · ok)
+              ├─ Amber banner if connectorsError
+              └─ Sidebar: score pill + AI→signals delta + Signals badges
+```
+
+### Signal interface
+
+```ts
+interface Signal {
+  id: string;             // `${connectorId}:${siteId}:${type}`
+  source: string;         // "overpass"
+  type: string;           // "amenity_density"
+  lat?: number;
+  lng?: number;
+  label: string;          // "12 amenities within 1.5km"
+  value: number;          // 12
+  weight: number;         // [0..1], used by scoring engine
+  fetchedAt: string;      // ISO timestamp
+}
+```
+
+### Connector interface
+
+```ts
+interface Connector {
+  id: string;             // "overpass"
+  name: string;           // "OpenStreetMap Overpass"
+  vertical: Vertical | "all";
+  fetch: (ctx: ConnectorContext) => Promise<Signal[]>;
+}
+
+interface ConnectorContext {
+  vertical: Vertical;
+  location: { lat: number; lng: number; label?: string };
+  site: { id: string; name: string; lat: number; lng: number };
+}
+```
+
+### Plan interface
+
+```ts
+interface PlanStep {
+  connectorId: string;                       // "overpass"
+  input: Record<string, unknown>;            // { siteId } in v1
+  reason: string;                            // human sentence
+}
+
+interface Plan {
+  vertical: Vertical;
+  location: { lat: number; lng: number; label?: string };
+  steps: PlanStep[];                         // one per ranked site in v1
+}
+```
+
+### Why Day 5 is "the horizontal engine is real"
+
+Before Day 5 the AI was the only source of truth — Atlas printed whatever
+the model said. After Day 5, every score is `f(AI ranking, live signals)`
+and the UI shows the breakdown so Chris can audit. Adding a new vertical
+(real estate, crypto, competitor research) now means:
+
+1. Write N new connectors (each one implements the `Connector` interface)
+2. Add per-vertical weights to `lib/scoring/types.ts` (`VERTICAL_WEIGHTS`)
+3. Register the connectors in `lib/connectors/registry.ts`
+
+The planner, scoring engine, API route, and UI don't change. That is the
+horizontal engine done right.
 
 ---
 
