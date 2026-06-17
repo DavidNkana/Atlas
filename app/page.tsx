@@ -10,6 +10,7 @@ import { ThinkingLoader } from "@/components/ThinkingLoader";
 import { StreamingThinking } from "@/components/StreamingThinking";
 import { ModelIcon } from "@/components/ModelIcon";
 import { OutOfScopeModal, useOutOfScopeGate } from "@/components/OutOfScopeModal";
+import { VerticalMismatchModal, suggestVertical } from "@/components/VerticalMismatchModal";
 import { readPrefs, DEFAULT_PREFS, type AtlasPrefs } from "@/components/SettingsDrawer";
 
 /**
@@ -95,12 +96,21 @@ export default function HomePage() {
     DEFAULT_PREFS.showThinkingLoader
   );
   const [modelPickerOpen, setModelPickerOpen] = useState<boolean>(false);
+  // Model picker flips up if there isn't enough space below the
+  // button. We measure on open.
+  const [modelPickerFlipUp, setModelPickerFlipUp] = useState<boolean>(false);
+  const [mismatchOpen, setMismatchOpen] = useState<boolean>(false);
+  const [mismatchData, setMismatchData] = useState<{
+    question: string;
+    current: string;
+    suggested: string;
+  } | null>(null);
+  const modelButtonRef = useRef<HTMLButtonElement | null>(null);
   const outOfScope = useOutOfScopeGate();
   const [customInputOpen, setCustomInputOpen] = useState<boolean>(false);
   const [customInputValue, setCustomInputValue] = useState<string>("");
   const [customError, setCustomError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const modelButtonRef = useRef<HTMLButtonElement | null>(null);
   const customInputRef = useRef<HTMLInputElement | null>(null);
 
   /**
@@ -227,6 +237,22 @@ export default function HomePage() {
     };
   }, [modelPickerOpen]);
 
+  // When the model picker opens, measure the space below the
+  // button. If there isn't room for the dropdown (we need ~320px),
+  // flip it above the button. This keeps the popup fully visible
+  // even when the user is scrolled near the bottom of the page.
+  useEffect(() => {
+    if (!modelPickerOpen) return;
+    if (typeof window === "undefined") return;
+    if (!modelButtonRef.current) return;
+    const rect = modelButtonRef.current.getBoundingClientRect();
+    const DROPDOWN_HEIGHT = 320;
+    const spaceBelow = window.innerHeight - rect.bottom - 16;
+    const spaceAbove = rect.top - 16;
+    const shouldFlip = spaceBelow < DROPDOWN_HEIGHT && spaceAbove > spaceBelow;
+    setModelPickerFlipUp(shouldFlip);
+  }, [modelPickerOpen]);
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!question.trim()) return;
@@ -237,9 +263,32 @@ export default function HomePage() {
       return;
     }
 
+    // Vertical mismatch gate. If the question clearly points to a
+    // different vertical than the one selected, show the warning
+    // modal and let the user decide. Custom verticals are user-defined
+    // so we skip the check for those.
+    if (!vertical.startsWith("custom:")) {
+      const suggested = suggestVertical(question.trim(), vertical);
+      if (suggested) {
+        setMismatchData({
+          question: question.trim(),
+          current: vertical,
+          suggested,
+        });
+        setMismatchOpen(true);
+        return;
+      }
+    }
+
     setLoading(true);
     setError(null);
 
+    await doSubmit();
+  }
+
+  // Extracted so the "Ask anyway" override on the vertical-mismatch
+  // modal can also call it after the user dismisses the warning.
+  async function doSubmit() {
     try {
       const res = await fetch("/api/ask", {
         method: "POST",
@@ -287,6 +336,37 @@ export default function HomePage() {
       <Sidebar />
 
       <outOfScope.Modal />
+
+      {mismatchOpen && mismatchData && (
+        <VerticalMismatchModal
+          question={mismatchData.question}
+          currentVertical={mismatchData.current}
+          onClose={() => {
+            setMismatchOpen(false);
+            setMismatchData(null);
+          }}
+          onUseVertical={(v) => {
+            // The suggestion comes from VERTICAL_KEYWORDS and matches
+            // one of our BuiltinVertical values.
+            setVertical(v as any);
+            setMismatchOpen(false);
+            setMismatchData(null);
+          }}
+          onUseCustom={() => {
+            setVertical("custom:hospital" as any); // placeholder, opens input
+            setCustomInputOpen(true);
+            setTimeout(() => customInputRef.current?.focus(), 100);
+            setMismatchOpen(false);
+            setMismatchData(null);
+          }}
+          onOverride={() => {
+            setMismatchOpen(false);
+            setMismatchData(null);
+            // Fire the actual submit now
+            void doSubmit();
+          }}
+        />
+      )}
 
       <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
         {/* Top bar: top-right links */}
@@ -487,7 +567,11 @@ export default function HomePage() {
                       {modelPickerOpen && (
                         <div
                           data-model-picker
-                          className="absolute right-0 top-full z-30 mt-1 w-72 overflow-hidden rounded-lg border border-atlas-border bg-atlas-surface shadow-2xl shadow-black/40"
+                          className={`absolute right-0 z-30 w-72 overflow-hidden rounded-lg border border-atlas-border bg-atlas-surface shadow-2xl shadow-black/40 ${
+                            modelPickerFlipUp
+                              ? "bottom-full mb-1"
+                              : "top-full mt-1"
+                          }`}
                         >
                           <div className="border-b border-atlas-border px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-atlas-muted">
                             Choose a model
