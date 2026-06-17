@@ -23,6 +23,7 @@
  */
 
 import type { Connector, ConnectorContext, Signal } from "./types";
+import { withTimeout } from "@/lib/util/timeout";
 
 const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
 const FETCH_TIMEOUT_MS = 8_000;
@@ -115,7 +116,11 @@ export const overpassConnector: Connector = {
 
     try {
       const query = buildQuery(vertical, lat, lng);
-      const data = await postOverpass(query, controller.signal);
+      const data = await withTimeout(
+        postOverpass(query, controller.signal),
+        FETCH_TIMEOUT_MS,
+        "overpass",
+      );
       clearTimeout(timer);
 
       const elements = Array.isArray(data.elements) ? data.elements : [];

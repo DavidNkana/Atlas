@@ -11,6 +11,27 @@ import { combine } from "@/lib/scoring/engine";
 import type { ScoreBreakdown, ScoreFactor } from "@/lib/scoring/types";
 import { buildPlan } from "@/lib/plan/planner";
 import type { Plan } from "@/lib/plan/types";
+import { withTimeout } from "@/lib/util/timeout";
+
+/**
+ * Day 5 hotfix — handler-level budget.
+ *
+ * Vercel's free-tier Pro default FUNCTION_INVOCATION_TIMEOUT is 300s.
+ * We hit it because the AI fallback chain cascaded through every
+ * discovered OpenRouter model. The handler itself now has a 50s hard
+ * budget; we set the elapsed-ms header on the response so Chris can
+ * see the real wall-clock time in DevTools.
+ */
+const HANDLER_TIMEOUT_MS = 50_000;
+
+/**
+ * Day 5 hotfix — fallback chain cap.
+ *
+ * Cap total model attempts at 3: primary → 1 best fallback → curated-stub.
+ * Previously we cascaded through ALL live models (5+ attempts × 30s each
+ * = 150s+), which is the dominant contributor to the 504s we were seeing.
+ */
+const MAX_FALLBACK_ATTEMPTS = 3;
 
 /**
  * Day 5 — connectors wired in.
@@ -67,6 +88,8 @@ type ModelBlock = {
   provider: string;
   free: boolean;
   fallbackUsed: boolean;
+  /** Day 5 hotfix — list of model ids that were attempted before success / stub. */
+  attemptedChain?: string[];
   modelError?: string;
 };
 
@@ -93,7 +116,7 @@ const SUPPORTED_VERTICALS = new Set<Vertical>([
   "retail_shop",
 ]);
 
-function modelInfoToBlock(info: ModelInfo, fallbackUsed: boolean, modelError?: string): ModelBlock {
+function modelInfoToBlock(info: ModelInfo, fallbackUsed: boolean, modelError?: string, attemptedChain?: string[]): ModelBlock {
   const block: ModelBlock = {
     id: info.id,
     displayName: info.displayName,
@@ -103,6 +126,9 @@ function modelInfoToBlock(info: ModelInfo, fallbackUsed: boolean, modelError?: s
   };
   if (modelError) {
     block.modelError = modelError;
+  }
+  if (attemptedChain && attemptedChain.length > 0) {
+    block.attemptedChain = attemptedChain;
   }
   return block;
 }
@@ -132,7 +158,22 @@ function deriveLocation(sites: RankedSite[]): {
   return { lat: -15.3875, lng: 28.3228, label: "Lusaka CBD (fallback)" };
 }
 
-export async function POST(req: NextRequest) {
+/**
+ * Day 5 hotfix — the handler itself is wrapped in a 50s hard timeout
+ * (withTimeout). If the inner work doesn't finish in time, we throw
+ * api_ask_timeout and the outer POST returns a 504-shaped JSON with a
+ * "timed out" message and the elapsed time we know about. The header
+ * `x-atlas-elapsed-ms` is set on every response so Chris can see the
+ * real wall-clock duration in DevTools' Network tab.
+ *
+ * Why 50s and not the Vercel default 60s? Give ourselves a 10s buffer
+ * so Prisma persist + JSON serialisation can finish before Vercel
+ * hard-kills us at 60s. Vercel's FUNCTION_INVOCATION_TIMEOUT is the
+ * real ceiling; our 50s is an inner cap.
+ */
+async function handleAsk(req: NextRequest): Promise<NextResponse> {
+  const t0 = Date.now();
+
   // 1. Auth check
   const { userId } = await auth();
   if (!userId) {
@@ -187,12 +228,21 @@ export async function POST(req: NextRequest) {
   let fallbackUsed = false;
   let responseStatus: "ok" | "stub_fallback" = "ok";
 
+  // Day 5 hotfix — track every model id we attempted so the user sees
+  // exactly what was tried in the response.
+  const attemptedChain: string[] = [];
+
+  // Day 5 hotfix — if the user picks the curated stub explicitly, we skip
+  // the entire chain (it's already a stub).
+  const requestedIsStub = requestedModelId === "curated-stub";
+
   try {
     activeModel = getModel(requestedModelId);
     activeInfo = activeModel.info;
     if (!activeModel.isAvailable()) {
       // Requested model has no key set — fall back to curated stub
       console.warn(`[/api/ask] model ${requestedModelId} not available, falling back to curated-stub`);
+      attemptedChain.push(requestedModelId);
       activeModel = curatedStub;
       activeInfo = curatedStub.info;
       fallbackUsed = true;
@@ -201,33 +251,45 @@ export async function POST(req: NextRequest) {
   } catch {
     // Unknown model id — fall back to curated stub
     console.warn(`[/api/ask] unknown model ${requestedModelId}, falling back to curated-stub`);
+    attemptedChain.push(requestedModelId);
     activeModel = curatedStub;
     activeInfo = curatedStub.info;
     fallbackUsed = true;
     responseStatus = "stub_fallback";
   }
 
+  // Day 5 hotfix — if primary is the stub, don't bother cascading.
+  if (!requestedIsStub && activeInfo.id !== "curated-stub") {
+    attemptedChain.push(activeInfo.id);
+  }
+
   // 4. Call the model
   let rankedSites: RankedSite[] = [];
   let raw: string | undefined;
   let modelError: string | undefined;
-  try {
-    const result = await activeModel.call({
+
+  // Helper — keep the model-call try-block small and readable.
+  const callModel = async (m: Model): Promise<{ ranked_sites: RankedSite[]; raw?: string }> => {
+    const result = await m.call({
       vertical: vertical as Vertical,
       question: trimmedQuestion,
     });
+    return { ranked_sites: result.ranked_sites, raw: result.raw };
+  };
+
+  try {
+    const result = await callModel(activeModel);
     rankedSites = result.ranked_sites;
     raw = result.raw;
   } catch (modelErr) {
-    // Primary model failed. Day 3 fix 3: try EVERY other live model in the
-    // registry (excluding the one that just failed and excluding the curated
-    // stub) before giving up to the stub. This way if the user picks
-    // gemini-flash and Gemini's quota is 0, we still try the OpenRouter
-    // models instead of going straight to the curated stub.
+    // Primary model failed. Day 5 hotfix: cap the fallback chain at
+    // MAX_FALLBACK_ATTEMPTS (3 total = primary → 1 fallback → curated-stub).
+    // Previously we cascaded through every live model (5+ × 30s = 150s+),
+    // which was the dominant contributor to FUNCTION_INVOCATION_TIMEOUT.
     const primaryErrMsg =
       modelErr instanceof Error ? modelErr.message : String(modelErr);
     console.error(
-      `[/api/ask] model ${activeInfo.id} call failed, trying fallback chain:`,
+      `[/api/ask] model ${activeInfo.id} call failed, trying fallback chain (max ${MAX_FALLBACK_ATTEMPTS} attempts):`,
       modelErr
     );
 
@@ -235,28 +297,28 @@ export async function POST(req: NextRequest) {
       `${activeInfo.id} call failed: ${primaryErrMsg}`,
     ];
 
-    // Build fallback chain: every model in the registry except the one that
-    // just failed and except the curated-stub. Only live (isAvailable) ones.
+    // Build fallback chain: every model in the registry except the one
+    // that just failed and except the curated-stub. Only live (isAvailable)
+    // ones. We cap attempts at MAX_FALLBACK_ATTEMPTS - 1 (primary is 1) so
+    // the final curated-stub call is always the last attempt.
     const fallbackChain = ALL_MODELS.filter(
       (m) =>
         m.info.id !== activeInfo.id &&
         m.info.id !== "curated-stub" &&
         m.isAvailable()
-    );
+    ).slice(0, MAX_FALLBACK_ATTEMPTS - 2); // -2 = primary + curated-stub
 
     let cascaded = false;
     for (const fallback of fallbackChain) {
       try {
-        const fallbackResult = await fallback.call({
-          vertical: vertical as Vertical,
-          question: trimmedQuestion,
-        });
+        const fallbackResult = await callModel(fallback);
         rankedSites = fallbackResult.ranked_sites;
         raw = fallbackResult.raw;
         activeInfo = fallback.info;
         activeModel = fallback;
         fallbackUsed = true;
         cascaded = true;
+        attemptedChain.push(fallback.info.id);
         console.log(
           `[/api/ask] fallback chain served by ${fallback.info.id} after ${activeInfo.id} failed`
         );
@@ -267,6 +329,7 @@ export async function POST(req: NextRequest) {
             ? fallbackErr.message
             : String(fallbackErr);
         errorChain.push(`${fallback.info.id} call failed: ${fbMsg}`);
+        attemptedChain.push(fallback.info.id);
         console.error(
           `[/api/ask] fallback model ${fallback.info.id} also failed:`,
           fallbackErr
@@ -276,13 +339,11 @@ export async function POST(req: NextRequest) {
     }
 
     if (!cascaded) {
-      // All fallbacks failed (or there were none available). Use curated stub
-      // so the user never sees a 500. modelError captures every failure in
-      // the chain so we can see why the stub fired.
-      const stubResult = await curatedStub.call({
-        vertical: vertical as Vertical,
-        question: trimmedQuestion,
-      });
+      // All fallbacks failed (or there were none available). Use curated
+      // stub so the user never sees a 500. modelError captures every
+      // failure in the chain so we can see why the stub fired.
+      attemptedChain.push("curated-stub");
+      const stubResult = await callModel(curatedStub);
       rankedSites = stubResult.ranked_sites;
       raw = stubResult.raw;
       activeInfo = curatedStub.info;
@@ -396,7 +457,7 @@ export async function POST(req: NextRequest) {
   // 6. Build response body (sans id; id comes from prisma row)
   const responseBody: Omit<AskResponse, "id"> = {
     status: responseStatus,
-    model: modelInfoToBlock(activeInfo, fallbackUsed, modelError),
+    model: modelInfoToBlock(activeInfo, fallbackUsed, modelError, attemptedChain),
     vertical,
     question: trimmedQuestion,
     echo: raw ? `Answer generated by ${activeInfo.displayName}${fallbackUsed ? " (fallback)" : ""}.` : "ok",
@@ -432,7 +493,47 @@ export async function POST(req: NextRequest) {
     id: questionRow.id,
     ...responseBody,
   };
-  return NextResponse.json(response);
+  const finalResponse = NextResponse.json(response);
+  // Diagnostic header — Chris can see real wall-clock time in DevTools.
+  finalResponse.headers.set("x-atlas-elapsed-ms", String(Date.now() - t0));
+  return finalResponse;
+}
+
+export async function POST(req: NextRequest) {
+  const t0 = Date.now();
+  try {
+    const response = await withTimeout(
+      handleAsk(req),
+      HANDLER_TIMEOUT_MS,
+      "api_ask",
+    );
+    // Belt-and-braces: ensure header is set even if the inner handler
+    // returned before we got here (it already sets it, but this guards
+    // future refactors that might forget).
+    response.headers.set("x-atlas-elapsed-ms", String(Date.now() - t0));
+    return response;
+  } catch (err) {
+    const elapsed = Date.now() - t0;
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[/api/ask] handler timed out or threw after ${elapsed}ms:`, err);
+    const isTimeout = msg.includes("api_ask_timeout");
+    const body = isTimeout
+      ? {
+          error: "Atlas /api/ask timed out",
+          message: "Request exceeded 50s. Try a different model or ask again.",
+          elapsedMs: elapsed,
+        }
+      : {
+          error: "Atlas /api/ask failed",
+          message: msg,
+          elapsedMs: elapsed,
+        };
+    const response = NextResponse.json(body, {
+      status: isTimeout ? 504 : 500,
+    });
+    response.headers.set("x-atlas-elapsed-ms", String(elapsed));
+    return response;
+  }
 }
 
 // Liveness check — also reports the available model list.
