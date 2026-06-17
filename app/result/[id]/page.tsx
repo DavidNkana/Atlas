@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { notFound, redirect } from "next/navigation";
 import ResultMapClient from "@/components/ResultMapClient";
 import { Sidebar } from "@/components/Sidebar";
+import { RankedSiteCard } from "@/components/RankedSiteCard";
 
 /**
  * Day 4 commit 1 + Day 5 commit 4:
@@ -252,44 +253,25 @@ export default async function ResultPage({
               Ranked sites
             </h2>
             <span className="text-[10px] uppercase tracking-wider text-atlas-muted">
-              {rankedSites.length} site{rankedSites.length === 1 ? "" : "s"}
+              {rankedSites.length} site{rankedSites.length === 1 ? "" : "s"} · click to expand
             </span>
           </div>
           <ol className="space-y-2">
             {rankedSites.map((s, i) => (
-              <li
+              <RankedSiteCard
                 key={i}
-                className="rounded-lg border border-atlas-border bg-atlas-surface p-4"
-              >
-                <div className="mb-1 flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-atlas-accent/10 text-xs font-semibold text-atlas-accent">
-                      {s.rank}
-                    </span>
-                    <h3 className="text-sm font-medium text-atlas-text">
-                      {s.name}
-                    </h3>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2 text-[11px]">
-                    <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 font-mono text-emerald-300">
-                      score {s.score?.toFixed?.(2) ?? "—"}
-                    </span>
-                    <span className="rounded bg-atlas-surface2 px-1.5 py-0.5 font-mono text-atlas-muted">
-                      conf {s.confidence?.toFixed?.(2) ?? "—"}
-                    </span>
-                  </div>
-                </div>
-                {s.rationale && (
-                  <p className="ml-8 text-xs leading-relaxed text-atlas-muted">
-                    {s.rationale}
-                  </p>
-                )}
-                {s.lat != null && s.lng != null && (
-                  <p className="ml-8 mt-1 font-mono text-[10px] text-atlas-muted">
-                    {s.lat.toFixed(4)}, {s.lng.toFixed(4)}
-                  </p>
-                )}
-              </li>
+                site={{
+                  rank: s.rank,
+                  name: s.name,
+                  score: s.score,
+                  confidence: s.confidence,
+                  rationale: s.rationale,
+                  lat: s.lat,
+                  lng: s.lng,
+                  signals: s.signals,
+                  scoreBreakdown: s.scoreBreakdown,
+                }}
+              />
             ))}
           </ol>
         </section>
