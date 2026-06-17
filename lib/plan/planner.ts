@@ -55,29 +55,33 @@ export function buildPlan(
 
     if (!hasCoords) {
       // Still emit one step per connector so the UI's plan counter matches.
-      steps.push({
-        connectorId: "overpass",
-        input: { siteId: id, __skip: true },
-        reason: `fetch POI density for site ${id} (skipped: missing coords)`,
-      });
-      steps.push({
-        connectorId: "real_estate_listings",
-        input: { siteId: id, __skip: true },
-        reason: `fetch listing density for site ${id} (skipped: missing coords)`,
-      });
+      for (const connectorId of [
+        "overpass",
+        "real_estate_listings",
+        "stats_sa",
+        "google_places",
+      ]) {
+        steps.push({
+          connectorId,
+          input: { siteId: id, __skip: true },
+          reason: `fetch ${connectorId} for site ${id} (skipped: missing coords)`,
+        });
+      }
       continue;
     }
 
-    steps.push({
-      connectorId: "overpass",
-      input: { siteId: id },
-      reason: `fetch POI density for site ${id} (${site.name ?? "unnamed"})`,
-    });
-    steps.push({
-      connectorId: "real_estate_listings",
-      input: { siteId: id },
-      reason: `fetch listing density for site ${id} (${site.name ?? "unnamed"})`,
-    });
+    for (const connectorId of [
+      "overpass",
+      "real_estate_listings",
+      "stats_sa",
+      "google_places",
+    ]) {
+      steps.push({
+        connectorId,
+        input: { siteId: id },
+        reason: `fetch ${connectorId} for site ${id} (${site.name ?? "unnamed"})`,
+      });
+    }
   }
 
   return {
