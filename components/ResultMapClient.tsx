@@ -5,10 +5,39 @@ import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 
 /**
- * Day 4 commit 3: render one marker per ranked site with a popup, auto-fit
- * the map bounds to all markers, and show a sidebar list that flies the
- * map to a clicked site.
+ * Day 4 commit 3 + Day 5 commit 4: render one marker per ranked site with a
+ * popup, auto-fit the map bounds to all markers, show a sidebar list that
+ * flies the map to a clicked site, AND show the per-site Signals + AI→signals
+ * score breakdown next to each site so the user sees the score is now
+ * evidence-based.
  */
+
+type Signal = {
+  id: string;
+  source: string;
+  type: string;
+  lat?: number;
+  lng?: number;
+  label: string;
+  value: number;
+  weight: number;
+  fetchedAt: string;
+};
+
+type ScoreFactor = {
+  name: string;
+  weight: number;
+  contribution: number;
+  evidence: string;
+};
+
+type ScoreBreakdown = {
+  siteId: string;
+  baseScore: number;
+  signalScore: number;
+  confidence: number;
+  factors: ScoreFactor[];
+};
 
 type RankedSite = {
   rank: number;
@@ -18,6 +47,8 @@ type RankedSite = {
   rationale: string;
   lat?: number;
   lng?: number;
+  signals?: Signal[];
+  scoreBreakdown?: ScoreBreakdown;
 };
 
 function escapeHtml(s: string): string {
@@ -27,6 +58,18 @@ function escapeHtml(s: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+function scoreColor(score: number): string {
+  if (score >= 0.8) return "text-emerald-400";
+  if (score >= 0.6) return "text-amber-400";
+  return "text-zinc-400";
+}
+
+function statusColor(status: string): string {
+  if (status === "ok") return "bg-emerald-500/10 text-emerald-400 border-emerald-900";
+  if (status === "timeout") return "bg-amber-500/10 text-amber-400 border-amber-900";
+  return "bg-rose-500/10 text-rose-400 border-rose-900";
 }
 
 export default function ResultMapClient({
@@ -170,6 +213,16 @@ export default function ResultMapClient({
             {rankedSites.map((site) => {
               const hasCoords =
                 typeof site.lat === "number" && typeof site.lng === "number";
+              const breakdown = site.scoreBreakdown;
+              const signalDelta =
+                breakdown ? breakdown.signalScore : 0;
+              const baseScore = breakdown ? breakdown.baseScore : site.score;
+              const signalText =
+                signalDelta > 0
+                  ? `+${signalDelta.toFixed(2)}`
+                  : signalDelta < 0
+                    ? signalDelta.toFixed(2)
+                    : "±0.00";
               return (
                 <li key={site.rank}>
                   <button
@@ -186,10 +239,17 @@ export default function ResultMapClient({
                         {site.name}
                       </span>
                       <span className="block text-[11px] text-zinc-400">
-                        <span className="text-emerald-400 font-medium">
-                          Score {site.score.toFixed(2)}
+                        <span
+                          className={`font-medium ${scoreColor(site.score)}`}
+                          data-testid="atlas-site-score"
+                        >
+                          score {site.score.toFixed(2)}
                         </span>{" "}
-                        · Confidence{" "}
+                        · AI {baseScore.toFixed(2)} → signals{" "}
+                        <span className={signalDelta >= 0 ? "text-emerald-400" : "text-rose-400"}>
+                          {signalText}
+                        </span>
+                        {" "}· Confidence{" "}
                         <span className="text-zinc-300">
                           {site.confidence.toFixed(2)}
                         </span>
@@ -197,6 +257,21 @@ export default function ResultMapClient({
                           ? ` · ${site.lat!.toFixed(4)}, ${site.lng!.toFixed(4)}`
                           : " · no coords"}
                       </span>
+                      {site.signals && site.signals.length > 0 && (
+                        <span
+                          className="mt-1 flex flex-wrap gap-1"
+                          data-testid="atlas-site-signals"
+                        >
+                          {site.signals.map((sig) => (
+                            <span
+                              key={sig.id}
+                              className="inline-flex items-center rounded-full border border-zinc-700 bg-zinc-900 px-2 py-0.5 text-[10px] text-zinc-300"
+                            >
+                              {sig.label}
+                            </span>
+                          ))}
+                        </span>
+                      )}
                     </span>
                   </button>
                 </li>
