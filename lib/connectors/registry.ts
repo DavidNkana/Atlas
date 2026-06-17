@@ -8,13 +8,17 @@
 
 import type { Connector } from "./types";
 import { overpassConnector } from "./overpass";
+import { realEstateListingsConnector } from "./real_estate_listings";
 
 /**
  * The full list of connectors Atlas will consider running. Order matters:
  * the planner iterates this list. Today every plan runs every connector;
  * the planner is the place that will later learn to skip or fan-out.
  */
-export const ALL_CONNECTORS: Connector[] = [overpassConnector];
+export const ALL_CONNECTORS: Connector[] = [
+  overpassConnector,
+  realEstateListingsConnector,
+];
 
 /** O(1) lookup by connector id. Throws if unknown so callers fail loudly. */
 export function getConnector(id: string): Connector {

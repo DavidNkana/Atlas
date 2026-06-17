@@ -42,8 +42,11 @@ export function buildPlan(
   location: { lat: number; lng: number; label?: string },
   sites: PlannerSite[],
 ): Plan {
-  const steps: PlanStep[] = sites.map((site, idx) => {
-    const id = siteKey(site, idx);
+  const steps: PlanStep[] = [];
+
+  for (let i = 0; i < sites.length; i++) {
+    const site = sites[i];
+    const id = siteKey(site, i);
     const hasCoords =
       typeof site.lat === "number" &&
       typeof site.lng === "number" &&
@@ -51,19 +54,31 @@ export function buildPlan(
       !Number.isNaN(site.lng);
 
     if (!hasCoords) {
-      return {
+      // Still emit one step per connector so the UI's plan counter matches.
+      steps.push({
         connectorId: "overpass",
         input: { siteId: id, __skip: true },
         reason: `fetch POI density for site ${id} (skipped: missing coords)`,
-      };
+      });
+      steps.push({
+        connectorId: "real_estate_listings",
+        input: { siteId: id, __skip: true },
+        reason: `fetch listing density for site ${id} (skipped: missing coords)`,
+      });
+      continue;
     }
 
-    return {
+    steps.push({
       connectorId: "overpass",
       input: { siteId: id },
       reason: `fetch POI density for site ${id} (${site.name ?? "unnamed"})`,
-    };
-  });
+    });
+    steps.push({
+      connectorId: "real_estate_listings",
+      input: { siteId: id },
+      reason: `fetch listing density for site ${id} (${site.name ?? "unnamed"})`,
+    });
+  }
 
   return {
     vertical,
