@@ -19,13 +19,14 @@ const CURATED_STUB_SLUGS: string[] = [
 ];
 
 /**
- * Build an OpenRouter-backed Atlas Model.
+ * Day 5 hotfix v3 — defensive call().
  *
- * Chain on call:
- *   1. The hardcoded primary if it survives in the discovered free list.
- *   2. The first discovered free model (any).
- *   3. The remaining discovered free models (de-duplicated).
- *   4. The curated stub slugs as last-ditch fallback.
+ * Wraps the entire OpenRouter chain in try/catch. NEVER throws out of
+ * .call() so the fallback chain in route.ts can always move on.
+ *
+ * Each individual model in the chain has its own inner try/catch that
+ * records lastError and continues. If the entire chain fails, we return
+ * { ok: false, error } instead of throwing.
  */
 function makeOpenRouterModel(
   id: string,
@@ -37,38 +38,66 @@ function makeOpenRouterModel(
     info: { id, displayName: hardcodedDisplayName, provider: 'openrouter', free: true, description },
     isAvailable: () => !!process.env.OPENROUTER_API_KEY,
     call: async (req: ModelRequest): Promise<ModelResponse> => {
-      const key = process.env.OPENROUTER_API_KEY;
-      if (!key) throw new Error('OPENROUTER_API_KEY not set');
-      const client = new OpenAI({ apiKey: key, baseURL: 'https://openrouter.ai/api/v1' });
-
-      const discoveredIds = await fetchOpenRouterFreeModelIds();
-      const chain: string[] = [];
-      if (discoveredIds.includes(upstreamModelId)) chain.push(upstreamModelId);
-      for (const dId of discoveredIds) {
-        if (!chain.includes(dId)) chain.push(dId);
-      }
-      for (const stub of CURATED_STUB_SLUGS) {
-        if (!chain.includes(stub)) chain.push(stub);
-      }
-
-      let lastError: Error | null = null;
-      for (const modelId of chain) {
-        try {
-          const completion = await client.chat.completions.create({
-            model: modelId,
-            messages: [{ role: 'user', content: buildPrompt(req) }],
-            response_format: { type: 'json_object' },
-          });
-          const text = completion.choices[0]?.message?.content || '{}';
-          const parsed = JSON.parse(text);
-          return { ranked_sites: parsed.ranked_sites, raw: text };
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          lastError = new Error(`OpenRouter call failed (${modelId}): ${msg}`);
-          // Continue to next fallback.
+      try {
+        const key = process.env.OPENROUTER_API_KEY;
+        if (!key) {
+          return { ok: false, error: 'OPENROUTER_API_KEY not set' } as any;
         }
+        const client = new OpenAI({ apiKey: key, baseURL: 'https://openrouter.ai/api/v1' });
+
+        const discoveredIds = await fetchOpenRouterFreeModelIds();
+        const chain: string[] = [];
+        if (discoveredIds.includes(upstreamModelId)) chain.push(upstreamModelId);
+        for (const dId of discoveredIds) {
+          if (!chain.includes(dId)) chain.push(dId);
+        }
+        for (const stub of CURATED_STUB_SLUGS) {
+          if (!chain.includes(stub)) chain.push(stub);
+        }
+
+        let lastError: string | null = null;
+        for (const modelId of chain) {
+          try {
+            const completion: any = await client.chat.completions.create({
+              model: modelId,
+              messages: [{ role: 'user', content: buildPrompt(req) }],
+              response_format: { type: 'json_object' },
+            });
+            // Defensive: completion.choices may be missing or empty.
+            const choice = completion?.choices?.[0];
+            const text = (choice?.message?.content ?? '') as string;
+            if (!text || typeof text !== 'string' || text.trim() === '') {
+              lastError = `OpenRouter (${modelId}): empty response`;
+              continue;
+            }
+            let parsed: any;
+            try {
+              parsed = JSON.parse(text);
+            } catch (parseErr) {
+              const msg = parseErr instanceof Error ? parseErr.message : String(parseErr);
+              lastError = `OpenRouter (${modelId}) returned non-JSON: ${msg}`;
+              continue;
+            }
+            if (!parsed || !Array.isArray(parsed.ranked_sites)) {
+              lastError = `OpenRouter (${modelId}): missing ranked_sites array`;
+              continue;
+            }
+            return { ranked_sites: parsed.ranked_sites, raw: text } as any;
+          } catch (perModelErr) {
+            const msg = perModelErr instanceof Error ? perModelErr.message : String(perModelErr);
+            lastError = `OpenRouter (${modelId}) call failed: ${msg}`;
+            // Continue to next fallback.
+          }
+        }
+        return {
+          ok: false,
+          error: lastError ?? `OpenRouter call failed: all ${chain.length} models in chain returned errors`,
+        } as any;
+      } catch (outerErr) {
+        // Last-resort: catch ANY throwable.
+        const msg = outerErr instanceof Error ? outerErr.message : String(outerErr);
+        return { ok: false, error: `OpenRouter call failed: ${msg}` } as any;
       }
-      throw lastError ?? new Error(`OpenRouter call failed: all ${chain.length} models in chain returned errors`);
     },
   };
 }

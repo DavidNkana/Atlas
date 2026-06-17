@@ -42,6 +42,6 @@ export const curatedStub: Model = {
   isAvailable: () => true,
   call: async (req: ModelRequest): Promise<ModelResponse> => {
     const sites = STUB_RESPONSES[req.vertical] || STUB_RESPONSES.gas_station;
-    return { ranked_sites: sites, raw: 'stub' };
+    return { ok: true, ranked_sites: sites, raw: 'stub' };
   },
 };

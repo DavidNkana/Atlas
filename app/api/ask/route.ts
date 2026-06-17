@@ -12,6 +12,7 @@ import type { ScoreBreakdown, ScoreFactor } from "@/lib/scoring/types";
 import { buildPlan } from "@/lib/plan/planner";
 import type { Plan } from "@/lib/plan/types";
 import { withTimeout } from "@/lib/util/timeout";
+import { sanitizeForJson } from "@/lib/util/json-sanitize";
 
 /**
  * Day 5 hotfix — handler-level budget.
@@ -304,38 +305,63 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   // Helper — keep the model-call try-block small and readable.
   // Day 5 hotfix v2: every model.call() is wrapped in a 25s per-model
   // timeout so a single hanging model can't burn the whole handler
-  // budget. The error message uses the "model_<id>_timeout" prefix
-  // so catch blocks can distinguish a per-model timeout from the
-  // outer api_ask_timeout.
-  const callModel = async (m: Model): Promise<{ ranked_sites: RankedSite[]; raw?: string }> => {
-    const result = await withTimeout(
-      m.call({
-        vertical: vertical as Vertical,
-        question: trimmedQuestion,
-      }),
-      MODEL_TIMEOUT_MS,
-      "model:" + m.info.id,
-    );
-    return { ranked_sites: result.ranked_sites, raw: result.raw };
+  // budget.
+  //
+  // Day 5 hotfix v3: model.call() now returns a union type
+  //   { ok: true, ranked_sites, raw } | { ok: false, error }
+  // so we never have to rely on throwing for control flow. This helper
+  // normalises that into either { ok: true, sites, raw } or { ok: false,
+  // error } for the fallback chain.
+  const callModel = async (
+    m: Model,
+  ): Promise<{ ok: true; sites: RankedSite[]; raw?: string } | { ok: false; error: string }> => {
+    let result;
+    try {
+      result = await withTimeout(
+        m.call({
+          vertical: vertical as Vertical,
+          question: trimmedQuestion,
+        }),
+        MODEL_TIMEOUT_MS,
+        "model:" + m.info.id,
+      );
+    } catch (timeoutErr) {
+      const msg = timeoutErr instanceof Error ? timeoutErr.message : String(timeoutErr);
+      return { ok: false, error: `model:${m.info.id} ${msg}` };
+    }
+    // Defensive: model.call() should never return null/undefined.
+    if (!result || typeof result !== "object") {
+      return { ok: false, error: `model:${m.info.id} returned non-object` };
+    }
+    const r = result as any;
+    if (r.ok === false && typeof r.error === "string") {
+      return { ok: false, error: `model:${m.info.id} ${r.error}` };
+    }
+    if (r.ok === true && Array.isArray(r.ranked_sites)) {
+      return { ok: true, sites: r.ranked_sites, raw: r.raw };
+    }
+    // Legacy shape (no ok flag) — support existing callers that still
+    // return { ranked_sites } without ok:true.
+    if (Array.isArray(r.ranked_sites)) {
+      return { ok: true, sites: r.ranked_sites, raw: r.raw };
+    }
+    return { ok: false, error: `model:${m.info.id} returned malformed response` };
   };
 
   try {
     await withTimeout((async () => {
       try {
         const result = await callModel(activeModel);
-        rankedSites = result.ranked_sites;
-        raw = result.raw;
-        return;
-      } catch (modelErr) {
-        // Primary model failed. Day 5 hotfix: cap the fallback chain at
-        // MAX_FALLBACK_ATTEMPTS (3 total = primary → 1 fallback → curated-stub).
-        // Previously we cascaded through every live model (5+ × 30s = 150s+),
-        // which was the dominant contributor to FUNCTION_INVOCATION_TIMEOUT.
-        const primaryErrMsg =
-          modelErr instanceof Error ? modelErr.message : String(modelErr);
+        if (result.ok) {
+          rankedSites = result.sites;
+          raw = result.raw;
+          return;
+        }
+        // Primary model returned { ok: false, error } — no exception,
+        // but still no answer. Treat as failure and fall through.
+        const primaryErrMsg = result.error;
         console.error(
-          `[/api/ask] model ${activeInfo.id} call failed, trying fallback chain (max ${MAX_FALLBACK_ATTEMPTS} attempts):`,
-          modelErr
+          `[/api/ask] model ${activeInfo.id} call returned error, trying fallback chain (max ${MAX_FALLBACK_ATTEMPTS} attempts): ${primaryErrMsg}`,
         );
 
         const errorChain: string[] = [
@@ -355,32 +381,25 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
 
         let cascaded = false;
         for (const fallback of fallbackChain) {
-          try {
-            const fallbackResult = await callModel(fallback);
-            rankedSites = fallbackResult.ranked_sites;
-            raw = fallbackResult.raw;
+          attemptedChain.push(fallback.info.id);
+          const fbResult = await callModel(fallback);
+          if (fbResult.ok) {
+            rankedSites = fbResult.sites;
+            raw = fbResult.raw;
             activeInfo = fallback.info;
             activeModel = fallback;
             fallbackUsed = true;
             cascaded = true;
-            attemptedChain.push(fallback.info.id);
             console.log(
               `[/api/ask] fallback chain served by ${fallback.info.id} after ${activeInfo.id} failed`
             );
             return;
-          } catch (fallbackErr) {
-            const fbMsg =
-              fallbackErr instanceof Error
-                ? fallbackErr.message
-                : String(fallbackErr);
-            errorChain.push(`${fallback.info.id} call failed: ${fbMsg}`);
-            attemptedChain.push(fallback.info.id);
-            console.error(
-              `[/api/ask] fallback model ${fallback.info.id} also failed:`,
-              fallbackErr
-            );
-            continue;
           }
+          errorChain.push(`${fallback.info.id} call failed: ${fbResult.error}`);
+          console.error(
+            `[/api/ask] fallback model ${fallback.info.id} also failed: ${fbResult.error}`,
+          );
+          // continue to next fallback — never throw
         }
 
         if (!cascaded) {
@@ -388,9 +407,18 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
           // stub so the user never sees a 500. modelError captures every
           // failure in the chain so we can see why the stub fired.
           attemptedChain.push("curated-stub");
+          // curatedStub.call() can never fail (it's a pure function), but
+          // wrap defensively anyway.
           const stubResult = await callModel(curatedStub);
-          rankedSites = stubResult.ranked_sites;
-          raw = stubResult.raw;
+          if (stubResult.ok) {
+            rankedSites = stubResult.sites;
+            raw = stubResult.raw;
+          } else {
+            // Should never happen — stub is pure. Defensive fallback.
+            console.error("[/api/ask] curated-stub failed (should never happen):", stubResult.error);
+            rankedSites = [];
+            raw = "stub_failed";
+          }
           activeInfo = curatedStub.info;
           activeModel = curatedStub;
           fallbackUsed = true;
@@ -403,6 +431,23 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
         modelError = cascaded
           ? errorChain[0]
           : errorChain.join("\n");
+      } catch (modelErr) {
+        // Last-resort catch — should be impossible since callModel() never
+        // throws and the loop never throws. But just in case.
+        const msg = modelErr instanceof Error ? modelErr.message : String(modelErr);
+        console.error(`[/api/ask] Step A inner threw unexpectedly:`, modelErr);
+        // Force stub so we still return something.
+        attemptedChain.push("curated-stub");
+        const stubResult = await callModel(curatedStub);
+        if (stubResult.ok) {
+          rankedSites = stubResult.sites;
+          raw = stubResult.raw;
+        }
+        activeInfo = curatedStub.info;
+        activeModel = curatedStub;
+        fallbackUsed = true;
+        responseStatus = "stub_fallback";
+        modelError = `unexpected_step_a_error: ${msg}`;
       }
     })(), STEP_A_TIMEOUT_MS, "step_a");
   } catch (stepAErr) {
@@ -561,28 +606,47 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
     responseBody.connectorsError = connectorsError;
   }
 
-  // 7. Persist to Supabase via Prisma (best-effort; surface errors to caller)
-  let questionRow;
+  // 7. Persist to Supabase via Prisma (best-effort).
+  //
+  // Day 5 hotfix v3 — persistence is NOT in the critical response path.
+  // If Prisma rejects the row (e.g. Json codec rejects an undefined value,
+  // NaN, or a non-serialisable field), we log the error, generate a
+  // fallback id locally, and STILL return 200 with the answer. The user
+  // gets their result, we get a log line, and the dashboard will just
+  // not show this question (acceptable — it's persisted best-effort).
+  //
+  // responseJson is run through sanitizeForJson() to strip undefined keys
+  // and replace NaN/Infinity with null before handing to Prisma.
+  let questionId: string;
   try {
-    questionRow = await prisma.question.create({
+    const safeResponse = sanitizeForJson(responseBody);
+    const questionRow = await prisma.question.create({
       data: {
         userId,
         vertical,
         questionText: trimmedQuestion,
-        responseJson: responseBody as any,
+        responseJson: safeResponse as any,
       },
     });
+    questionId = questionRow.id;
   } catch (dbErr) {
-    console.error("[/api/ask] failed to persist question:", dbErr);
-    return NextResponse.json(
-      { error: "Failed to record question" },
-      { status: 500 }
+    const msg = dbErr instanceof Error ? dbErr.message : String(dbErr);
+    console.error(
+      `[/api/ask] failed to persist question (returning answer anyway):`,
+      dbErr,
     );
+    // Synthetic id so the response shape stays consistent. Marked so the
+    // dashboard knows this row wasn't actually persisted.
+    questionId = `no_persist_${Date.now().toString(36)}`;
+    // Surface the persist error in headers so Chris can see it in DevTools.
+    responseBody.connectorsError = responseBody.connectorsError ?? "persist_failed";
+    // We log the message too so the diagnostic trail isn't lost.
+    console.error(`[/api/ask] persist message: ${msg}`);
   }
 
   // 8. Return response + id
   const response: AskResponse = {
-    id: questionRow.id,
+    id: questionId,
     ...responseBody,
   };
   const finalResponse = NextResponse.json(response);
