@@ -143,11 +143,7 @@ export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boole
           <Link
             href="/"
             className="flex items-center gap-2 overflow-hidden"
-            onClick={() => {
-              if (typeof window !== "undefined") {
-                window.dispatchEvent(new CustomEvent("atlas:new"));
-              }
-            }}
+            title="Go to home"
           >
             <AtlasLogo size={28} className="shrink-0" />
             {!collapsed && (
@@ -188,23 +184,19 @@ export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boole
           </button>
         )}
 
-        {/* + New button */}
+        {/* + New button — always navigates to home */}
         <div className="px-3">
-          <button
-            type="button"
-            onClick={() => {
-              if (typeof window !== "undefined") {
-                window.dispatchEvent(new CustomEvent("atlas:new"));
-              }
-            }}
+          <Link
+            href="/"
             className="flex w-full items-center gap-2 rounded-md border border-atlas-border bg-atlas-bg px-3 py-2 text-sm text-atlas-text transition-colors hover:border-atlas-accent"
+            title="Start a new question"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="12" y1="5" x2="12" y2="19"></line>
               <line x1="5" y1="12" x2="19" y2="12"></line>
             </svg>
             {!collapsed && <span>New</span>}
-          </button>
+          </Link>
         </div>
 
         {/* History */}

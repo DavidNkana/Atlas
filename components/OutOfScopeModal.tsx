@@ -124,7 +124,10 @@ const EXAMPLE_PROMPTS = [
 
 function isRelevant(question: string): boolean {
   const q = question.toLowerCase().trim();
-  if (q.length < 4) return true; // too short to judge
+  // Too short to be a real location question — treat as out of scope.
+  // Things like "hi", "ok", "go", "test" pass through otherwise and
+  // produce useless answers.
+  if (q.length < 12) return false;
   for (const kw of LAND_KEYWORDS) {
     if (q.includes(kw)) return true;
   }
