@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { sendWaitlistNotification } from "@/lib/email/send";
 
 /**
  * POST /api/waitlist
@@ -66,6 +67,27 @@ export async function POST(req: Request) {
       data: { email, name, vertical, plan, message, userType },
       select: { id: true, createdAt: true },
     });
+
+    // Fire-and-forget notification email. We don't block the
+    // response on the email — the row is persisted, the user gets
+    // a 200, and the email goes out in the background. If the
+    // email fails, the row is still saved and the admin dashboard
+    // is the source of truth.
+    void sendWaitlistNotification({
+      email,
+      name,
+      vertical,
+      plan,
+      userType,
+      message,
+    }).then((result) => {
+      if (!result.sent) {
+        console.warn(
+          `[waitlist] Notification not sent: provider=${result.provider} error=${result.error ?? "none"}`
+        );
+      }
+    });
+
     return NextResponse.json({ ok: true, id: row.id });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

@@ -7,7 +7,7 @@ import { MODEL_INFO } from "@/lib/models/registry";
 import type { ModelInfo } from "@/lib/models/types";
 import { Sidebar } from "@/components/Sidebar";
 import { ThinkingLoader } from "@/components/ThinkingLoader";
-import { StreamingThinking } from "@/components/StreamingThinking";
+import { ChatGPTThinking } from "@/components/ChatGPTThinking";
 import { ModelIcon } from "@/components/ModelIcon";
 import { OutOfScopeModal, useOutOfScopeGate } from "@/components/OutOfScopeModal";
 import { VerticalMismatchModal, suggestVertical } from "@/components/VerticalMismatchModal";
@@ -386,7 +386,7 @@ export default function HomePage() {
         <div className="flex flex-1 flex-col items-center justify-center px-6">
           {loading ? (
             showThinkingLoader ? (
-              <StreamingThinking
+              <ChatGPTThinking
                 firstName={isLoaded ? user?.firstName ?? null : null}
                 question={question}
                 vertical={vertical}

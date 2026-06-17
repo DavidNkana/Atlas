@@ -28,6 +28,11 @@ const VERTICAL_KEYWORDS: Record<string, string[]> = {
   agricultural_land: ["farm", "agricultural", "farming", "crop", "livestock", "ranch", "orchard", "pasture"],
   industrial_land: ["industrial", "factory", "manufacturing", "plant", "heavy industry", "logistics hub"],
   mixed_use_land: ["mixed-use", "mixed use", "combined", "multi-use", "live-work", "town centre", "transit-oriented"],
+  // Civic / institutional uses. The wedge of "where can I build X?"
+  // needs X to map to something we can suggest. If the user picks
+  // "school", we suggest a "civic" vertical which they can rename via
+  // custom.
+  civic_land: ["school", "hospital", "church", "clinic", "university", "campus", "civic", "institutional", "mosque", "temple", "public", "library", "community"],
 };
 
 const VERTICAL_LABEL: Record<string, string> = {
@@ -40,6 +45,7 @@ const VERTICAL_LABEL: Record<string, string> = {
   agricultural_land: "Agricultural land",
   industrial_land: "Industrial land",
   mixed_use_land: "Mixed-use land",
+  civic_land: "Civic / institutional",
   gas_station_custom: "Custom",
   restaurant_custom: "Custom",
 };
@@ -48,32 +54,84 @@ const VERTICAL_LABEL: Record<string, string> = {
  * Detect a likely mismatch. Returns the suggested vertical id if the
  * question's keywords clearly point to a different vertical than the
  * one selected. Returns null if no clear mismatch.
+ *
+ * Day 9 polish: only fire when the prompt names an EXPLICIT ENTITY
+ * (school, hospital, church, farm, warehouse, restaurant, etc.). A
+ * generic question like "where can I build?" works for any vertical
+ * and must NOT warn — only fire when the entity itself is a different
+ * vertical than the one selected.
+ *
+ * Algorithm:
+ *   1. Find every vertical whose keywords match the question.
+ *   2. Sort by match strength.
+ *   3. Require at least one STRONG match: a single keyword of length
+ *      >= 5 that is a real vertical noun (school, hospital, church,
+ *      farm, warehouse, restaurant, retail, gas station, industrial,
+ *      etc.). Generic words like "where", "find", "build", "plot",
+ *      "site", "land", "property" are explicitly excluded — they
+ *      match everything and would warn on every prompt.
+ *   4. Only fire if the top match is a DIFFERENT vertical than
+ *      the one selected.
  */
+
+// Words that match the atmoSphere of a real-estate question but are
+// NOT specific to any one vertical. If a match consists only of
+// these words, we don't warn — the question is genuinely generic.
+const GENERIC_WORDS = new Set([
+  "where", "find", "build", "plot", "site", "land", "property",
+  "open", "put", "place", "start", "locate", "set up", "develop",
+  "best", "good", "top", "right", "area", "location", "neighborhood",
+  "neighbourhood", "south", "north", "east", "west", "central",
+  "vacant", "erf", "suburb", "city", "town", "country",
+  "invest", "investment", "developer", "develop", "build", "construct",
+  "available", "buy", "purchase", "affordable", "size", "price",
+  "zoning", "zoned", "permit", "approved", "ready",
+]);
+
+function isStrongEntityHit(keyword: string): boolean {
+  // Strong = at least 5 chars AND not a generic word AND not just
+  // a common verb/preposition. A single match of "school" or
+  // "hospital" or "warehouse" is enough to warn.
+  if (keyword.length < 5) return false;
+  if (GENERIC_WORDS.has(keyword)) return false;
+  // Reject if the keyword is just a substring of a generic word
+  // (e.g. "house" inside "household" handled by word boundary
+  // check at the call site, not here).
+  return true;
+}
+
 function suggestVertical(question: string, current: string): string | null {
   const q = question.toLowerCase();
   if (q.length < 8) return null; // too short to judge
 
   // Build a list of (vertical, matchedKeywords[]) pairs
-  const hits: Array<{ v: string; count: number; samples: string[] }> = [];
+  const hits: Array<{ v: string; count: number; strongCount: number; samples: string[] }> = [];
   for (const [v, kws] of Object.entries(VERTICAL_KEYWORDS)) {
     const matched: string[] = [];
     for (const kw of kws) {
-      if (q.includes(kw)) matched.push(kw);
+      // Word-boundary check: don't match "house" inside "warehouse",
+      // don't match "shop" inside "shopping". Use a simple
+      // non-alphanumeric boundary on each side.
+      const re = new RegExp(`(^|[^a-z0-9])${kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z0-9]|$)`);
+      if (re.test(q)) matched.push(kw);
     }
     if (matched.length > 0) {
-      hits.push({ v, count: matched.length, samples: matched });
+      const strongCount = matched.filter(isStrongEntityHit).length;
+      hits.push({ v, count: matched.length, strongCount, samples: matched });
     }
   }
   if (hits.length === 0) return null; // no signal — silent pass-through
 
-  // Pick the strongest match (most keyword hits). Skip if that match
-  // is the same as the current vertical.
-  hits.sort((a, b) => b.count - a.count);
+  // Pick the strongest match (most keyword hits, then most strong hits).
+  // Skip if that match is the same as the current vertical.
+  hits.sort((a, b) => (b.strongCount - a.strongCount) || (b.count - a.count));
   if (hits[0].v === current) return null;
 
-  // Only fire if the match is strong (>= 2 hits OR 1 strong hit).
-  // Single weak hits are not enough to second-guess the user.
-  if (hits[0].count < 2 && hits[0].samples[0].length < 6) return null;
+  // Only fire if the top match has at least one STRONG entity hit
+  // (a real vertical noun, not a generic word). Single weak hits
+  // like "where" or "build" are not enough to second-guess the
+  // user — those work for any vertical.
+  if (hits[0].strongCount < 1) return null;
 
   return hits[0].v;
 }
@@ -146,6 +204,10 @@ export function VerticalMismatchModal({
     mixed_use_land: [
       "Where in Sandton for a mixed-use development?",
       "Where in Cape Town for a live-work project?",
+    ],
+    civic_land: [
+      "Where in Lusaka for a school site?",
+      "Where in Nairobi for a community clinic?",
     ],
   };
   const examples = examplePrompts[suggested] ?? [];
