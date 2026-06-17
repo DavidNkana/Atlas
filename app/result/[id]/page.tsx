@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import ResultMapClient from "@/components/ResultMapClient";
 import { Sidebar } from "@/components/Sidebar";
 import { RankedSiteCard } from "@/components/RankedSiteCard";
+import { RankingChart } from "@/components/RankingChart";
 
 /**
  * Day 4 commit 1 + Day 5 commit 4:
@@ -253,6 +254,27 @@ export default async function ResultPage({
             stubReason={stubReason}
           />
         </section>
+
+        {/* Real-time ranking analytics chart — bar chart per site +
+            factor-by-factor line chart for the top 3. Hover any bar
+            to see the site's stats. */}
+        {rankedSites.length > 0 && (
+          <section className="mb-6">
+            <RankingChart
+              sites={rankedSites.map((s) => ({
+                rank: s.rank,
+                name: s.name,
+                score: s.score,
+                confidence: s.confidence,
+                rationale: s.rationale,
+                lat: s.lat,
+                lng: s.lng,
+                signals: s.signals,
+                scoreBreakdown: s.scoreBreakdown,
+              }))}
+            />
+          </section>
+        )}
 
         <section className="mb-6">
           <div className="mb-3 flex items-center justify-between">
