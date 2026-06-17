@@ -14,11 +14,19 @@ import type { Vertical } from "@/lib/models/types";
 import type { Plan, PlanStep } from "./types";
 
 export type PlannerSite = {
-  id: string;
+  id?: string;
+  rank?: number;
   name?: string;
   lat?: number;
   lng?: number;
 };
+
+/** Resolve a stable string id for a planner site. Falls back to the index. */
+function siteKey(site: PlannerSite, idx: number): string {
+  if (site.id) return site.id;
+  if (typeof site.rank === "number") return String(site.rank);
+  return String(idx);
+}
 
 /**
  * Build the plan. `location` is the user's query region (lat/lng + label).
@@ -34,7 +42,8 @@ export function buildPlan(
   location: { lat: number; lng: number; label?: string },
   sites: PlannerSite[],
 ): Plan {
-  const steps: PlanStep[] = sites.map((site) => {
+  const steps: PlanStep[] = sites.map((site, idx) => {
+    const id = siteKey(site, idx);
     const hasCoords =
       typeof site.lat === "number" &&
       typeof site.lng === "number" &&
@@ -44,15 +53,15 @@ export function buildPlan(
     if (!hasCoords) {
       return {
         connectorId: "overpass",
-        input: { siteId: site.id, __skip: true },
-        reason: `fetch POI density for site ${site.id} (skipped: missing coords)`,
+        input: { siteId: id, __skip: true },
+        reason: `fetch POI density for site ${id} (skipped: missing coords)`,
       };
     }
 
     return {
       connectorId: "overpass",
-      input: { siteId: site.id },
-      reason: `fetch POI density for site ${site.id} (${site.name ?? "unnamed"})`,
+      input: { siteId: id },
+      reason: `fetch POI density for site ${id} (${site.name ?? "unnamed"})`,
     };
   });
 

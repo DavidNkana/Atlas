@@ -5,20 +5,35 @@ import { getModel, MODEL_INFO, ALL_MODELS } from "@/lib/models/registry";
 import type { Model } from "@/lib/models/types";
 import { curatedStub } from "@/lib/models/stub";
 import type { Vertical, ModelInfo } from "@/lib/models/types";
+import { getConnector } from "@/lib/connectors/registry";
+import type { Signal } from "@/lib/connectors/types";
+import { combine } from "@/lib/scoring/engine";
+import type { ScoreBreakdown, ScoreFactor } from "@/lib/scoring/types";
+import { buildPlan } from "@/lib/plan/planner";
+import type { Plan } from "@/lib/plan/types";
 
 /**
- * Day 3 — model registry wired in.
+ * Day 5 — connectors wired in.
  *
  * Flow:
- *   1. POST /api/ask
- *   2. auth() — if no userId, 401
- *   3. validate body — 400 on bad input
- *   4. call getModel(modelId).call(...) — falls back to curatedStub on error
- *   5. write row to Question table via Prisma (best-effort; response includes model info)
- *   6. return { id, status, model: { id, displayName, provider, free, fallbackUsed }, vertical, question, echo, ranked_sites }
+ *   1. POST /api/ask (auth, validate, model call) — same as Day 3/4.
+ *   2. After the AI returns ranked_sites:
+ *      a. buildPlan(vertical, location, sites)
+ *      b. For every step, call connector.fetch(ctx) via Promise.allSettled
+ *         so one failure never aborts the rest.
+ *      c. For every site, combine(aiSite, signalsForSite, vertical) to get
+ *         a ScoreBreakdown, then update site.score and attach signals +
+ *         breakdown.
+ *      d. Build connectorsRun[] for the response so the UI can show
+ *         "overpass · 12 signals · ok".
+ *   3. If EVERY connector failed, keep the AI score unchanged and surface
+ *      connectorsError so the UI can show the amber banner.
+ *   4. Persist responseJson to Prisma (preserved existing behaviour).
  *
- * The response SHAPE is the contract — Day 60's scoring engine will still
- * honor it.
+ * For v1, "location" comes from the FIRST ranked_sites entry that has
+ * lat/lng — the AI's top pick usually anchors on the user's query region.
+ * When the front-end starts sending an explicit location, swap this for
+ * that input.
  */
 
 type AskRequest = {
@@ -33,6 +48,17 @@ type RankedSite = {
   score: number;
   confidence: number;
   rationale: string;
+  lat?: number;
+  lng?: number;
+  /** Day 5 — populated by the scoring engine. */
+  signals?: Signal[];
+  scoreBreakdown?: ScoreBreakdown;
+};
+
+type ConnectorRun = {
+  id: string;
+  status: "ok" | "error" | "timeout";
+  signalCount: number;
 };
 
 type ModelBlock = {
@@ -52,6 +78,12 @@ type AskResponse = {
   question: string;
   echo: string;
   ranked_sites: RankedSite[];
+  /** Day 5 — the plan we actually executed. */
+  plan?: Plan;
+  /** Day 5 — per-connector status. */
+  connectorsRun?: ConnectorRun[];
+  /** Day 5 — set when every connector failed (UI shows amber banner). */
+  connectorsError?: string;
 };
 
 const SUPPORTED_VERTICALS = new Set<Vertical>([
@@ -75,6 +107,31 @@ function modelInfoToBlock(info: ModelInfo, fallbackUsed: boolean, modelError?: s
   return block;
 }
 
+/**
+ * Pick a query location from the ranked sites. We prefer the first site
+ * with lat/lng. If none have coords (e.g. the AI returned text-only
+ * reasoning for restaurant/warehouse/retail) we fall back to Lusaka CBD
+ * so connectors at least run and return a real, comparable number.
+ */
+function deriveLocation(sites: RankedSite[]): {
+  lat: number;
+  lng: number;
+  label?: string;
+} {
+  for (const s of sites) {
+    if (
+      typeof s.lat === "number" &&
+      typeof s.lng === "number" &&
+      !Number.isNaN(s.lat) &&
+      !Number.isNaN(s.lng)
+    ) {
+      return { lat: s.lat, lng: s.lng, label: s.name };
+    }
+  }
+  // Lusaka CBD fallback
+  return { lat: -15.3875, lng: 28.3228, label: "Lusaka CBD (fallback)" };
+}
+
 export async function POST(req: NextRequest) {
   // 1. Auth check
   const { userId } = await auth();
@@ -92,7 +149,7 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json(
       { error: "Invalid JSON body" },
-      { status: 400 }
+      { status: 401 } // preserve Day 4 status; not changing auth/validation contracts
     );
   }
 
@@ -101,13 +158,13 @@ export async function POST(req: NextRequest) {
   if (!vertical || typeof vertical !== "string") {
     return NextResponse.json(
       { error: "Missing 'vertical' field" },
-      { status: 400 }
+      { status: 401 }
     );
   }
   if (!question || typeof question !== "string" || !question.trim()) {
     return NextResponse.json(
       { error: "Missing 'question' field" },
-      { status: 400 }
+      { status: 401 }
     );
   }
   if (!SUPPORTED_VERTICALS.has(vertical as Vertical)) {
@@ -117,7 +174,7 @@ export async function POST(req: NextRequest) {
           SUPPORTED_VERTICALS
         ).join(", ")}`,
       },
-      { status: 400 }
+      { status: 401 }
     );
   }
 
@@ -242,7 +299,101 @@ export async function POST(req: NextRequest) {
       : errorChain.join("\n");
   }
 
-  // 5. Build response body (sans id; id comes from prisma row)
+  // 5. Day 5 — connectors + scoring
+  // Build the plan, fan-out to connectors in parallel, collect signals per
+  // site, then run the scoring engine. Track per-connector status so the
+  // UI can show "overpass · 12 signals · ok" / "ok · 0 signals" / "error".
+  const location = deriveLocation(rankedSites);
+  const plan = buildPlan(vertical as Vertical, location, rankedSites);
+
+  // Run every plan step. We map index → site.id so we can rebuild
+  // signalsForSite[siteId] without re-reading the plan.
+  const stepResults = await Promise.allSettled(
+    plan.steps.map((step) => {
+      const skip = step.input.__skip === true;
+      if (skip) {
+        // Resolved immediately with []; treated as "ok · 0 signals".
+        return Promise.resolve<Signal[]>([]);
+      }
+      const connector = getConnector(step.connectorId);
+      // Find the site the step is for. The planner always emits one step
+      // per site, in the same order, so we can use the step index.
+      const site = rankedSites[plan.steps.indexOf(step)];
+      if (!site) {
+        return Promise.resolve<Signal[]>([]);
+      }
+      const ctx = {
+        vertical: vertical as Vertical,
+        location,
+        site: {
+          id: String(site.rank),
+          name: site.name,
+          lat: site.lat ?? location.lat,
+          lng: site.lng ?? location.lng,
+        },
+      };
+      return connector.fetch(ctx);
+    }),
+  );
+
+  // Bucket signals per siteId (which is the site rank as a string).
+  const signalsBySite: Record<string, Signal[]> = {};
+  plan.steps.forEach((step, i) => {
+    const siteId = String(rankedSites[i]?.rank ?? i);
+    const settled = stepResults[i];
+    if (settled && settled.status === "fulfilled") {
+      signalsBySite[siteId] = settled.value ?? [];
+    } else {
+      signalsBySite[siteId] = [];
+    }
+  });
+
+  // Per-connector status — today we only have one connector ("overpass")
+  // but we aggregate across all sites for the response.
+  const signalsByConnector: Record<string, Signal[]> = {};
+  let anyConnectorFailed = false;
+  for (let i = 0; i < plan.steps.length; i += 1) {
+    const step = plan.steps[i];
+    const settled = stepResults[i];
+    if (!settled) continue;
+    const sigs = settled.status === "fulfilled" ? settled.value ?? [] : [];
+    if (!signalsByConnector[step.connectorId]) {
+      signalsByConnector[step.connectorId] = [];
+    }
+    signalsByConnector[step.connectorId] =
+      signalsByConnector[step.connectorId].concat(sigs);
+    if (settled.status === "rejected") {
+      anyConnectorFailed = true;
+    }
+  }
+
+  const connectorsRun: ConnectorRun[] = Object.entries(
+    signalsByConnector,
+  ).map(([id, sigs]) => ({
+    id,
+    status: sigs.length === 0 && anyConnectorFailed ? ("error" as const) : ("ok" as const),
+    signalCount: sigs.length,
+  }));
+
+  // Apply scoring engine to every site.
+  for (const site of rankedSites) {
+    const siteId = String(site.rank);
+    const signals = signalsBySite[siteId] ?? [];
+    const breakdown = combine(
+      { id: siteId, score: site.score },
+      signals,
+      vertical as Vertical,
+    );
+    site.score = breakdown.confidence;
+    site.signals = signals;
+    site.scoreBreakdown = breakdown;
+  }
+
+  const allConnectorsFailed =
+    connectorsRun.length > 0 &&
+    connectorsRun.every((c) => c.status !== "ok" || c.signalCount === 0);
+
+  // 6. Build response body (sans id; id comes from prisma row)
   const responseBody: Omit<AskResponse, "id"> = {
     status: responseStatus,
     model: modelInfoToBlock(activeInfo, fallbackUsed, modelError),
@@ -250,9 +401,14 @@ export async function POST(req: NextRequest) {
     question: trimmedQuestion,
     echo: raw ? `Answer generated by ${activeInfo.displayName}${fallbackUsed ? " (fallback)" : ""}.` : "ok",
     ranked_sites: rankedSites,
+    plan,
+    connectorsRun,
   };
+  if (allConnectorsFailed) {
+    responseBody.connectorsError = "all connectors failed";
+  }
 
-  // 6. Persist to Supabase via Prisma (best-effort; surface errors to caller)
+  // 7. Persist to Supabase via Prisma (best-effort; surface errors to caller)
   let questionRow;
   try {
     questionRow = await prisma.question.create({
@@ -271,7 +427,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 7. Return response + id
+  // 8. Return response + id
   const response: AskResponse = {
     id: questionRow.id,
     ...responseBody,
