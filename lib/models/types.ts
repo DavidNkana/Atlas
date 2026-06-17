@@ -1,4 +1,21 @@
-export type Vertical = 'gas_station' | 'restaurant' | 'warehouse' | 'retail_shop';
+// Day 1-8: 4 chip verticals (gas_station, restaurant, warehouse, retail_shop)
+// Day 9: +5 land verticals suggested by the vertical-mismatch modal
+//        (residential_land, commercial_land, agricultural_land,
+//         industrial_land, mixed_use_land) and +1 civic vertical
+//        (civic_land — schools, hospitals, churches, clinics).
+//        These are accepted by /api/ask so the "Switch to {suggested}"
+//        one-click flow doesn't 401 with "Unsupported vertical".
+export type Vertical =
+  | 'gas_station'
+  | 'restaurant'
+  | 'warehouse'
+  | 'retail_shop'
+  | 'residential_land'
+  | 'commercial_land'
+  | 'agricultural_land'
+  | 'industrial_land'
+  | 'mixed_use_land'
+  | 'civic_land';
 
 export interface RankedSite {
   rank: number;

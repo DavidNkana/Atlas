@@ -45,6 +45,11 @@ export interface VerticalWeights {
   maxSignalBoost: number;
 }
 
+// Day 1-8 had 4 verticals here. Day 9 adds 5 land verticals (suggested
+// by the vertical-mismatch modal) and 1 civic vertical (school, hospital,
+// church, clinic). We keep Record<Vertical, ...> (full, not Partial) so
+// TypeScript catches missing entries; each new vertical uses a sensible
+// default weight profile below.
 export const VERTICAL_WEIGHTS: Record<Vertical, VerticalWeights> = {
   // Gas stations care MOST about competition density — too crowded = bad,
   // too empty = no demand. So we lean on amenity_density heavily.
@@ -58,4 +63,15 @@ export const VERTICAL_WEIGHTS: Record<Vertical, VerticalWeights> = {
   warehouse: { amenityDensity: 0.30, maxSignalBoost: 0.15 },
   // Retail shops care about shop density (supermarkets, malls).
   retail_shop: { amenityDensity: 0.35, maxSignalBoost: 0.15 },
+  // Day 9: land verticals. The scoring engine doesn't have a
+  // dedicated land-use signal yet, so we use the same amenity_density
+  // weight as gas_station (which is the most-amenity-sensitive of
+  // the original 4). Future land-specific connectors (zoning, plot
+  // size, slope, flood risk) will adjust these.
+  residential_land: { amenityDensity: 0.35, maxSignalBoost: 0.15 },
+  commercial_land: { amenityDensity: 0.35, maxSignalBoost: 0.15 },
+  agricultural_land: { amenityDensity: 0.25, maxSignalBoost: 0.15 },
+  industrial_land: { amenityDensity: 0.30, maxSignalBoost: 0.15 },
+  mixed_use_land: { amenityDensity: 0.35, maxSignalBoost: 0.15 },
+  civic_land: { amenityDensity: 0.25, maxSignalBoost: 0.15 },
 };

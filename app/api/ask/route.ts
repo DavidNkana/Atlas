@@ -161,10 +161,23 @@ type AskResponse = {
 type AskVertical = Vertical | `custom:${string}`;
 
 const SUPPORTED_VERTICALS = new Set<Vertical>([
+  // Day 1-8 verticals (the 4 chip-buttons at the top of the home page)
   "gas_station",
   "restaurant",
   "warehouse",
   "retail_shop",
+  // Day 9: land verticals suggested by the vertical-mismatch modal
+  // when the user's question clearly points to a different vertical
+  // than the one selected. The mismatch modal's "Switch to {suggested}"
+  // button sets the vertical to one of these and auto-submits — if
+  // we don't accept them here, the route returns 401 "Unsupported
+  // vertical" which the page misinterprets as a sign-in error.
+  "residential_land",
+  "commercial_land",
+  "agricultural_land",
+  "industrial_land",
+  "mixed_use_land",
+  "civic_land",
 ]);
 
 /**

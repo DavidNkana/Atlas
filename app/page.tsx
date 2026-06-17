@@ -311,8 +311,20 @@ export default function HomePage() {
         }),
       });
 
+      // Day 9: read the JSON body FIRST so we can show the actual
+      // server error message. Previously this block showed a hard-
+      // coded "Please sign in to ask questions" for ANY 401 — but
+      // the route returns 401 for validation errors too (missing
+      // vertical, unsupported vertical, etc.) and the user saw the
+      // wrong message. Now we only show "Please sign in" if the
+      // server explicitly says the auth failed.
       if (res.status === 401) {
-        setError("Please sign in to ask questions");
+        const errData = await res.json().catch(() => ({}));
+        if (errData.error === "Sign in required") {
+          setError("Please sign in to ask questions");
+        } else {
+          setError(errData.error || `Request failed: ${res.status}`);
+        }
         setLoading(false);
         return;
       }
