@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/db";
 import { getModel, MODEL_INFO, ALL_MODELS } from "@/lib/models/registry";
+import type { Model } from "@/lib/models/types";
 import { curatedStub } from "@/lib/models/stub";
 import type { Vertical, ModelInfo } from "@/lib/models/types";
 
@@ -124,8 +125,8 @@ export async function POST(req: NextRequest) {
 
   // 3. Resolve model — default to gemini-flash
   const requestedModelId = (model && typeof model === "string") ? model : "gemini-flash";
-  let activeModel;
-  let activeInfo;
+  let activeModel: Model;
+  let activeInfo: ModelInfo;
   let fallbackUsed = false;
   let responseStatus: "ok" | "stub_fallback" = "ok";
 
@@ -150,7 +151,7 @@ export async function POST(req: NextRequest) {
   }
 
   // 4. Call the model
-  let rankedSites: RankedSite[];
+  let rankedSites: RankedSite[] = [];
   let raw: string | undefined;
   let modelError: string | undefined;
   try {
