@@ -132,10 +132,10 @@ export default async function ResultPage({
   const stubReason = responseBody.stubReason;
 
   return (
-    <div className="flex min-h-screen items-start bg-atlas-bg text-atlas-text">
+    <div className="flex h-screen overflow-hidden bg-atlas-bg text-atlas-text">
       <Sidebar />
 
-      <main className="flex min-w-0 flex-1 flex-col">
+      <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
         <header className="flex items-center justify-between border-b border-atlas-border px-6 py-4">
           <div className="min-w-0">
             <h1 className="text-lg font-semibold tracking-tight text-atlas-text">

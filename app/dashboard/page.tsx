@@ -69,10 +69,10 @@ export default async function DashboardPage() {
   });
 
   return (
-    <div className="flex min-h-screen items-start bg-atlas-bg text-atlas-text">
+    <div className="flex h-screen overflow-hidden bg-atlas-bg text-atlas-text">
       <Sidebar />
 
-      <main className="flex min-w-0 flex-1 flex-col">
+      <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
         {/* Header */}
         <header className="flex items-center justify-between border-b border-atlas-border px-6 py-4">
           <div className="flex items-center gap-3">

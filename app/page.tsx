@@ -253,10 +253,10 @@ export default function HomePage() {
   );
 
   return (
-    <div className="flex min-h-screen items-start bg-atlas-bg text-atlas-text">
+    <div className="flex h-screen overflow-hidden bg-atlas-bg text-atlas-text">
       <Sidebar />
 
-      <main className="flex min-w-0 flex-1 flex-col">
+      <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
         {/* Top bar: top-right links */}
         <header className="flex items-center justify-end gap-3 px-6 py-3 text-xs text-atlas-muted">
           <a href="/land" className="hover:text-atlas-accent">
