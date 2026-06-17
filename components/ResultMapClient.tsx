@@ -80,13 +80,13 @@ export default function ResultMapClient({
         }
         const lngLat: [number, number] = [site.lng, site.lat];
         const popupHtml =
-          `<h3 style=\"margin:0 0 4px;font-size:14px;font-weight:600;\">${escapeHtml(
+          `<h3 style=\"margin:0 0 4px;font-size:14px;font-weight:600;color:#fafafa;\">${escapeHtml(
             site.name
           )}</h3>` +
-          `<p style=\"margin:0 0 4px;font-size:12px;line-height:1.4;\">${escapeHtml(
+          `<p style=\"margin:0 0 4px;font-size:12px;line-height:1.4;color:#e4e4e7;\">${escapeHtml(
             site.rationale
           )}</p>` +
-          `<small style=\"font-size:11px;opacity:0.8;\">Score ${site.score.toFixed(
+          `<small style=\"font-size:11px;opacity:0.8;color:#a1a1aa;\">Score ${site.score.toFixed(
             2
           )} &middot; Confidence ${site.confidence.toFixed(2)}</small>`;
         const marker = new mapboxgl.Marker({ color: "#6366f1" })
@@ -141,15 +141,15 @@ export default function ResultMapClient({
   }
 
   return (
-    <div className="rounded-lg border border-atlas-border bg-atlas-surface p-3">
+    <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-3 text-zinc-100">
       {tokenMissing && (
         <div
           role="alert"
           data-testid="atlas-map-token-missing"
-          className="mb-3 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200"
+          className="mb-3 rounded-md border border-amber-900 bg-amber-500/10 px-3 py-2 text-xs text-amber-400"
         >
-          <strong className="font-semibold">Mapbox token missing.</strong>{" "}
-          Add <code className="rounded bg-amber-500/20 px-1 py-0.5 text-[11px]">NEXT_PUBLIC_MAPBOX_TOKEN</code>{" "}
+          <strong className="font-semibold text-amber-300">Mapbox token missing.</strong>{" "}
+          Add <code className="rounded bg-amber-500/20 px-1 py-0.5 text-[11px] text-amber-300">NEXT_PUBLIC_MAPBOX_TOKEN</code>{" "}
           in Vercel → Project → Settings → Environment Variables, then redeploy.
           The map and sidebar fly-to need this token to work; the ranked_sites
           JSON above is still valid.
@@ -163,7 +163,7 @@ export default function ResultMapClient({
       />
       <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
         <div>
-          <h3 className="mb-2 text-xs font-medium text-atlas-muted">
+          <h3 className="mb-2 text-xs font-medium text-zinc-100">
             Ranked sites
           </h3>
           <ol className="space-y-1 text-sm">
@@ -176,16 +176,23 @@ export default function ResultMapClient({
                     type="button"
                     onClick={() => flyToSite(site)}
                     disabled={!hasCoords}
-                    className="flex w-full items-start gap-2 rounded-md border border-atlas-border bg-atlas-surface2 px-3 py-2 text-left text-xs text-atlas-text transition-colors hover:border-atlas-accent disabled:cursor-not-allowed disabled:opacity-60"
+                    className="flex w-full items-start gap-2 rounded-md border border-zinc-800 bg-zinc-800 px-3 py-2 text-left text-xs text-zinc-100 transition-colors hover:bg-zinc-700 hover:border-zinc-600 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-atlas-accent text-[10px] font-semibold text-white">
+                    <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-[10px] font-semibold text-white">
                       {site.rank}
                     </span>
                     <span className="flex-1">
-                      <span className="block font-medium">{site.name}</span>
-                      <span className="block text-[11px] text-atlas-muted">
-                        Score {site.score.toFixed(2)} · Confidence{" "}
-                        {site.confidence.toFixed(2)}
+                      <span className="block font-medium text-zinc-100">
+                        {site.name}
+                      </span>
+                      <span className="block text-[11px] text-zinc-400">
+                        <span className="text-emerald-400 font-medium">
+                          Score {site.score.toFixed(2)}
+                        </span>{" "}
+                        · Confidence{" "}
+                        <span className="text-zinc-300">
+                          {site.confidence.toFixed(2)}
+                        </span>
                         {hasCoords
                           ? ` · ${site.lat!.toFixed(4)}, ${site.lng!.toFixed(4)}`
                           : " · no coords"}
@@ -197,15 +204,15 @@ export default function ResultMapClient({
             })}
           </ol>
           {missingCoords > 0 && (
-            <p className="mt-2 text-[11px] text-atlas-muted">
+            <p className="mt-2 text-[11px] text-zinc-400">
               {missingCoords} site{missingCoords === 1 ? "" : "s"} missing lat/lng
               — markers not placed.
             </p>
           )}
         </div>
         <div>
-          <h3 className="mb-2 text-xs font-medium text-atlas-muted">About</h3>
-          <p className="text-xs text-atlas-text">
+          <h3 className="mb-2 text-xs font-medium text-zinc-100">About</h3>
+          <p className="text-xs text-zinc-300">
             Click any site in the list to fly the map to it. Click a marker to
             open its rationale popup. The map auto-fits to include every
             marker.
