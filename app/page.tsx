@@ -7,6 +7,7 @@ import { MODEL_INFO } from "@/lib/models/registry";
 import type { ModelInfo } from "@/lib/models/types";
 import { Sidebar } from "@/components/Sidebar";
 import { ThinkingLoader } from "@/components/ThinkingLoader";
+import { StreamingThinking } from "@/components/StreamingThinking";
 import { ModelIcon } from "@/components/ModelIcon";
 import { OutOfScopeModal, useOutOfScopeGate } from "@/components/OutOfScopeModal";
 import { readPrefs, DEFAULT_PREFS, type AtlasPrefs } from "@/components/SettingsDrawer";
@@ -302,7 +303,11 @@ export default function HomePage() {
         <div className="flex flex-1 flex-col items-center justify-center px-6">
           {loading ? (
             showThinkingLoader ? (
-              <ThinkingLoader />
+              <StreamingThinking
+                firstName={isLoaded ? user?.firstName ?? null : null}
+                question={question}
+                vertical={vertical}
+              />
             ) : (
               <div className="flex items-center gap-2 text-sm text-atlas-muted">
                 <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-atlas-accent" />
