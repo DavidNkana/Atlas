@@ -8,6 +8,7 @@ import type { ModelInfo } from "@/lib/models/types";
 import { Sidebar } from "@/components/Sidebar";
 import { ThinkingLoader } from "@/components/ThinkingLoader";
 import { ModelIcon } from "@/components/ModelIcon";
+import { OutOfScopeModal, useOutOfScopeGate } from "@/components/OutOfScopeModal";
 import { readPrefs, DEFAULT_PREFS, type AtlasPrefs } from "@/components/SettingsDrawer";
 
 /**
@@ -93,6 +94,7 @@ export default function HomePage() {
     DEFAULT_PREFS.showThinkingLoader
   );
   const [modelPickerOpen, setModelPickerOpen] = useState<boolean>(false);
+  const outOfScope = useOutOfScopeGate();
   const [customInputOpen, setCustomInputOpen] = useState<boolean>(false);
   const [customInputValue, setCustomInputValue] = useState<string>("");
   const [customError, setCustomError] = useState<string | null>(null);
@@ -181,6 +183,26 @@ export default function HomePage() {
     inputRef.current?.focus();
   }, []);
 
+  // Listen for "atlas:use-example" events from the OutOfScopeModal
+  // so clicking an example in the modal fills the input.
+  useEffect(() => {
+    function onUseExample(e: Event) {
+      const ce = e as CustomEvent<string>;
+      if (typeof ce.detail === "string") {
+        setQuestion(ce.detail);
+        setTimeout(() => inputRef.current?.focus(), 50);
+      }
+    }
+    if (typeof window !== "undefined") {
+      window.addEventListener("atlas:use-example", onUseExample);
+    }
+    return () => {
+      if (typeof window !== "undefined") {
+        window.removeEventListener("atlas:use-example", onUseExample);
+      }
+    };
+  }, []);
+
   // Close model picker when clicking outside
   useEffect(() => {
     function onClick(e: MouseEvent) {
@@ -207,6 +229,13 @@ export default function HomePage() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!question.trim()) return;
+
+    // Out-of-scope prompt gate. If the question doesn't look like a
+    // location intelligence question, show the modal and don't submit.
+    if (outOfScope.checkQuestion(question.trim())) {
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
@@ -255,6 +284,8 @@ export default function HomePage() {
   return (
     <div className="flex h-screen overflow-hidden bg-atlas-bg text-atlas-text">
       <Sidebar />
+
+      <outOfScope.Modal />
 
       <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
         {/* Top bar: top-right links */}

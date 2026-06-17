@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
+import { NavigationLoader } from "@/components/NavigationLoader";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -27,6 +28,7 @@ export default function RootLayout({
     >
       <html lang="en" className="dark">
         <body className="min-h-screen bg-atlas-bg text-atlas-text font-sans antialiased">
+          <NavigationLoader />
           {children}
         </body>
       </html>
