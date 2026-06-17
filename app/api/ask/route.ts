@@ -1,27 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/db";
+import { getModel, MODEL_INFO } from "@/lib/models/registry";
+import { curatedStub } from "@/lib/models/stub";
+import type { Vertical, ModelInfo } from "@/lib/models/types";
 
 /**
- * Day 3 stub — now with Clerk auth and Supabase persistence.
+ * Day 3 — model registry wired in.
  *
  * Flow:
  *   1. POST /api/ask
  *   2. auth() — if no userId, 401
  *   3. validate body — 400 on bad input
- *   4. write row to Question table via Prisma
- *   5. return { id, status, vertical, question, echo, ranked_sites }
+ *   4. call getModel(modelId).call(...) — falls back to curatedStub on error
+ *   5. write row to Question table via Prisma (best-effort; response includes model info)
+ *   6. return { id, status, model: { id, displayName, provider, free, fallbackUsed }, vertical, question, echo, ranked_sites }
  *
  * The response SHAPE is the contract — Day 60's scoring engine will still
  * honor it.
- *
- * Day 3 will replace the stub ranked_sites with a real MiniMax planner call.
- * Day 5 will replace it with a real connector output.
  */
 
 type AskRequest = {
   vertical: string;
   question: string;
+  model?: string;
 };
 
 type RankedSite = {
@@ -32,21 +34,40 @@ type RankedSite = {
   rationale: string;
 };
 
+type ModelBlock = {
+  id: string;
+  displayName: string;
+  provider: string;
+  free: boolean;
+  fallbackUsed: boolean;
+};
+
 type AskResponse = {
   id: string;
   status: string;
+  model: ModelBlock;
   vertical: string;
   question: string;
   echo: string;
   ranked_sites: RankedSite[];
 };
 
-const SUPPORTED_VERTICALS = new Set([
+const SUPPORTED_VERTICALS = new Set<Vertical>([
   "gas_station",
   "restaurant",
   "warehouse",
   "retail_shop",
 ]);
+
+function modelInfoToBlock(info: ModelInfo, fallbackUsed: boolean): ModelBlock {
+  return {
+    id: info.id,
+    displayName: info.displayName,
+    provider: info.provider,
+    free: info.free,
+    fallbackUsed,
+  };
+}
 
 export async function POST(req: NextRequest) {
   // 1. Auth check
@@ -69,7 +90,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { vertical, question } = body;
+  const { vertical, question, model } = body;
 
   if (!vertical || typeof vertical !== "string") {
     return NextResponse.json(
@@ -83,7 +104,7 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
-  if (!SUPPORTED_VERTICALS.has(vertical)) {
+  if (!SUPPORTED_VERTICALS.has(vertical as Vertical)) {
     return NextResponse.json(
       {
         error: `Unsupported vertical: ${vertical}. Supported: ${Array.from(
@@ -94,27 +115,70 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 3. Build the Day-1-shaped response (contract preserved)
   const trimmedQuestion = question.trim();
+
+  // 3. Resolve model — default to gemini-flash
+  const requestedModelId = (model && typeof model === "string") ? model : "gemini-flash";
+  let activeModel;
+  let activeInfo;
+  let fallbackUsed = false;
+  let responseStatus: "ok" | "stub_fallback" = "ok";
+
+  try {
+    activeModel = getModel(requestedModelId);
+    activeInfo = activeModel.info;
+    if (!activeModel.isAvailable()) {
+      // Requested model has no key set — fall back to curated stub
+      console.warn(`[/api/ask] model ${requestedModelId} not available, falling back to curated-stub`);
+      activeModel = curatedStub;
+      activeInfo = curatedStub.info;
+      fallbackUsed = true;
+      responseStatus = "stub_fallback";
+    }
+  } catch {
+    // Unknown model id — fall back to curated stub
+    console.warn(`[/api/ask] unknown model ${requestedModelId}, falling back to curated-stub`);
+    activeModel = curatedStub;
+    activeInfo = curatedStub.info;
+    fallbackUsed = true;
+    responseStatus = "stub_fallback";
+  }
+
+  // 4. Call the model
+  let rankedSites: RankedSite[];
+  let raw: string | undefined;
+  try {
+    const result = await activeModel.call({
+      vertical: vertical as Vertical,
+      question: trimmedQuestion,
+    });
+    rankedSites = result.ranked_sites;
+    raw = result.raw;
+  } catch (modelErr) {
+    // Model call failed — fall back to curated stub so the user never sees a 500
+    console.error(`[/api/ask] model ${activeInfo.id} call failed, falling back to curated-stub:`, modelErr);
+    const stubResult = await curatedStub.call({
+      vertical: vertical as Vertical,
+      question: trimmedQuestion,
+    });
+    rankedSites = stubResult.ranked_sites;
+    raw = stubResult.raw;
+    activeInfo = curatedStub.info;
+    fallbackUsed = true;
+    responseStatus = "stub_fallback";
+  }
+
+  // 5. Build response body (sans id; id comes from prisma row)
   const responseBody: Omit<AskResponse, "id"> = {
-    status: "stub",
+    status: responseStatus,
+    model: modelInfoToBlock(activeInfo, fallbackUsed),
     vertical,
     question: trimmedQuestion,
-    echo:
-      "This is the Day 1 stub. The deploy pipeline is alive. Day 3 will call MiniMax here. Day 5 will call the connector registry.",
-    ranked_sites: [
-      {
-        rank: 1,
-        name: "Stub site (Day 5 will be a real connector output)",
-        score: 0,
-        confidence: 0,
-        rationale:
-          "Stub. Day 5 wires the real connector and scoring engine. The shape of this object is the contract that Day 60 will still honor.",
-      },
-    ],
+    echo: raw ? `Answer generated by ${activeInfo.displayName}${fallbackUsed ? " (fallback)" : ""}.` : "ok",
+    ranked_sites: rankedSites,
   };
 
-  // 4. Persist to Supabase via Prisma (best-effort; surface errors to caller)
+  // 6. Persist to Supabase via Prisma (best-effort; surface errors to caller)
   let questionRow;
   try {
     questionRow = await prisma.question.create({
@@ -133,7 +197,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 5. Return response + id
+  // 7. Return response + id
   const response: AskResponse = {
     id: questionRow.id,
     ...responseBody,
@@ -141,11 +205,12 @@ export async function POST(req: NextRequest) {
   return NextResponse.json(response);
 }
 
-// Liveness check.
+// Liveness check — also reports the available model list.
 export async function GET() {
   return NextResponse.json({
-    status: "stub",
-    message: "Atlas /api/ask is alive. POST a { vertical, question } body.",
+    status: "ok",
+    message: "Atlas /api/ask is alive. POST a { vertical, question, model? } body.",
     supported_verticals: Array.from(SUPPORTED_VERTICALS),
+    models: MODEL_INFO,
   });
 }
