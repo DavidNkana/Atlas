@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
+import { auth, getAuth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/db";
 import { getModel, MODEL_INFO, ALL_MODELS } from "@/lib/models/registry";
 import type { Model } from "@/lib/models/types";
@@ -242,10 +242,41 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   const t0 = Date.now();
 
   // 1. Auth check
-  const { userId } = await auth();
+  //
+  // Day 9: We use getAuth(req) instead of the bare auth() call.
+  // getAuth() takes the request directly and reads the Clerk
+  // session state from the request context. The bare auth() reads
+  // from a module-level cache that the Clerk middleware populates.
+  // On Next.js 15 + Clerk v6, that cache can be stale in edge
+  // regions or when the request goes through a long-lived serverless
+  // worker — which produces the 401 even though the user IS signed
+  // in and the middleware returned 200.
+  //
+  // By reading the auth state directly from the request, we
+  // guarantee we see the same session the middleware validated.
+  const cookieNames = req.cookies.getAll().map((c) => c.name);
+  const hasSessionCookie = cookieNames.some(
+    (n) => n.startsWith("__session") || n.startsWith("__client") || n === "session"
+  );
+  const authResult = getAuth(req);
+  const userId = authResult.userId;
   if (!userId) {
+    console.warn(
+      `[ask-401] cookies=${cookieNames.length} hasSession=${hasSessionCookie} userId=null` +
+        ` sessionClaimsKeys=${authResult.sessionClaims ? Object.keys(authResult.sessionClaims).length : 0}` +
+        ` url=${req.nextUrl.pathname}`
+    );
     return NextResponse.json(
-      { error: "Sign in required" },
+      {
+        error: "Sign in required",
+        debug: {
+          cookieCount: cookieNames.length,
+          hasSessionCookie,
+          sessionClaimsKeys: authResult.sessionClaims
+            ? Object.keys(authResult.sessionClaims).length
+            : 0,
+        },
+      },
       { status: 401 }
     );
   }

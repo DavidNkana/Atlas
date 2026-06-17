@@ -310,8 +310,13 @@ export function VerticalMismatchModal({
 
         {examples.length > 0 && (
           <section className="mb-4">
-            <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-atlas-accent">
-              Examples for {suggestedLabel}
+            <div className="mb-2 flex items-center justify-between">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-atlas-accent">
+                Examples for {suggestedLabel}
+              </div>
+              <div className="text-[10px] text-atlas-muted">
+                {suggestedLabel} ↓
+              </div>
             </div>
             <ul className="space-y-1.5">
               {examples.map((ex, i) => (
@@ -319,9 +324,12 @@ export function VerticalMismatchModal({
                   <button
                     type="button"
                     onClick={() => onUseExample(suggested, ex)}
-                    className="w-full rounded-md border border-atlas-border bg-atlas-bg px-3 py-2 text-left text-xs text-atlas-text transition-colors hover:border-atlas-accent hover:bg-atlas-surface2"
+                    className="flex w-full items-start gap-2 rounded-md border border-atlas-border bg-atlas-bg px-3 py-2 text-left text-xs text-atlas-text transition-colors hover:border-atlas-accent hover:bg-atlas-surface2"
                   >
-                    {ex}
+                    <span className="mt-0.5 inline-flex shrink-0 items-center rounded bg-atlas-accent/15 px-1.5 py-0.5 text-[10px] font-medium text-atlas-accent">
+                      {suggestedLabel}
+                    </span>
+                    <span className="flex-1">{ex}</span>
                   </button>
                 </li>
               ))}

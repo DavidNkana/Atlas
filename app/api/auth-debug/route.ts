@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { auth } from "@clerk/nextjs/server";
+import { auth, getAuth } from "@clerk/nextjs/server";
 
 /**
  * GET /api/auth-debug
@@ -9,8 +9,8 @@ import { auth } from "@clerk/nextjs/server";
  * route. Useful for diagnosing 401s on /api/ask.
  *
  * Returns:
- *   - userId: from Clerk `auth()` (null if not signed in)
- *   - sessionClaims: from Clerk `auth()` (null if not signed in)
+ *   - userId: from Clerk `getAuth(req)` and `auth()` side by side
+ *   - sessionClaims: from Clerk (null if not signed in)
  *   - cookieCount: how many cookies the request carried (so we can
  *     see if the session cookie was sent at all)
  *   - cookies: list of cookie NAMES only (never values — for safety)
@@ -24,37 +24,61 @@ import { auth } from "@clerk/nextjs/server";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  let userId: string | null = null;
-  let sessionClaims: any = null;
-  try {
-    const authResult = await auth();
-    userId = authResult.userId;
-    sessionClaims = authResult.sessionClaims;
-  } catch (e) {
-    return NextResponse.json({
-      ok: false,
-      error: "auth() threw",
-      message: e instanceof Error ? e.message : String(e),
-    });
-  }
-
   const cookies = req.cookies.getAll();
   const cookieNames = cookies.map((c) => c.name);
   const hasSessionCookie = cookieNames.some(
-    (n) => n.includes("session") || n.includes("__session") || n.startsWith("__client")
+    (n) => n.includes("session") || n.startsWith("__session") || n.startsWith("__client")
   );
+
+  // Try BOTH the request-scoped getAuth(req) and the module-cached
+  // auth() so we can see if they differ. If getAuth returns a
+  // userId but auth() doesn't, the bug is the module cache (which
+  // is what /api/ask was hitting before).
+  let fromRequest: { userId: string | null; sessionClaims: any } = {
+    userId: null,
+    sessionClaims: null,
+  };
+  let fromCache: { userId: string | null; sessionClaims: any } = {
+    userId: null,
+    sessionClaims: null,
+  };
+  let fromCacheError: string | null = null;
+
+  try {
+    const a = getAuth(req);
+    fromRequest = { userId: a.userId, sessionClaims: a.sessionClaims };
+  } catch (e) {
+    fromRequest = {
+      userId: null,
+      sessionClaims: { error: e instanceof Error ? e.message : String(e) },
+    };
+  }
+
+  try {
+    const a = await auth();
+    fromCache = { userId: a.userId, sessionClaims: a.sessionClaims };
+  } catch (e) {
+    fromCacheError = e instanceof Error ? e.message : String(e);
+  }
 
   return NextResponse.json({
     ok: true,
-    userId,
-    isSignedIn: !!userId,
-    sessionClaims: sessionClaims
+    fromRequest: {
+      userId: fromRequest.userId,
+      isSignedIn: !!fromRequest.userId,
+      hasSessionClaims: !!fromRequest.sessionClaims,
+    },
+    fromCache: {
+      userId: fromCache.userId,
+      isSignedIn: !!fromCache.userId,
+      hasSessionClaims: !!fromCache.sessionClaims,
+      error: fromCacheError,
+    },
+    sessionClaims: fromRequest.sessionClaims
       ? {
-          // Strip anything sensitive. Just enough to know which
-          // fields Clerk populated.
-          hasSub: !!sessionClaims.sub,
-          hasEmail: !!sessionClaims.email,
-          keys: Object.keys(sessionClaims).slice(0, 20),
+          hasSub: !!fromRequest.sessionClaims.sub,
+          hasEmail: !!fromRequest.sessionClaims.email,
+          keys: Object.keys(fromRequest.sessionClaims).slice(0, 20),
         }
       : null,
     cookieCount: cookies.length,
