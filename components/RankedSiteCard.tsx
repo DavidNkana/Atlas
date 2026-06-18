@@ -110,7 +110,20 @@ function generateExplanation(site: Site): string {
   return `${baseRationale}${signalParagraph}`;
 }
 
-export function RankedSiteCard({ site }: { site: Site }) {
+export function RankedSiteCard({
+  site,
+  fallbackLatLng,
+}: {
+  site: Site;
+  /**
+   * Day 12 v10: city-centre coordinates to use as the Street
+   * View fallback if the exact site coordinates have no
+   * Google coverage. Computed once on the result page from
+   * the detected city and passed down so each card doesn't
+   * have to re-detect.
+   */
+  fallbackLatLng?: { lat: number; lng: number };
+}) {
   const [expanded, setExpanded] = useState<boolean>(false);
   const explanation = generateExplanation(site);
   const factors = site.scoreBreakdown?.factors ?? [];
@@ -236,6 +249,8 @@ export function RankedSiteCard({ site }: { site: Site }) {
                   lat={site.lat}
                   lng={site.lng}
                   name={site.name}
+                  fallbackLat={fallbackLatLng?.lat}
+                  fallbackLng={fallbackLatLng?.lng}
                 />
               </div>
             </section>

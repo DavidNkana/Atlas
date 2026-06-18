@@ -145,8 +145,18 @@ export function generateStubSites(
 
   const sites: StubSite[] = [];
   for (let i = 0; i < 5; i++) {
-    const dLat = (rng() - 0.5) * 0.06;
-    const dLng = (rng() - 0.5) * 0.06;
+    // Day 12 v10: spread reduced from ±0.06 to ±0.005 degrees
+    // (≈550m). The old spread was 6.6km which scattered sites
+    // across fields, highways, and back streets with no Street
+    // View coverage. Google Street View Static API only returns
+    // imagery if a panorama exists within ~50m of the requested
+    // lat/lng, so 5 sites × random ±6.6km = almost zero coverage.
+    // The new ±550m spread keeps sites in the city's well-
+    // photographed urban core (where the Street View car has
+    // actually driven) while still being far enough apart to
+    // give the Mapbox auto-fit 5 distinct pins.
+    const dLat = (rng() - 0.5) * 0.01;
+    const dLng = (rng() - 0.5) * 0.01;
     const lat = +(city.lat + dLat).toFixed(6);
     const lng = +(city.lng + dLng).toFixed(6);
 

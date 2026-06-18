@@ -395,7 +395,7 @@ export default async function ResultPage({
               {rankedSites.length} site{rankedSites.length === 1 ? "" : "s"} · click to expand
             </span>
           </div>
-          <ol className="space-y-2">
+           <ol className="space-y-2">
             {rankedSites.map((s, i) => (
               <RankedSiteCard
                 key={i}
@@ -410,6 +410,11 @@ export default async function ResultPage({
                   signals: s.signals,
                   scoreBreakdown: s.scoreBreakdown,
                 }}
+                fallbackLatLng={
+                  detectedCity
+                    ? { lat: detectedCity.lat, lng: detectedCity.lng }
+                    : undefined
+                }
               />
             ))}
           </ol>

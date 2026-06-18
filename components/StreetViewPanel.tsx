@@ -54,13 +54,26 @@ export function StreetViewPanel({
   lng,
   name,
   city,
+  fallbackLat,
+  fallbackLng,
 }: {
   lat: number;
   lng: number;
   name: string;
   city?: string;
+  /**
+   * Day 12 v10: optional city-centre coordinates to fall back
+   * to if the exact site coordinates have no Street View
+   * coverage. The user is looking at "what does this area look
+   * like?" not "what does this exact vacant lot look like?", so
+   * a near-by panorama from the city centre is fine and almost
+   * always works because the centre is well-photographed.
+   */
+  fallbackLat?: number;
+  fallbackLng?: number;
 }) {
   const [imgError, setImgError] = useState(false);
+  const [triedFallback, setTriedFallback] = useState(false);
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
   // No key → show a setup hint. Don't render a broken <img>.
@@ -76,13 +89,24 @@ export function StreetViewPanel({
     );
   }
 
-  // Key set but Google returned no imagery for this location.
-  // Common in rural / underdeveloped areas without Street View
-  // coverage. Give the user a fallback: open in Google Maps.
-  if (imgError) {
+  // Pick which coordinates to render. If the first attempt
+  // errored AND we have a fallback, swap to the fallback. The
+  // <img> onError handler bumps triedFallback=true so this
+  // path only runs once.
+  const useLat =
+    imgError && !triedFallback && fallbackLat != null ? fallbackLat : lat;
+  const useLng =
+    imgError && !triedFallback && fallbackLng != null ? fallbackLng : lng;
+  const showingFallback =
+    imgError && !triedFallback && fallbackLat != null;
+
+  // If the first attempt failed AND the fallback also failed,
+  // give up and show the no-coverage message with a Google Maps
+  // link to the original site coordinates.
+  if (imgError && triedFallback) {
     return (
       <div className="rounded-md border border-atlas-border bg-atlas-surface2/50 p-3 text-[11px] leading-relaxed text-atlas-muted">
-        <strong className="text-atlas-text">No Street View coverage here.</strong>{" "}
+        <strong className="text-atlas-text">No Street View coverage nearby.</strong>{" "}
         Google hasn&apos;t photographed this area.{" "}
         <a
           href={`https://www.google.com/maps/@${lat},${lng},18z`}
@@ -100,16 +124,20 @@ export function StreetViewPanel({
   // panorama within ~50m, so a vacant lot gets the closest road
   // imagery. heading=0 (north), pitch=0 (level), fov=90 (typical).
   // source=outdoor: prefer outdoor panoramas (default behaviour,
-  // but explicit is clearer).
+  // but explicit is clearer). On first error, the <img> onError
+  // sets imgError=true. The render then re-runs with useLat/useLng
+  // pointing at the fallback (city centre), so React swaps the
+  // src attribute. Once triedFallback is true, a second error
+  // shows the no-coverage message.
   const imgSrc =
     `${STATIC_API}?size=640x360` +
-    `&location=${lat},${lng}` +
+    `&location=${useLat},${useLng}` +
     `&heading=0&pitch=0&fov=90` +
     `&source=outdoor` +
     `&key=${encodeURIComponent(apiKey)}`;
 
-  const mapsHref = `https://www.google.com/maps/@${lat},${lng},18z`;
-  const fullMapsHref = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}${name ? `&query_place_id=&query=${encodeURIComponent(name + (city ? `, ${city}` : ""))}` : ""}`;
+  const mapsHref = `https://www.google.com/maps/@${useLat},${useLng},18z`;
+  const fullMapsHref = `https://www.google.com/maps/search/?api=1&query=${useLat},${useLng}${name ? `&query_place_id=&query=${encodeURIComponent(name + (city ? `, ${city}` : ""))}` : ""}`;
 
   return (
     <div className="overflow-hidden rounded-md border border-atlas-border">
@@ -123,9 +151,21 @@ export function StreetViewPanel({
           width={640}
           height={360}
           loading="lazy"
-          onError={() => setImgError(true)}
+          onError={() => {
+            if (imgError) {
+              // Already tried the fallback and it also failed.
+              setTriedFallback(true);
+            } else {
+              setImgError(true);
+            }
+          }}
           className="block h-auto w-full bg-atlas-surface2 object-cover"
         />
+        {showingFallback && (
+          <div className="absolute left-2 top-2 rounded-md bg-black/65 px-2 py-1 text-[10px] font-medium text-white backdrop-blur-sm">
+            City centre (no coverage at exact site)
+          </div>
+        )}
         <a
           href={fullMapsHref}
           target="_blank"
