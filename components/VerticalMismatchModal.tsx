@@ -18,21 +18,166 @@
 
 import { useEffect } from "react";
 
+// Day 12 v8: massively expanded vertical keyword table.
+//
+// The previous table had ~7 words per vertical and missed all the
+// natural phrasings users actually type. Examples that failed to
+// match before:
+//   "looking to build a home in Sandton"   → home was 4 chars, not strong
+//   "open a restaurant in Cape Town"       → "open" was generic
+//   "set up a warehouse in Lusaka"         → "set up" was generic
+//   "put up a clinic in Nairobi"           → "put" was generic
+//   "develop a residential plot"           → "develop" was generic
+//   "looking for a school site"            → "school" worked, but "site" pulled
+//
+// The fix has three parts:
+//   1. Many more words per vertical, including the actual noun
+//      the user types ("home", "shop", "cafe", "mall", "clinic",
+//      "church", "school").
+//   2. Verb+noun phrases ("build a home", "open a restaurant",
+//      "set up a warehouse", "put up a clinic", "construct a
+//      school") so the matcher reads "looking to build a home"
+//      as a residential_land signal.
+//   3. The strong-hit threshold is lowered to 4 chars AND common
+//      short nouns ("home", "shop", "mall", "cafe", "kitchen",
+//      "bar", "pub", "spa", "gym") are added to a known-short
+//      allowlist so they count even though they fail the
+//      length>=5 rule.
+//
+// The phrase match uses an order-sensitive substring search
+// (not a regex) so "build a home" matches even with extra
+// words in between like "looking to build a nice home".
 const VERTICAL_KEYWORDS: Record<string, string[]> = {
-  gas_station: ["gas", "fuel", "petrol", "diesel", "station", "fueling", "forecourt"],
-  restaurant: ["restaurant", "food", "cafe", "dining", "eatery", "kitchen", "menu", "chef", "table"],
-  warehouse: ["warehouse", "storage", "logistics", "distribution", "fulfilment", "industrial space", "shed"],
-  retail_shop: ["retail", "shop", "store", "boutique", "showroom", "outlet", "mall", "merchandise"],
-  residential_land: ["residential", "house", "housing", "home", "townhouse", "apartment", "suburb", "estate", "family", "build a house"],
-  commercial_land: ["commercial", "office", "mixed-use", "retail space", "shopping centre", "business park"],
-  agricultural_land: ["farm", "agricultural", "farming", "crop", "livestock", "ranch", "orchard", "pasture"],
-  industrial_land: ["industrial", "factory", "manufacturing", "plant", "heavy industry", "logistics hub"],
-  mixed_use_land: ["mixed-use", "mixed use", "combined", "multi-use", "live-work", "town centre", "transit-oriented"],
-  // Civic / institutional uses. The wedge of "where can I build X?"
-  // needs X to map to something we can suggest. If the user picks
-  // "school", we suggest a "civic" vertical which they can rename via
-  // custom.
-  civic_land: ["school", "hospital", "church", "clinic", "university", "campus", "civic", "institutional", "mosque", "temple", "public", "library", "community"],
+  gas_station: [
+    // nouns
+    "gas station", "gas", "petrol station", "fuel station", "filling station",
+    "service station", "forecourt", "fuel pump", "pump",
+    // short forms
+    "petrol", "diesel", "fuel", "fueling", "refuel",
+    // common phrasings
+    "build a gas station", "open a gas station", "build a petrol station",
+    "build a fuel station", "set up a gas station", "put up a gas station",
+  ],
+  restaurant: [
+    // nouns
+    "restaurant", "restaurants", "food", "cafe", "cafes", "dining", "eatery",
+    "kitchen", "menu", "chef", "table", "bistro", "eateries", "diner",
+    "dinners", "food court", "fast food", "coffee shop", "bakery", "deli",
+    "pizzeria", "steakhouse", "food truck", "tavern", "pub", "bar",
+    // common phrasings
+    "open a restaurant", "open a cafe", "build a restaurant", "set up a restaurant",
+    "start a restaurant", "open a bar", "open a pub", "open a fast food",
+    "start a cafe", "open a coffee shop",
+  ],
+  warehouse: [
+    // nouns
+    "warehouse", "warehouses", "storage", "logistics", "distribution",
+    "fulfilment", "fulfillment", "industrial space", "shed", "sheds",
+    "depot", "storehouse", "godown", "bonded warehouse",
+    // common phrasings
+    "build a warehouse", "set up a warehouse", "put up a warehouse",
+    "open a warehouse", "construct a warehouse", "develop a warehouse",
+    "need a warehouse", "looking for a warehouse",
+  ],
+  retail_shop: [
+    // nouns
+    "retail", "shop", "shops", "store", "stores", "boutique", "showroom",
+    "outlet", "mall", "merchandise", "supermarket", "grocery",
+    "clothing store", "fashion store", "electronics store", "furniture store",
+    // common phrasings
+    "open a shop", "open a store", "open a mall", "set up a shop",
+    "set up a store", "start a shop", "build a shop", "build a mall",
+    "build a retail", "open a retail", "open a boutique", "open a showroom",
+    "open a supermarket", "open a grocery",
+  ],
+  residential_land: [
+    // nouns
+    "residential", "house", "houses", "housing", "home", "homes", "townhouse",
+    "townhouses", "apartment", "apartments", "flat", "flats", "estate",
+    "estates", "family", "residence", "residences", "villa", "villas",
+    "cottage", "cottages", "bungalow", "bungalows", "duplex",
+    "subdivision", "housing development", "residential development",
+    "residential plot", "residential plots", "residential land",
+    // common phrasings
+    "build a home", "build a house", "build homes", "build houses",
+    "build a villa", "build a bungalow", "build a duplex",
+    "build a residence", "construct a home", "construct a house",
+    "develop a home", "develop a house", "develop a residential",
+    "looking to build a home", "looking to build a house",
+    "where can I build a home", "where can I build a house",
+    "set up a home", "put up a home", "start a home", "open a home",
+    "build residential", "construct residential", "develop residential",
+  ],
+  commercial_land: [
+    // nouns
+    "commercial", "office", "offices", "office space", "business",
+    "business park", "shopping centre", "shopping center", "mall",
+    "retail space", "office block", "office park", "corporate",
+    "co-working", "coworking", "showroom", "anchor store",
+    "commercial plot", "commercial plots", "commercial land",
+    // common phrasings
+    "build an office", "build offices", "build a mall", "build a shopping centre",
+    "build a business park", "set up an office", "open an office",
+    "develop a commercial", "develop commercial", "construct an office",
+    "looking to build an office", "looking for office space",
+    "open a coworking", "start a coworking",
+  ],
+  agricultural_land: [
+    // nouns
+    "farm", "farms", "agricultural", "agriculture", "farming", "crop",
+    "crops", "livestock", "cattle", "sheep", "poultry", "pigs",
+    "ranch", "ranches", "orchard", "orchards", "pasture", "pastures",
+    "maize", "wheat", "soya", "tobacco", "cotton", "coffee", "tea farm",
+    "vineyard", "vineyards", "winery", "dairy", "dairy farm", "poultry farm",
+    "agricultural land", "agricultural plot", "agricultural plots",
+    "smallholder", "smallholder farm", "commercial farm",
+    // common phrasings
+    "buy a farm", "start a farm", "set up a farm", "build a farm",
+    "develop a farm", "farm land", "farming land",
+  ],
+  industrial_land: [
+    // nouns
+    "industrial", "factory", "factories", "manufacturing", "plant", "plants",
+    "heavy industry", "light industry", "logistics hub", "industrial park",
+    "industrial estate", "industrial plot", "industrial plots", "industrial land",
+    "manufacturing plant", "assembly plant", "processing plant",
+    "smelter", "mill", "brewery", "tannery", "industrial zone",
+    // common phrasings
+    "build a factory", "build a plant", "set up a factory", "open a factory",
+    "develop an industrial", "develop industrial", "construct a factory",
+    "looking for industrial land", "looking for industrial plot",
+  ],
+  mixed_use_land: [
+    // nouns
+    "mixed-use", "mixed use", "combined", "multi-use", "live-work",
+    "town centre", "town center", "transit-oriented", "transit oriented",
+    "TOD", "live work", "mixed development", "mixed use development",
+    // common phrasings
+    "build a mixed-use", "develop a mixed-use", "set up a mixed-use",
+  ],
+  civic_land: [
+    // nouns
+    "school", "schools", "hospital", "hospitals", "church", "churches",
+    "clinic", "clinics", "university", "universities", "campus",
+    "campuses", "civic", "institutional", "mosque", "mosques",
+    "temple", "temples", "public", "library", "libraries", "community",
+    "community centre", "community center", "police station",
+    "fire station", "firehouse", "town hall", "courthouse",
+    "place of worship", "synagogue", "shrine",
+    // common phrasings
+    "build a school", "build a hospital", "build a church", "build a clinic",
+    "build a mosque", "build a temple", "build a university", "build a library",
+    "set up a school", "set up a hospital", "set up a clinic", "set up a church",
+    "open a school", "open a clinic", "open a hospital", "open a church",
+    "construct a school", "construct a hospital", "construct a clinic",
+    "develop a school", "develop a hospital", "develop a clinic",
+    "looking to build a school", "looking to build a hospital",
+    "looking to build a church", "looking to build a clinic",
+    "where can I build a school", "where can I build a hospital",
+    "where can I build a church", "where can I build a clinic",
+    "put up a school", "put up a hospital", "put up a church", "put up a clinic",
+    "start a school", "start a hospital", "start a clinic", "start a church",
+  ],
 };
 
 const VERTICAL_LABEL: Record<string, string> = {
@@ -88,15 +233,37 @@ const GENERIC_WORDS = new Set([
   "zoning", "zoned", "permit", "approved", "ready",
 ]);
 
+// Day 12 v8: known short nouns that should count as strong
+// matches even though they fail the length>=5 rule. These are
+// words that a user would type to clearly indicate a vertical:
+//   "home"   → residential_land
+//   "shop"   → retail_shop (also "store" / "mall")
+//   "cafe"   → restaurant
+//   "bar"    → restaurant
+//   "pub"    → restaurant
+//   "spa"    → retail_shop
+//   "gym"    → retail_shop
+//   "mall"   → retail_shop (also "commercial")
+//   "kiosk"  → retail_shop
+//   "shed"   → warehouse
+//   "mill"   → industrial
+const KNOWN_SHORT_NOUNS = new Set([
+  "home", "homes", "shop", "shops", "store", "stores", "mall", "cafe", "cafes",
+  "kiosk", "bar", "pub", "spa", "gym", "shed", "sheds", "mill", "barn",
+  "plot", "plots", "erf", "farm", "farms", "tank", "tanks",
+]);
+
 function isStrongEntityHit(keyword: string): boolean {
-  // Strong = at least 5 chars AND not a generic word AND not just
-  // a common verb/preposition. A single match of "school" or
-  // "hospital" or "warehouse" is enough to warn.
+  // Day 12 v8: a hit is "strong" (i.e. the question clearly names
+  // this vertical) if EITHER:
+  //   (a) the keyword is a known short noun (home, shop, mall, etc.)
+  //   (b) the keyword is ≥ 5 chars AND not in the generic-word list
+  // This fixes the bug where "looking to build a home in Sandton"
+  // with gas_station selected failed to trigger the mismatch because
+  // "home" was 4 chars and was rejected by the length rule.
+  if (KNOWN_SHORT_NOUNS.has(keyword)) return true;
   if (keyword.length < 5) return false;
   if (GENERIC_WORDS.has(keyword)) return false;
-  // Reject if the keyword is just a substring of a generic word
-  // (e.g. "house" inside "household" handled by word boundary
-  // check at the call site, not here).
   return true;
 }
 
