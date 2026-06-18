@@ -312,10 +312,10 @@ export function VerticalMismatchModal({
           <section className="mb-4">
             <div className="mb-2 flex items-center justify-between">
               <div className="text-[10px] font-semibold uppercase tracking-wider text-atlas-accent">
-                Examples for {suggestedLabel}
+                Use a starter prompt
               </div>
               <div className="text-[10px] text-atlas-muted">
-                {suggestedLabel} ↓
+                edit before sending ↓
               </div>
             </div>
             <ul className="space-y-1.5">

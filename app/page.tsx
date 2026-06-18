@@ -380,32 +380,45 @@ export default function HomePage() {
             setMismatchData(null);
           }}
           onUseExample={(newVertical, exampleQuestion) => {
-            // One-click flow: switch vertical, fill the question with
-            // a worked example, then immediately submit. This avoids
-            // the broken intermediate state where the user has to
-            // click a vertical chip AND click Ask again — that path
-            // was hitting an auth race condition where the second
-            // fetch lost the session cookie.
+            // Day 12 v6: do NOT auto-submit on example click. The
+            // previous behaviour (added in Day 9 hotfix v2 to work
+            // around an auth race that has since been fixed in
+            // Day 9 v4) was: clicking an example chip replaces the
+            // user's typed question with the example text AND
+            // immediately submits. The auth race is gone — the
+            // 401s were from auth() vs getAuth() in the route
+            // handler, not from a double-submit.
             //
-            // We update React state AND pass the new values directly
-            // to doSubmit() so the submit doesn't read the stale
-            // closure. Without the explicit override, doSubmit
-            // would POST the OLD vertical/question and then a render
-            // cycle would happen, leaving the UI out of sync with
-            // what the server processed.
+            // The auto-submit was causing data loss: David typed
+            // "Where in Nairobi for an industrial warehouse",
+            // the mismatch modal opened (because residential_land
+            // was selected and "industrial" hit industrial_land),
+            // he clicked an example to "dismiss" the modal, and
+            // the example "Where in Durban for a logistics
+            // warehouse?" was submitted instead. His Nairobi was
+            // silently replaced by Durban.
+            //
+            // New behaviour: clicking an example fills the input
+            // with the example, sets the new vertical, closes the
+            // modal, and lets the user edit + click Ask themselves.
+            // The user always sees the question that's about to be
+            // submitted because they see it in the input.
             setVertical(newVertical as any);
             setQuestion(exampleQuestion);
             setMismatchOpen(false);
             setMismatchData(null);
             setError(null);
-            setLoading(true);
-            // Fire submit with the explicit new values. The state
-            // setters above are committed before the next render;
-            // doSubmit reads from the override first.
-            void doSubmit({
-              vertical: newVertical,
-              question: exampleQuestion,
-            });
+            // Focus the question input so the user can edit
+            // (e.g. swap "Durban" for "Nairobi") and submit.
+            setTimeout(() => {
+              const input = document.getElementById("atlas-question-input");
+              if (input) {
+                input.focus();
+                // Place cursor at the end so they can keep typing.
+                const len = (input as HTMLInputElement).value.length;
+                (input as HTMLInputElement).setSelectionRange(len, len);
+              }
+            }, 50);
           }}
           onUseCustom={() => {
             setVertical("custom:hospital" as any); // placeholder, opens input
