@@ -23,12 +23,10 @@ import { sanitizeForJson } from "@/lib/util/json-sanitize";
  * budget; we set the elapsed-ms header on the response so Chris can
  * see the real wall-clock time in DevTools.
  */
-// Day 12 v19: handler budget bumped 50s -> 60s to give
-// gemini-search (30s) + 8s fallback + 12s Step B connectors
-// + 5s safety + 5s persist/respond all room to finish
-// without hitting Vercel's 60s FUNCTION_INVOCATION_TIMEOUT.
-// Vercel would still hard-kill us at 60s if we went over.
-const HANDLER_TIMEOUT_MS = 60_000;
+// Day 12 v28: HANDLER_TIMEOUT_MS must be < Vercel's
+// FUNCTION_INVOCATION_TIMEOUT (60s on Pro) to give us time
+// to return a 200 partial_timeout stub before Vercel kills us.
+const HANDLER_TIMEOUT_MS = 58_000;
 
 // Force dynamic evaluation. Without this, Next.js 15 may treat the
 // route as a Server Component endpoint and try to evaluate it at
@@ -68,15 +66,17 @@ let partialUserId: string = "";
  *           return Step A's result with connectorsError = "timeout".
  *   Step C: persist + respond. Always runs.
  */
-// Day 12 v19: STEP_A budget bumped from 35s to 45s. With
-// gemini-search getting a 30s budget (Google Search grounding
-// is inherently slow) and a few seconds of fallback overhead,
-// the 35s budget was tight enough to trigger partial_timeout
-// on the first Gemini Search call. 45s = 30s gemini + 8s
-// fallback + safety. Still leaves 15s of the 50s handler
-// budget for Step B connectors + persist.
-const STEP_A_TIMEOUT_MS = 45_000;
-const STEP_B_TIMEOUT_MS = 12_000;
+// Day 12 v28: Vercel Pro hard-limits the function at 60s.
+// We need to fit: model call + Step B connectors + persist
+// + response. Budget:
+//   - gemini-search: 50s (3 model id attempts, each up to ~15s)
+//   - Step B: 5s (just city-aware validation now, no slow connectors)
+//   - Persist + respond: 3s
+//   - Total: 58s (under the 60s Vercel ceiling)
+// HANDLER_TIMEOUT_MS matches Vercel exactly. STEP_A is the
+// budget for the model call + cascade.
+const STEP_A_TIMEOUT_MS = 55_000;
+const STEP_B_TIMEOUT_MS = 5_000;
 
 // Day 12 v4: per-model timeout dropped from 25s to 8s. The 25s
 // cap was originally set to give slow models (e.g. Gemini 3.5 Flash
@@ -89,17 +89,15 @@ const STEP_B_TIMEOUT_MS = 12_000;
 // that values "always something" over "perfect answer eventually".
 const MODEL_TIMEOUT_MS = 8_000;
 
-// Day 12 v19: per-model timeout override for models that
-// deliberately do real-time web work. The Google Search
-// grounding tool needs to (1) do a Google search HTTP call,
-// (2) feed the results to Gemini, (3) generate a response.
-// Empirically this takes 15-30s end-to-end. An 8s budget
-// silently kills every Gemini Search call (v18 diagnostic
-// showed 25.7s real latency, while the route saw a 8s
-// timeout and cascaded to stub). Give Gemini Search
-// (and any future web-grounded model) a 30s budget.
+// Day 12 v28: gemini-search tries 3 different model ids in
+// sequence (2.0-flash, 1.5-flash, 2.5-flash) — each can take
+// 10-15s before failing with 404/503/429. The route's
+// withTimeout applies to the whole model.call() function
+// not per-attempt. So we need 60s budget for the full
+// 3-attempt cascade.
 const MODEL_TIMEOUT_OVERRIDES: Record<string, number> = {
-  'gemini-search': 30_000,
+  'gemini-search': 60_000,
+  'tavily': 45_000,
 };
 
 function getModelTimeoutMs(modelId: string): number {
