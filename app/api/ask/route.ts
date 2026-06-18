@@ -43,6 +43,9 @@ export const dynamic = "force-dynamic";
 // these at the top of every POST.
 let partialAttemptedChain: string[] = [];
 let partialModelError: string | null = null;
+let partialVertical: string = "";
+let partialQuestionText: string = "";
+let partialUserId: string = "";
 
 /**
  * Day 5 hotfix v2 — per-step budgets.
@@ -285,6 +288,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   );
   const authResult = getAuth(req);
   const userId = authResult.userId;
+  partialUserId = userId ?? "";
   if (!userId) {
     console.warn(
       `[ask-401] cookies=${cookieNames.length} hasSession=${hasSessionCookie} userId=null` +
@@ -352,6 +356,10 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   const isCustom = !SUPPORTED_VERTICALS.has(vertical as Vertical);
 
   const trimmedQuestion = question.trim();
+  // Mirror to module-level vars so the outer POST can persist
+  // a Question row on partial_timeout.
+  partialVertical = vertical;
+  partialQuestionText = trimmedQuestion;
 
   // 3. Resolve model — default to gemini-flash
   const requestedModelId = (model && typeof model === "string") ? model : "gemini-flash";
@@ -830,6 +838,9 @@ export async function POST(req: NextRequest) {
   // leak state across requests on the same worker.
   partialAttemptedChain = [];
   partialModelError = null;
+  partialVertical = "";
+  partialQuestionText = "";
+  partialUserId = "";
   // Day 5 hotfix v2 — partial-response pattern.
   //
   // When the handler exceeds its 50s budget (api_ask_timeout), the old
@@ -883,22 +894,55 @@ export async function POST(req: NextRequest) {
     // attempted (mirrored to module-level vars by the inner
     // Step A handler) so the UI can tell the user what to do
     // next ("try again" vs "switch to curated-stub").
+    //
+    // Day 12 hotfix v2: ALSO persist a Question row so the
+    // /result/[id] page renders the timeout state in a real
+    // route. Without this the page sees no `id` and shows
+    // "Atlas returned no result id. Please try again." which is
+    // wrong — the partial response IS a result, just with
+    // empty ranked_sites.
     const actualElapsed = Date.now() - t0;
     const partialResult = {
-      status: "partial_timeout",
+      status: "partial_timeout" as const,
       error: "Request timed out. Try again or pick curated-stub for instant response.",
       elapsedMs: actualElapsed,
       timeoutMs: HANDLER_TIMEOUT_MS,
+      vertical: partialVertical,
+      questionText: partialQuestionText,
       ranked_sites: [],
       model: {
         id: "timeout",
         displayName: "Timed out",
+        provider: "stub" as const,
+        free: true,
+        description: "Request exceeded the time budget before any model could respond.",
         fallbackUsed: true,
         attemptedChain: partialAttemptedChain,
       },
       modelError: partialModelError || "No model produced a response within the time budget",
+      connectorsRun: [],
     };
-    const res = NextResponse.json(partialResult);
+    let questionId: string | null = null;
+    try {
+      const safeResponse = sanitizeForJson(partialResult);
+      const questionRow = await prisma.question.create({
+        data: {
+          userId: partialUserId,
+          vertical: partialVertical,
+          questionText: partialQuestionText,
+          responseJson: safeResponse as any,
+        },
+      });
+      questionId = questionRow.id;
+    } catch (persistErr) {
+      // Persistence is best-effort. If Prisma rejects we still
+      // return 200 with the partial data so the UI has something
+      // to show. The page will degrade to the home screen.
+      console.error(`[/api/ask] partial_timeout persist failed:`, persistErr);
+    }
+    const res = questionId
+      ? NextResponse.json({ ok: true, id: questionId, ...partialResult })
+      : NextResponse.json({ ok: true, ...partialResult });
     res.headers.set("x-atlas-elapsed-ms", String(partialResult.elapsedMs));
     res.headers.set("x-atlas-status", "partial_timeout");
     return res;
