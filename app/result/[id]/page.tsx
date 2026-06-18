@@ -10,6 +10,7 @@ import { FeedbackWidget } from "@/components/FeedbackWidget";
 import { RankingChart } from "@/components/RankingChart";
 import { ListingsOverlay } from "@/components/ListingsOverlay";
 import { detectCity } from "@/lib/stub/detect";
+import { SUBURB_PROFILES } from "@/lib/demographics/suburbs";
 
 /**
  * Day 4 commit 1 + Day 5 commit 4:
@@ -159,6 +160,61 @@ export default async function ResultPage({
   // see them all in their /dashboard watchlist.
   const detectedCity = detectCity(question.questionText ?? "");
   const cityFilter = detectedCity?.name ?? null;
+
+  // Day 12 v11: pick a Street View anchor that matches the
+  // query vertical. The plain city-centre fallback was
+  // showing users the CBD / downtown — useless for a
+  // "build a home" query because you can't build a
+  // house in the financial district. We now bias the
+  // anchor toward a suburb that fits the vertical:
+  //   - residential_land → first suburb with houses
+  //     (dominantDwellingType=house) or any "suburban" zone
+  //   - commercial_land / mixed_use_land → CBD or "suburban"
+  //   - industrial_land / warehouse → "industrial" or
+  //     "suburban"
+  //   - agricultural_land → "peri-urban"
+  //   - restaurant / gas_station / retail_shop → CBD or
+  //     "suburban" (foot traffic matters)
+  //   - civic_land → first available
+  //   - fallback → city centre
+  const questionVertical = question.vertical ?? "";
+  function pickStreetViewAnchor(): { lat: number; lng: number } | undefined {
+    if (!detectedCity) return undefined;
+    const suburbs = SUBURB_PROFILES[detectedCity.id] ?? [];
+    if (suburbs.length === 0) {
+      return { lat: detectedCity.lat, lng: detectedCity.lng };
+    }
+    const pickByZone = (...zones: Array<"CBD" | "suburban" | "peri-urban" | "industrial">) =>
+      suburbs.find((s) => zones.includes(s.economicZone));
+    let chosen: { lat: number; lng: number } | undefined;
+    if (
+      questionVertical === "residential_land" ||
+      questionVertical === "agricultural_land"
+    ) {
+      // House-dominant suburb first, then suburban, then peri-urban
+      chosen =
+        suburbs.find((s) => s.dominantDwellingType === "house") ??
+        pickByZone("suburban", "peri-urban") ??
+        suburbs[0];
+    } else if (questionVertical === "commercial_land" || questionVertical === "mixed_use_land") {
+      chosen = pickByZone("CBD", "suburban") ?? suburbs[0];
+    } else if (
+      questionVertical === "industrial_land" ||
+      questionVertical === "warehouse"
+    ) {
+      chosen = pickByZone("industrial", "suburban") ?? suburbs[0];
+    } else if (questionVertical === "restaurant" || questionVertical === "retail_shop" || questionVertical === "gas_station") {
+      chosen = pickByZone("CBD", "suburban") ?? suburbs[0];
+    } else if (questionVertical === "civic_land") {
+      chosen = suburbs[0];
+    }
+    if (!chosen) {
+      return { lat: detectedCity.lat, lng: detectedCity.lng };
+    }
+    return { lat: chosen.lat, lng: chosen.lng };
+  }
+  const streetViewAnchor = pickStreetViewAnchor();
+
   const ownerWhere: any = { userId };
   if (cityFilter) {
     ownerWhere.city = { equals: cityFilter, mode: "insensitive" };
@@ -410,11 +466,7 @@ export default async function ResultPage({
                   signals: s.signals,
                   scoreBreakdown: s.scoreBreakdown,
                 }}
-                fallbackLatLng={
-                  detectedCity
-                    ? { lat: detectedCity.lat, lng: detectedCity.lng }
-                    : undefined
-                }
+                fallbackLatLng={streetViewAnchor}
               />
             ))}
           </ol>
