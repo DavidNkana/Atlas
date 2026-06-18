@@ -83,6 +83,19 @@ function isModelAvailable(modelId: string): boolean {
   if (modelId === "llama-free" || modelId === "mistral-free") {
     return process.env.NEXT_PUBLIC_HAS_OPENROUTER !== "false";
   }
+  // Day 12 v23: tavily needs both TAVILY_API_KEY and GEMINI_API_KEY.
+  // perplexity needs PERPLEXITY_API_KEY. The server checks the actual
+  // env var (via the model's isAvailable()), this is just a hint
+  // to dim the picker.
+  if (modelId === "tavily") {
+    return (
+      process.env.NEXT_PUBLIC_HAS_TAVILY !== "false" &&
+      process.env.NEXT_PUBLIC_HAS_GEMINI !== "false"
+    );
+  }
+  if (modelId === "perplexity") {
+    return process.env.NEXT_PUBLIC_HAS_PERPLEXITY !== "false";
+  }
   return false;
 }
 
