@@ -1,4 +1,5 @@
 import { auth } from "@clerk/nextjs/server";
+import { cookies } from "next/headers";
 import { prisma } from "@/lib/db";
 import { notFound, redirect } from "next/navigation";
 import ResultMapClient from "@/components/ResultMapClient";
@@ -7,6 +8,7 @@ import { RankedSiteCard } from "@/components/RankedSiteCard";
 import { FeedbackWidget } from "@/components/FeedbackWidget";
 import { RankingChart } from "@/components/RankingChart";
 import { ListingsOverlay } from "@/components/ListingsOverlay";
+import { detectCity } from "@/lib/stub/detect";
 
 /**
  * Day 4 commit 1 + Day 5 commit 4:
@@ -128,22 +130,84 @@ export default async function ResultPage({
     ? responseBody.connectorsRun
     : [];
 
-  // Day 10+ Path 4: fetch the user's plots linked to this
-  // question. These get overlaid on the result map as green
-  // markers and shown as cards in a "Listings I know about in
-  // this area" section. Plots are private to the user — we
-  // only ever fetch rows owned by the current user.
-  const plotRows = await prisma.plot.findMany({
+  // Day 10+ Path 4: fetch the user's own plots AND other users'
+  // published plots in the same area. Day 11 cross-user: the API
+  // returns { owner, market, cityFilter, suburbFilter }. The
+  // server has already done the privacy filtering (market plots
+  // only get public fields unless revealContact is true).
+  //
+  // We do this via Prisma directly instead of a server-side
+  // fetch so we don't have to forward the auth cookie (server
+  // components run in the same Node process as the API routes).
+  const detectedCity = detectCity(question.questionText ?? "");
+  const ownerPlotsRaw = await prisma.plot.findMany({
     where: { userId, questionId: id },
     orderBy: { createdAt: "desc" },
     take: 50,
   });
-  const plots = plotRows.map((p) => ({
+  const ownerPlots = ownerPlotsRaw.map((p) => ({
     id: p.id,
     suburb: p.suburb,
     city: p.city,
     sizeM2: p.sizeM2,
     priceAmount: p.priceAmount != null ? Number(p.priceAmount) : null,
+    currency: p.currency,
+    listingType: p.listingType,
+    agentName: p.agentName,
+    sourceUrl: p.sourceUrl,
+    lat: p.lat,
+    lng: p.lng,
+    publishToMarket: p.publishToMarket,
+    revealContact: p.revealContact,
+    notes: p.notes,
+    ownership: "owner" as const,
+  }));
+
+  // Cross-user market: published plots from other users in the
+  // same city as the question. Privacy: strip fields the owner
+  // hasn't shared. Same logic as the API route's
+  // serializeForMarket — kept here to avoid a server-side fetch
+  // round-trip.
+  const cityFilter = detectedCity?.name ?? null;
+  let marketPlots: Array<any> = [];
+  if (cityFilter) {
+    const marketRaw = await prisma.plot.findMany({
+      where: {
+        publishToMarket: true,
+        city: { equals: cityFilter, mode: "insensitive" },
+        userId: { not: userId },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+    });
+    marketPlots = marketRaw.map((p) => {
+      const showContact = !!p.revealContact;
+      return {
+        id: p.id,
+        suburb: p.suburb,
+        city: p.city,
+        sizeM2: p.sizeM2,
+        priceAmount: p.priceAmount != null ? Number(p.priceAmount) : null,
+        currency: p.currency,
+        listingType: p.listingType,
+        agentName: showContact ? p.agentName : null,
+        sourceUrl: showContact ? p.sourceUrl : null,
+        lat: p.lat,
+        lng: p.lng,
+        ownership: "market" as const,
+      };
+    });
+  }
+
+  // Combined view for the map client: owner + market, each
+  // reduced to the fields the map needs (lat/lng for the marker,
+  // popup fields for the click).
+  const plotsForMap = [...ownerPlots, ...marketPlots].map((p) => ({
+    id: p.id,
+    suburb: p.suburb,
+    city: p.city,
+    sizeM2: p.sizeM2,
+    priceAmount: p.priceAmount,
     currency: p.currency,
     listingType: p.listingType,
     agentName: p.agentName,
@@ -274,7 +338,7 @@ export default async function ResultPage({
         <section className="mb-6">
           <ResultMapClient
             rankedSites={rankedSites}
-            plots={plots}
+            plots={plotsForMap}
             status={responseStatus}
             city={stubCity}
             country={stubCountry}
@@ -332,7 +396,12 @@ export default async function ResultPage({
           </ol>
         </section>
 
-        <ListingsOverlay questionId={id} initialPlots={plots} />
+        <ListingsOverlay
+          questionId={id}
+          initialOwner={ownerPlots}
+          initialMarket={marketPlots}
+          cityFilter={cityFilter}
+        />
 
         <FeedbackWidget questionId={id} />
 

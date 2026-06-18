@@ -26,6 +26,24 @@ import {
   currencyFromUrl,
 } from "@/lib/listings/parse-property24-url";
 
+// Local Plot shape. We don't import from ListingsOverlay because
+// that would create a circular dependency through `ownership`
+// (the modal doesn't care about ownership, only the listings
+// overlay does). Keep this stable — the API contract.
+export interface PlotCard {
+  id: string;
+  suburb: string;
+  city: string;
+  sizeM2: number | null;
+  priceAmount: number | null;
+  currency: string;
+  listingType: string;
+  agentName: string | null;
+  sourceUrl: string | null;
+  lat: number | null;
+  lng: number | null;
+}
+
 const VALID_LISTING_TYPES = [
   { value: "for_sale", label: "For sale" },
   { value: "auction", label: "Auction" },
@@ -47,20 +65,6 @@ interface AddListingModalProps {
   questionId: string;
   onClose: () => void;
   onSaved: (plot: PlotCard) => void;
-}
-
-interface PlotCard {
-  id: string;
-  suburb: string;
-  city: string;
-  sizeM2: number | null;
-  priceAmount: number | null;
-  currency: string;
-  listingType: string;
-  agentName: string | null;
-  sourceUrl: string | null;
-  lat: number | null;
-  lng: number | null;
 }
 
 export function AddListingModal({
@@ -85,6 +89,13 @@ export function AddListingModal({
   const [listingType, setListingType] = useState("for_sale");
   const [agentName, setAgentName] = useState("");
   const [notes, setNotes] = useState("");
+
+  // Day 11 LinkedIn-style privacy toggles. Default publishToMarket
+  // = true (the data fields go to the Atlas market) and
+  // revealContact = false (the agent + source URL stay private
+  // until the user opts in).
+  const [publishToMarket, setPublishToMarket] = useState(true);
+  const [revealContact, setRevealContact] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -137,6 +148,8 @@ export function AddListingModal({
         country: country.trim() || "South Africa",
         currency,
         listingType,
+        publishToMarket,
+        revealContact,
       };
       if (url.trim()) body.sourceUrl = url.trim();
       if (sizeSqm.trim()) {
@@ -360,6 +373,29 @@ export function AddListingModal({
             />
           </Field>
 
+          {/* Day 11: LinkedIn-style privacy toggles. We render them
+              in a small explainer card so the user understands
+              exactly what each toggle does. */}
+          <div className="rounded-lg border border-atlas-border bg-atlas-bg p-3">
+            <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-atlas-muted">
+              Sharing
+            </div>
+            <PrivacyToggle
+              checked={publishToMarket}
+              onChange={setPublishToMarket}
+              title="Share with the Atlas market"
+              description="Other users searching this area will see suburb, size, and price. Notes stay private."
+              defaultOn
+            />
+            <PrivacyToggle
+              checked={revealContact}
+              onChange={setRevealContact}
+              title="Reveal contact info to other users"
+              description="Other users will see the agent name and a link to the original listing."
+              defaultOn={false}
+            />
+          </div>
+
           {error && (
             <p className="text-[11px] text-rose-300">{error}</p>
           )}
@@ -397,5 +433,50 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       </label>
       {children}
     </div>
+  );
+}
+
+function PrivacyToggle({
+  checked,
+  onChange,
+  title,
+  description,
+  defaultOn,
+}: {
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  title: string;
+  description: string;
+  defaultOn: boolean;
+}) {
+  return (
+    <label className="flex cursor-pointer items-start gap-3 py-1.5 first:pt-0 last:pb-0">
+      <span
+        className={`mt-0.5 inline-flex h-4 w-7 shrink-0 items-center rounded-full border transition-colors ${
+          checked
+            ? "border-atlas-accent bg-atlas-accent"
+            : "border-atlas-border bg-atlas-surface"
+        }`}
+        onClick={(e) => {
+          e.preventDefault();
+          onChange(!checked);
+        }}
+      >
+        <span
+          className={`inline-block h-3 w-3 rounded-full bg-white transition-transform ${
+            checked ? "translate-x-3.5" : "translate-x-0.5"
+          }`}
+        />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[11px] font-medium text-atlas-text">
+          {title}
+          <span className="ml-1.5 text-[10px] font-normal text-atlas-muted">
+            ({defaultOn ? "default on" : "default off"})
+          </span>
+        </span>
+        <span className="block text-[10px] text-atlas-muted">{description}</span>
+      </span>
+    </label>
   );
 }

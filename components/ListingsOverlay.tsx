@@ -1,60 +1,69 @@
 "use client";
 
 /**
- * Atlas — Listings Overlay (Path 4, Day 10+).
+ * Atlas — Listings Overlay (Path 4, Day 10+; Day 11 cross-user).
  *
- * The "Listings I know about in this area" section on the result
- * page. Shows each user-added plot as a card with price, size,
- * agent, and a link to the original Property24 URL. The user can
- * add more listings via the "+ Add a listing" button.
+ * The "Listings in this area" section on the result page. Shows:
+ *   - The user's own plots first (full data, can edit/share)
+ *   - Then other Atlas users' published plots (data fields
+ *     only by default, contact fields only if the owner
+ *     explicitly opted in via revealContact)
  *
- * Plots are private to the user. They live in the Plot table
- * scoped by userId + questionId. When a plot is added, we
- * optimistically prepend it to the local state so the UI updates
- * instantly; on save error we roll back.
+ * Plots are private to their owner by default. The user can
+ * toggle publishToMarket + revealContact on a per-listing basis
+ * via the AddListingModal.
  */
 
 import { useState } from "react";
 import { AddListingModal } from "./AddListingModal";
+import type { PlotCard as ModalPlotCard } from "./AddListingModal";
 
-export interface PlotCard {
-  id: string;
-  suburb: string;
-  city: string;
-  sizeM2: number | null;
-  priceAmount: number | null;
-  currency: string;
-  listingType: string;
-  agentName: string | null;
-  sourceUrl: string | null;
-  lat: number | null;
-  lng: number | null;
+// The ListingsOverlay's PlotCard extends the modal's PlotCard
+// with privacy flags + an ownership marker. Market plots come
+// in pre-filtered from the server; the modal's onSaved returns
+// the unflagged base shape.
+export interface PlotCard extends ModalPlotCard {
+  // Privacy flags — only present on owner plots. Market plots
+  // are already pre-filtered server-side.
+  publishToMarket?: boolean;
+  revealContact?: boolean;
+  notes?: string | null;
+  ownership: "owner" | "market";
 }
 
 export function ListingsOverlay({
   questionId,
-  initialPlots,
+  initialOwner,
+  initialMarket,
+  cityFilter,
 }: {
   questionId: string;
-  initialPlots: PlotCard[];
+  initialOwner: PlotCard[];
+  initialMarket: PlotCard[];
+  cityFilter: string | null;
 }) {
-  const [plots, setPlots] = useState<PlotCard[]>(initialPlots);
+  const [owner, setOwner] = useState<PlotCard[]>(initialOwner);
+  const [market] = useState<PlotCard[]>(initialMarket);
   const [modalOpen, setModalOpen] = useState(false);
 
-  function onSaved(newPlot: PlotCard) {
-    // Dedupe: if the same id is already in the list, replace it
-    // (the API returns the updated row when a sourceUrl already
-    // exists). Otherwise prepend.
-    setPlots((prev) => {
-      const idx = prev.findIndex((p) => p.id === newPlot.id);
+  function onSaved(newPlot: ModalPlotCard) {
+    // Dedupe + prepend for the owner's list. The new plot is
+    // always an owner plot (the user just added it). The
+    // AddListingModal hands us a PlotCard without the
+    // `ownership` marker, so we add it here.
+    const owned: PlotCard = { ...newPlot, ownership: "owner" as const };
+    setOwner((prev) => {
+      const idx = prev.findIndex((p) => p.id === owned.id);
       if (idx >= 0) {
         const next = prev.slice();
-        next[idx] = newPlot;
+        next[idx] = owned;
         return next;
       }
-      return [newPlot, ...prev];
+      return [owned, ...prev];
     });
   }
+
+  const total = owner.length + market.length;
 
   return (
     <section className="mt-6">
@@ -64,7 +73,8 @@ export function ListingsOverlay({
             Listings in this area
           </h2>
           <span className="text-[10px] uppercase tracking-wider text-atlas-muted">
-            {plots.length} {plots.length === 1 ? "plot" : "plots"} you know about
+            {owner.length} yours &middot; {market.length} from other Atlas users
+            {cityFilter ? ` · ${cityFilter}` : ""}
           </span>
         </div>
         <button
@@ -89,17 +99,27 @@ export function ListingsOverlay({
         </button>
       </div>
 
-      {plots.length === 0 ? (
+      {total === 0 ? (
         <div className="rounded-md border border-dashed border-atlas-border bg-atlas-surface/50 p-6 text-center">
           <p className="text-xs text-atlas-muted">
             No listings yet. Add a Property24 URL you&apos;re watching, or fill
-            in the details of a plot you know about. Listings are private to
-            you.
+            in the details of a plot you know about. Listings you add are
+            shared with the Atlas market by default (you can toggle this off).
           </p>
         </div>
       ) : (
         <ol className="space-y-2">
-          {plots.map((p) => (
+          {owner.map((p) => (
+            <PlotListItem key={p.id} plot={p} />
+          ))}
+          {market.length > 0 && owner.length > 0 && (
+            <li className="my-3 flex items-center gap-2 text-[10px] uppercase tracking-wider text-atlas-muted">
+              <div className="h-px flex-1 bg-atlas-border" />
+              <span>From other Atlas users</span>
+              <div className="h-px flex-1 bg-atlas-border" />
+            </li>
+          )}
+          {market.map((p) => (
             <PlotListItem key={p.id} plot={p} />
           ))}
         </ol>
@@ -131,17 +151,41 @@ function PlotListItem({ plot }: { plot: PlotCard }) {
         ? "Tender"
         : "Off-market";
 
+  const isMarket = plot.ownership === "market";
+
   return (
-    <li className="rounded-md border border-atlas-border bg-atlas-surface p-3">
+    <li
+      className={`rounded-md border p-3 ${
+        isMarket
+          ? "border-emerald-500/30 bg-emerald-500/5"
+          : "border-atlas-border bg-atlas-surface"
+      }`}
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="mb-0.5 flex items-center gap-2">
             <h3 className="truncate text-sm font-medium text-atlas-text">
               {plot.suburb}, {plot.city}
             </h3>
-            <span className="inline-flex shrink-0 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
+            <span
+              className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                isMarket
+                  ? "bg-emerald-500/20 text-emerald-300"
+                  : "bg-emerald-500/15 text-emerald-300"
+              }`}
+            >
               {listingLabel}
             </span>
+            {isMarket && (
+              <span className="inline-flex shrink-0 rounded-full bg-atlas-surface px-2 py-0.5 text-[10px] font-medium text-atlas-muted">
+                Atlas market
+              </span>
+            )}
+            {!isMarket && plot.publishToMarket === false && (
+              <span className="inline-flex shrink-0 rounded-full bg-atlas-surface px-2 py-0.5 text-[10px] font-medium text-atlas-muted">
+                Private
+              </span>
+            )}
           </div>
           <p className="text-xs text-atlas-muted">
             <span className="font-semibold text-atlas-text">{priceStr}</span>
