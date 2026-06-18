@@ -139,9 +139,21 @@ export default async function ResultPage({
   // We do this via Prisma directly instead of a server-side
   // fetch so we don't have to forward the auth cookie (server
   // components run in the same Node process as the API routes).
+  //
+  // Day 12 v3: the owner query used to filter by questionId
+  // (only show plots the user added WHILE on this exact
+  // question). That was wrong: a user adds 10 plots over a
+  // week across 5 searches, then comes back to a new search
+  // and sees ZERO listings because none are linked to the new
+  // questionId. The right behaviour: show ALL of the user's
+  // own plots in the owner section regardless of which
+  // question they were added on. The market section still
+  // filters by questionId only for the user's OWN plots
+  // (so they don't see their own plot twice) — but their
+  // owner section shows everything.
   const detectedCity = detectCity(question.questionText ?? "");
   const ownerPlotsRaw = await prisma.plot.findMany({
-    where: { userId, questionId: id },
+    where: { userId },
     orderBy: { createdAt: "desc" },
     take: 50,
   });
