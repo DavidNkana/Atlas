@@ -110,7 +110,26 @@ export const curatedStub: Model = {
       }));
       usingRealCatalog = true;
     } else {
-      sites = generateStubSites(city, vertical);
+      // Day 12 v14: run the fallback (old random-coord
+      // generator) through the same context-aware builder
+      // so even when a (city, vertical) isn't in the real
+      // catalog, the rationale matches the question
+      // instead of being a generic "mixed-use density"
+      // copy. The fallback still uses random lat/lng,
+      // but the explanation is now per-question.
+      const fallback = generateStubSites(city, vertical);
+      sites = fallback.map((s, i) => ({
+        ...s,
+        rank: i + 1,
+        rationale: buildRationale(parsed, city, {
+          name: s.name ?? "",
+          lat: s.lat ?? city.lat,
+          lng: s.lng ?? city.lng,
+          rationale: s.rationale ?? "",
+          source: "Fallback stub (random lat/lng)",
+          suburb: undefined,
+        }),
+      }));
     }
 
     const payload: StubPayload = {
