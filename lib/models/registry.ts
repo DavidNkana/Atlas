@@ -11,17 +11,22 @@ import type { Model, ModelInfo } from './types';
 // them as named Atlas model IDs. Discovery happens lazily on first call,
 // not at import time, so import is side-effect-free.
 //
-// Day 12 v23: added tavily and perplexity to the cascade. Order matters:
-//   1. gemini-search — primary Perplexity-style (Google Search grounding)
-//   2. tavily — Tavily web search + Gemini synthesis (works when
-//      Gemini grounding is rate-limited)
-//   3. perplexity — Perplexity Sonar API (paid-tier, most reliable)
-//   4. gemini-flash — plain Gemini (no grounding, no Perplexity shape)
-//   5. llama-free, mistral-free — OpenRouter fallbacks
-//   6. curatedStub — always available, demo placeholder
+// Day 12 v29: David's Vercel Gemini key is hitting 429 quota
+// limits on every model id (1.5/2.0/2.5-flash). Rather than
+// retry the same broken key 3 times per request, put Tavily
+// first. Tavily is now the primary research model. Gemini Search
+// is the fallback (in case the key's quota resets).
+//
+//   1. tavily         — Tavily web search + Gemini 1.5 Flash synthesis
+//                       (1,000 free searches/month, working today)
+//   2. gemini-search  — Gemini Search grounding (rate-limited today)
+//   3. perplexity     — Perplexity Sonar ($5 signup, not enabled)
+//   4. gemini-flash   — plain Gemini (rate-limited today)
+//   5. openrouter fallbacks
+//   6. curatedStub    — always available
 export const ALL_MODELS: Model[] = [
-  geminiSearch,
   tavily,
+  geminiSearch,
   perplexity,
   geminiFlash,
   llamaFree,
