@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getModel, ALL_MODELS } from "@/lib/models/registry";
+import { withTimeout } from "@/lib/util/timeout";
 import type { ModelRequest, Vertical } from "@/lib/models/types";
 
 /**
@@ -80,18 +81,24 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  // Make the actual call.
+  // Make the actual call. Run it through the same withTimeout
+  // wrapper the real /api/ask route uses, so we exercise the
+  // exact same per-model timeout logic.
   const req_payload: ModelRequest = {
     vertical: vertical as Vertical,
     question,
   };
   let response: any;
   try {
-    response = await model.call(req_payload);
+    response = await withTimeout(
+      model.call(req_payload),
+      30_000, // Same budget the v19 route gives gemini-search
+      "model:" + model.info.id,
+    );
   } catch (e) {
     return NextResponse.json({
       ...result,
-      error: `Model call threw: ${e instanceof Error ? e.message : String(e)}`,
+      error: `Model call threw/timed out: ${e instanceof Error ? e.message : String(e)}`,
       errorStack: e instanceof Error ? e.stack : "",
       latencyMs: Date.now() - t0,
     });
@@ -115,6 +122,29 @@ export async function GET(req: NextRequest) {
   if (typeof result.raw === "string" && result.raw.length > 2000) {
     result.raw = result.raw.slice(0, 2000) + "...[truncated]";
   }
+
+  // Simulate the route handler's callModel logic exactly.
+  // This is the "legacy shape" check in lib/models/* which catches
+  // {ranked_sites, raw} without an ok field. We replicate it here
+  // so the diagnostic tells us whether the FULL route pipeline
+  // would treat this as a success or failure.
+  let pipelineTreatsAsOk = false;
+  let pipelineReason = '';
+  if (!response) {
+    pipelineReason = 'response is null';
+  } else if (response.ok === false && typeof response.error === 'string') {
+    pipelineReason = 'route reads ok:false with error string -> treated as fail';
+  } else if (response.ok === true && Array.isArray(response.ranked_sites)) {
+    pipelineTreatsAsOk = true;
+    pipelineReason = 'route reads ok:true with array -> success';
+  } else if (Array.isArray(response.ranked_sites)) {
+    pipelineTreatsAsOk = true;
+    pipelineReason = 'route reads legacy shape (no ok field) with array -> success';
+  } else {
+    pipelineReason = 'route sees malformed response -> fail';
+  }
+  result.pipelineTreatsAsOk = pipelineTreatsAsOk;
+  result.pipelineReason = pipelineReason;
 
   return NextResponse.json(result);
 }
