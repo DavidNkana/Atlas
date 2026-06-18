@@ -141,6 +141,7 @@ export function VerticalMismatchModal({
   currentVertical,
   onClose,
   onUseExample,
+  onSwitchVertical,
   onUseCustom,
   onOverride,
 }: {
@@ -148,18 +149,24 @@ export function VerticalMismatchModal({
   currentVertical: string;
   onClose: () => void;
   /**
-   * Switch to a different vertical AND auto-fill the question with
-   * a worked example. The page sets `vertical = newVertical`,
-   * `question = example`, closes the modal, and immediately calls
-   * doSubmit() so the user gets a one-click flow.
-   *
-   * One-click flow avoids the broken intermediate state where the
-   * user has to manually click the new vertical chip AND click Ask
-   * — that path was hitting an auth race condition where the second
-   * fetch lost the session cookie. Auto-firing the submit right
-   * after the vertical switch keeps the session context intact.
+   * Fill the input with an example (one of the clickable chips in
+   * the "Use a starter prompt" section). The page sets
+   * `vertical = newVertical`, `question = example`, closes the
+   * modal, and does NOT submit. The user edits the example and
+   * clicks Ask themselves.
    */
   onUseExample: (vertical: string, example: string) => void;
+  /**
+   * Day 12 v6: the big "Switch to {suggested}" button now ONLY
+   * changes the vertical — it preserves the user's typed question.
+   * Previously it called onUseExample(suggested, defaultExample)
+   * which silently replaced the user's prompt with a pre-canned
+   * example ("Where in Durban for a logistics warehouse?") and
+   * auto-submitted, destroying the user's actual input ("Where
+   * in Nairobi for an industrial warehouse"). The new behaviour:
+   * vertical switches, question stays, user clicks Ask.
+   */
+  onSwitchVertical: (newVertical: string) => void;
   onUseCustom: () => void;
   onOverride: () => void;
 }) {
@@ -223,11 +230,6 @@ export function VerticalMismatchModal({
     ],
   };
   const examples = examplePrompts[suggested] ?? [];
-  // The default example for the Switch to button. Falls back to the
-  // user's original question text if we don't have a tailored example
-  // for the suggested vertical (very unlikely with the table above,
-  // but defensive).
-  const defaultExample = examples[0] ?? question;
 
   return (
     <div
@@ -354,7 +356,7 @@ export function VerticalMismatchModal({
           </button>
           <button
             type="button"
-            onClick={() => onUseExample(suggested, defaultExample)}
+            onClick={() => onSwitchVertical(suggested)}
             className="rounded-md bg-atlas-accent px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-atlas-accent2"
           >
             Switch to {suggestedLabel}

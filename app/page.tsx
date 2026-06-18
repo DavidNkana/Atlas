@@ -427,6 +427,23 @@ export default function HomePage() {
             setMismatchOpen(false);
             setMismatchData(null);
           }}
+          onSwitchVertical={(newVertical) => {
+            // Day 12 v6: the big "Switch to {suggested}" button
+            // only changes the vertical — the user's typed question
+            // stays in the input. The user then clicks Ask to
+            // submit with their actual prompt + the new vertical.
+            // No auto-fill of a pre-canned example, no auto-submit.
+            setVertical(newVertical as any);
+            setMismatchOpen(false);
+            setMismatchData(null);
+            setError(null);
+            // Focus the input so the user can immediately click Ask
+            // (or edit first if they want to refine the question).
+            setTimeout(() => {
+              const input = document.getElementById("atlas-question-input");
+              if (input) (input as HTMLInputElement).focus();
+            }, 50);
+          }}
           onOverride={() => {
             setMismatchOpen(false);
             setMismatchData(null);
