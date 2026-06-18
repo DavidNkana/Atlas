@@ -29,12 +29,11 @@
 
 import type { Connector, ConnectorContext, Signal } from "./types";
 import { CITIES, type City } from "@/lib/stub/cities";
+import { SUBURB_PROFILES, type SuburbProfile } from "@/lib/demographics/suburbs";
 
 /**
- * Per-city demographic profile. Only present for the cities we have data
- * for. Cities missing from this table get an empty Signal[] returned
- * (graceful degrade — sites still rank, just without the demographic
- * signal).
+ * Per-city demographic profile. Used as a fallback when no suburb-level
+ * data is available for a candidate site.
  */
 type DemographicProfile = {
   population: number; // suburb population (most recent census)
@@ -45,7 +44,7 @@ type DemographicProfile = {
   economicZone: "CBD" | "suburban" | "peri-urban" | "industrial";
 };
 
-const DEMOGRAPHIC_PROFILES: Record<string, DemographicProfile> = {
+const CITY_DEMOGRAPHIC_PROFILES: Record<string, DemographicProfile> = {
   // South Africa — 2022 Census + 2023 municipal economic profiles
   sandton: { population: 12400, medianHouseholdIncome: 720000, dominantDwellingType: "apartment", professionalShare: 0.78, growthRateYoY: 0.04, economicZone: "CBD" },
   johannesburg: { population: 95700, medianHouseholdIncome: 380000, dominantDwellingType: "mixed", professionalShare: 0.55, growthRateYoY: 0.02, economicZone: "CBD" },
@@ -100,11 +99,37 @@ function nearestCity(lat: number, lng: number): City | null {
 }
 
 /**
+ * Find the closest suburb in the SUBURB_PROFILES table to the
+ * candidate site's coords. Returns null if the site is more than
+ * 25km from any known suburb (suburb data is dense and
+ * geographically narrow).
+ */
+function nearestSuburb(lat: number, lng: number, cityId: string): SuburbProfile | null {
+  const suburbs = SUBURB_PROFILES[cityId];
+  if (!suburbs || suburbs.length === 0) return null;
+  let best: SuburbProfile | null = null;
+  let bestDist = Infinity;
+  for (const s of suburbs) {
+    const d = Math.hypot(s.lat - lat, s.lng - lng);
+    if (d < bestDist) {
+      bestDist = d;
+      best = s;
+    }
+  }
+  // 25km radius (~0.25 degrees). Suburb data is dense; we want
+  // the user to land in the actual suburb for the signal to be
+  // useful. If they're outside any profiled suburb, we fall back
+  // to the city-level profile.
+  if (bestDist > 0.25) return null;
+  return best;
+}
+
+/**
  * Compute a [0..1] weight for a demographic profile. Higher = better fit
  * for most commercial verticals. Uses a blend of growth, professional
  * share, and economic zone.
  */
-function weightFor(profile: DemographicProfile): number {
+function weightFor(profile: DemographicProfile | SuburbProfile): number {
   const growth = Math.max(0, Math.min(1, (profile.growthRateYoY + 0.05) / 0.15));
   const pro = profile.professionalShare;
   const zone =
@@ -134,12 +159,25 @@ export const statsSAConnector: Connector = {
     const city = nearestCity(lat, lng);
     if (!city) return [];
 
-    const profile = DEMOGRAPHIC_PROFILES[city.id];
+    // Day 10: try suburb-level first (more accurate, more useful for
+    // developers). Fall back to city-level if no suburb is within
+    // 25km of the site.
+    const suburb = nearestSuburb(lat, lng, city.id);
+    const profile: DemographicProfile | SuburbProfile =
+      suburb ?? CITY_DEMOGRAPHIC_PROFILES[city.id] ?? null;
     if (!profile) return [];
 
     const weight = weightFor(profile);
     const incomeStr = formatIncome(profile.medianHouseholdIncome, city.currency);
-    const label = `${city.name}: ${profile.population.toLocaleString()} residents, ${incomeStr} median income, ${Math.round(profile.professionalShare * 100)}% professionals`;
+    const proPct = Math.round(profile.professionalShare * 100);
+
+    // Suburb-level label is much more useful for the developer:
+    // "Sandton CBD: 4,200 residents, R1.7M median income, 88%
+    // professionals" tells them they're looking at the financial
+    // district, not just "Sandton". This is the question they
+    // actually ask.
+    const locationName = suburb ? `${suburb.name}, ${city.name}` : city.name;
+    const label = `${locationName}: ${profile.population.toLocaleString()} residents, ${incomeStr} median income, ${proPct}% professionals`;
 
     return [
       {
@@ -152,6 +190,22 @@ export const statsSAConnector: Connector = {
         value: weight,
         weight,
         fetchedAt: new Date().toISOString(),
+        // Extra payload so the UI can show the suburb name + economic
+        // zone as a separate badge without re-parsing the label.
+        payload: suburb
+          ? {
+              suburb: suburb.name,
+              city: city.name,
+              economicZone: suburb.economicZone,
+              growthRateYoY: suburb.growthRateYoY,
+              note: suburb.note,
+            }
+          : {
+              suburb: null,
+              city: city.name,
+              economicZone: CITY_DEMOGRAPHIC_PROFILES[city.id].economicZone,
+              growthRateYoY: CITY_DEMOGRAPHIC_PROFILES[city.id].growthRateYoY,
+            },
       },
     ];
   },

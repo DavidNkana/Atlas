@@ -37,6 +37,13 @@ export interface Signal {
   weight: number;
   /** ISO timestamp when the signal was fetched. */
   fetchedAt: string;
+  /**
+   * Optional structured metadata. Day 10: stats_sa connector uses
+   * this to surface suburb name + economic zone + growth rate as
+   * separate UI badges (instead of re-parsing the label string).
+   * Connectors that don't need this field can omit it.
+   */
+  payload?: Record<string, unknown>;
 }
 
 /**
