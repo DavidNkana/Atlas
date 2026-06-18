@@ -119,8 +119,18 @@ export const geminiSearch: Model = {
       //   plain text with inline citations when the grounding
       //   tool is enabled. We parse the JSON from the text
       //   (stripping markdown code fences if present).
+      //
+      // Day 12 v21: switched from 'gemini-2.5-flash' to
+      // 'gemini-2.0-flash'. v18 diagnostic showed the
+      // 2.5-flash free tier has a 20 RPD (requests per day)
+      // hard limit, not 1500 RPD as the docs imply.
+      // gemini-2.0-flash has the same google_search tool
+      // support but a more generous free tier (15 RPM,
+      // 1500 RPD). This unblocks real research answers for
+      // all cities without burning through the daily quota
+      // in 20 clicks.
       const model = genAI.getGenerativeModel({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-2.0-flash',
         tools: [{ googleSearch: {} }] as any,
       });
       let text: string;
