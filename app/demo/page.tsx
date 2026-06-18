@@ -211,12 +211,38 @@ export default function DemoPage() {
           investors, and builders who want to evaluate 10x more sites per week
           than they do today.
         </p>
-        <a
-          href="mailto:david@atlas.local?subject=Atlas%20demo%20request"
-          className="inline-block rounded-md bg-atlas-accent px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-atlas-accent2"
-        >
-          Get a demo
-        </a>
+        <div className="flex flex-wrap items-center gap-3">
+          <a
+            href="mailto:david@atlas.local?subject=Atlas%20demo%20request"
+            className="inline-block rounded-md bg-atlas-accent px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-atlas-accent2"
+          >
+            Get a demo
+          </a>
+          {/* Day 10: downloadable one-pager for investors. PDF is in
+              /public, served as a static asset. The download attribute
+              hints the browser to save rather than navigate. */}
+          <a
+            href="/atlas-investor-one-pager.pdf"
+            download="atlas-investor-one-pager.pdf"
+            className="inline-flex items-center gap-2 rounded-md border border-atlas-border bg-atlas-bg px-6 py-3 text-sm font-medium text-atlas-text transition-colors hover:border-atlas-accent hover:text-atlas-text"
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            Download investor one-pager
+          </a>
+        </div>
       </section>
 
       {/* Team */}
