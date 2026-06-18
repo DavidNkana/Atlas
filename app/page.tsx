@@ -104,7 +104,7 @@ export default function HomePage() {
   const { user, isLoaded } = useUser();
   const [vertical, setVertical] = useState<Vertical>("gas_station");
   const [modelId, setModelId] = useState<string>(
-    MODEL_INFO[0]?.id ?? "gemini-flash"
+    MODEL_INFO[0]?.id ?? "tavily"
   );
   const [question, setQuestion] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
