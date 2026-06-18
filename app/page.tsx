@@ -354,6 +354,24 @@ export default function HomePage() {
     (m) => m.id === modelId
   );
 
+  // Day 12 v4 follow-up: rotate the question input placeholder so
+  // it doesn't look like the system is forcing the same prompt.
+  // The user (David) has been typing the same prompt 5+ times
+  // because the placeholder looked identical to a system-pinned
+  // example. The placeholder now cycles through 4 different
+  // questions across cities + verticals so it's obvious it's a
+  // suggestion, not a forced default.
+  const PLACEHOLDERS = [
+    "Where in Sandton for vacant land to build houses?",
+    "Where in Cape Town for a family restaurant?",
+    "Where in Lusaka for an industrial warehouse?",
+    "Where in Nairobi for a school or hospital site?",
+  ];
+  const placeholder =
+    PLACEHOLDERS[
+      Math.floor(Date.now() / 60000) % PLACEHOLDERS.length
+    ];
+
   return (
     <div className="flex h-screen overflow-hidden bg-atlas-bg text-atlas-text">
       <Sidebar />
@@ -571,7 +589,7 @@ export default function HomePage() {
                       type="text"
                       value={question}
                       onChange={(e) => setQuestion(e.target.value)}
-                      placeholder="Where in Sandton for a gas station?"
+                      placeholder={placeholder}
                       className="min-w-0 flex-1 bg-transparent px-2 py-1.5 text-sm text-atlas-text placeholder:text-atlas-muted focus:outline-none"
                       required
                       disabled={loading}
