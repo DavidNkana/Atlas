@@ -101,46 +101,43 @@ export const geminiSearch: Model = {
         return { ok: false, error: 'GEMINI_API_KEY not set' } as any;
       }
       const genAI = new GoogleGenerativeAI(key);
-      // Day 12 v17 CRITICAL FIX:
-      //
-      //   The `google_search` grounding tool is INCOMPATIBLE with
-      //   `responseMimeType: "application/json"`. Google rejects
-      //   the request with HTTP 400:
-      //     "The response_mime_type field cannot be set when
-      //      using the google_search tool."
-      //
-      //   When v16 shipped with both, every Gemini Search call
-      //   failed silently at the SDK level and the route cascaded
-      //   to the curated stub. Users saw the persistent
-      //   "Demo placeholder" banner that the v16 commit was
-      //   supposed to eliminate.
-      //
-      //   Fix: drop `responseMimeType` entirely. Gemini returns
-      //   plain text with inline citations when the grounding
-      //   tool is enabled. We parse the JSON from the text
-      //   (stripping markdown code fences if present).
-      //
-      // Day 12 v25: David's new key (the Vertex-format one with
-      // AQ.Ab8RN6 prefix) has access to 50 models including
-      // gemini-2.0-flash (the test-keys diagnostic confirmed it).
-      // The OLD key had limit: 0 on 2.0-flash but the NEW key
-      // has full free-tier access. Switch back to 2.0-flash
-      // which has more generous free quota + better quality
-      // than 1.5-flash. The google_search grounding tool name
-      // is "googleSearch" on 2.0-flash (not "googleSearchRetrieval"
-      // which is the 1.5-flash name).
-      const model = genAI.getGenerativeModel({
-        model: 'gemini-2.0-flash',
-        tools: [{ googleSearch: {} }] as any,
-      });
-      let text: string;
+      // Day 12 v26: Vercel is serving stale builds (stuck on
+      // v22's gemini-1.5-flash even though main has v25's
+      // gemini-2.0-flash). The 1.5-flash on this Vertex-format
+      // key returns 404. So we now try multiple model ids in
+      // sequence — whichever one this key actually has access
+      // to. Order: 2.0-flash first (preferred), then 1.5-flash,
+      // then 2.5-flash. Each try has its own per-model timeout
+      // (8s default) so we don't blow the route budget.
+      const modelIdsToTry = [
+        { model: 'gemini-2.0-flash', tool: 'googleSearch' },
+        { model: 'gemini-1.5-flash', tool: 'googleSearchRetrieval' },
+        { model: 'gemini-2.5-flash', tool: 'googleSearch' },
+      ];
+      let text: string | undefined;
       let result: any;
-      try {
-        result = await model.generateContent(buildPrompt(req));
-        text = result.response.text();
-      } catch (innerErr) {
-        const msg = innerErr instanceof Error ? innerErr.message : String(innerErr);
-        return { ok: false, error: `Gemini Search request failed: ${msg}` } as any;
+      let lastError: string | null = null;
+      for (const { model: modelId, tool: toolName } of modelIdsToTry) {
+        try {
+          const m = genAI.getGenerativeModel({
+            model: modelId,
+            tools: toolName === 'googleSearch'
+              ? [{ googleSearch: {} } as any]
+              : [{ googleSearchRetrieval: {} } as any],
+          });
+          const r = await m.generateContent(buildPrompt(req));
+          text = r.response.text();
+          result = r;
+          // If we got here, this model worked. Break out of the loop.
+          break;
+        } catch (modelErr) {
+          const msg = modelErr instanceof Error ? modelErr.message : String(modelErr);
+          lastError = `${modelId}: ${msg.slice(0, 200)}`;
+          // Try the next model.
+        }
+      }
+      if (!text || !result) {
+        return { ok: false, error: `All Gemini models failed. Last error: ${lastError}` } as any;
       }
 
       // Extract grounding citations from the response metadata.
