@@ -354,23 +354,16 @@ export default function HomePage() {
     (m) => m.id === modelId
   );
 
-  // Day 12 v4 follow-up: rotate the question input placeholder so
-  // it doesn't look like the system is forcing the same prompt.
-  // The user (David) has been typing the same prompt 5+ times
-  // because the placeholder looked identical to a system-pinned
-  // example. The placeholder now cycles through 4 different
-  // questions across cities + verticals so it's obvious it's a
-  // suggestion, not a forced default.
-  const PLACEHOLDERS = [
-    "Where in Sandton for vacant land to build houses?",
-    "Where in Cape Town for a family restaurant?",
-    "Where in Lusaka for an industrial warehouse?",
-    "Where in Nairobi for a school or hospital site?",
-  ];
-  const placeholder =
-    PLACEHOLDERS[
-      Math.floor(Date.now() / 60000) % PLACEHOLDERS.length
-    ];
+  // Day 12 v4 follow-up v2: removed rotating placeholder entirely.
+  // The rotating placeholder (added in 2884e29) made things WORSE
+  // because users were reading the placeholder, mentally merging
+  // it with the example chips below, and submitting blended
+  // versions ("Nairobi industrial warehouse" when DB shows
+  // "Durban logistics warehouse"). The placeholder is now a
+  // neutral, non-city-specific hint. All city examples live
+  // EXCLUSIVELY in the clickable chips below the input so it's
+  // unambiguous what's a suggestion vs what's user-typed text.
+  const placeholder = "Describe a site you need, in any city…";
 
   return (
     <div className="flex h-screen overflow-hidden bg-atlas-bg text-atlas-text">
@@ -735,22 +728,27 @@ export default function HomePage() {
 
                 {/* Quick-pick sample questions (when input is empty) */}
                 {!loading && question.length === 0 && (
-                  <div className="mt-4 flex flex-wrap justify-center gap-2">
-                    {[
-                      "Where in Sandton for a gas station?",
-                      "Where in Pretoria for a restaurant?",
-                      "Where in Lusaka for a warehouse?",
-                      "Where in Cape Town for retail?",
-                    ].map((q) => (
-                      <button
-                        key={q}
-                        type="button"
-                        onClick={() => setQuestion(q)}
-                        className="rounded-full border border-atlas-border bg-atlas-surface px-3 py-1 text-xs text-atlas-muted transition-colors hover:border-atlas-accent hover:text-atlas-text"
-                      >
-                        {q}
-                      </button>
-                    ))}
+                  <div className="mt-4 flex flex-col items-center gap-2">
+                    <div className="text-[11px] uppercase tracking-wider text-atlas-muted">
+                      Try a sample
+                    </div>
+                    <div className="flex flex-wrap justify-center gap-2">
+                      {[
+                        "Where in Sandton for vacant land?",
+                        "Where in Lusaka for a logistics warehouse?",
+                        "Where in Cape Town for a family restaurant?",
+                        "Where in Nairobi for a school site?",
+                      ].map((q) => (
+                        <button
+                          key={q}
+                          type="button"
+                          onClick={() => setQuestion(q)}
+                          className="rounded-full border border-atlas-border bg-atlas-surface px-3 py-1.5 text-xs text-atlas-muted transition-colors hover:border-atlas-accent hover:text-atlas-text"
+                        >
+                          {q}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
 
