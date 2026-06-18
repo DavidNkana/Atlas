@@ -2,6 +2,8 @@ import type { Model, ModelRequest, ModelResponse, RankedSite, Vertical } from '.
 import { detectCity } from '../stub/detect';
 import { generateStubSites } from '../stub/sites';
 import { getRealSiteCandidates, type RealSite } from '../stub/real-sites';
+import { parseQuestion } from '../stub/question-parser';
+import { buildRationale } from '../stub/rationale-builder';
 import type { City } from '../stub/cities';
 
 /**
@@ -67,6 +69,13 @@ export const curatedStub: Model = {
     const vertical = req.vertical as Vertical;
     const city: City = detectCity(req.question ?? '');
 
+    // Day 12 v13: parse the question for intent tokens
+    // (intent verb, farm type, size, distance, budget,
+    // access hint, anchor name) so the rationale can be
+    // built to match what the user actually asked for,
+    // not a generic copy-paste of the catalog rationale.
+    const parsed = parseQuestion(req.question ?? '');
+
     // Day 12 v12: prefer the REAL site catalog (hand-curated
     // real place names + real lat/lng) when the (city, vertical)
     // pair is in the table. Falls back to the old random-coord
@@ -80,7 +89,12 @@ export const curatedStub: Model = {
     if (realSites && realSites.length > 0) {
       // Convert RealSite[] → RankedSite[] with deterministic
       // scores so the same query always returns the same
-      // ranking. Top entry is the strongest candidate.
+      // ranking. Top entry is the strongest candidate. The
+      // rationale is built per-site from the parsed question
+      // + the city's suburb data + the site-specific road /
+      // landmark reference — so "find a cattle farm near
+      // water" produces a different explanation per site than
+      // "find a smallholding".
       sites = realSites.map((r: RealSite, i: number) => ({
         rank: i + 1,
         name: r.name,
@@ -88,7 +102,7 @@ export const curatedStub: Model = {
         lng: r.lng,
         score: +(0.92 - i * 0.05).toFixed(2),
         confidence: +(0.88 - i * 0.04).toFixed(2),
-        rationale: r.rationale,
+        rationale: buildRationale(parsed, city, r),
         // Empty signals array — real connector data will populate
         // this in a future version when we wire the Overpass +
         // Stats SA connectors into the stub path.
