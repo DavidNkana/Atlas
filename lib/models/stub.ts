@@ -1,6 +1,7 @@
 import type { Model, ModelRequest, ModelResponse, RankedSite, Vertical } from './types';
 import { detectCity } from '../stub/detect';
 import { generateStubSites } from '../stub/sites';
+import { getRealSiteCandidates, type RealSite } from '../stub/real-sites';
 import type { City } from '../stub/cities';
 
 /**
@@ -65,7 +66,38 @@ export const curatedStub: Model = {
   call: async (req: ModelRequest): Promise<StubModelResponse> => {
     const vertical = req.vertical as Vertical;
     const city: City = detectCity(req.question ?? '');
-    const sites = generateStubSites(city, vertical);
+
+    // Day 12 v12: prefer the REAL site catalog (hand-curated
+    // real place names + real lat/lng) when the (city, vertical)
+    // pair is in the table. Falls back to the old random-coord
+    // generator for cities / verticals we haven't catalogued
+    // yet. The result page already shows a "Demo placeholder"
+    // banner, so the user knows the result is curated data,
+    // not a live AI.
+    const realSites = getRealSiteCandidates(city.id, vertical);
+    let sites: RankedSite[];
+    let usingRealCatalog = false;
+    if (realSites && realSites.length > 0) {
+      // Convert RealSite[] → RankedSite[] with deterministic
+      // scores so the same query always returns the same
+      // ranking. Top entry is the strongest candidate.
+      sites = realSites.map((r: RealSite, i: number) => ({
+        rank: i + 1,
+        name: r.name,
+        lat: r.lat,
+        lng: r.lng,
+        score: +(0.92 - i * 0.05).toFixed(2),
+        confidence: +(0.88 - i * 0.04).toFixed(2),
+        rationale: r.rationale,
+        // Empty signals array — real connector data will populate
+        // this in a future version when we wire the Overpass +
+        // Stats SA connectors into the stub path.
+        signals: [],
+      }));
+      usingRealCatalog = true;
+    } else {
+      sites = generateStubSites(city, vertical);
+    }
 
     const payload: StubPayload = {
       status: 'stub_demo',
@@ -73,8 +105,13 @@ export const curatedStub: Model = {
       city: city.name,
       country: city.country,
       ranked_sites: sites,
-      stubReason:
-        'AI models are currently overloaded. This is a city-specific demo placeholder. Try a real model in a few minutes or pick curated-stub explicitly.',
+      // v12: when using the real catalog, the banner is a
+      // softer "curated demo data" message instead of the
+      // "AI models overloaded" message — because the sites
+      // ARE real coordinates, just not live AI-ranked.
+      stubReason: usingRealCatalog
+        ? 'Live AI models are overloaded, so Atlas is showing real coordinates from a hand-curated catalog of candidate sites in this city. Each site has a real place name, real lat/lng, and a real reason it fits this query. Pick a real model when available to get the AI-ranked version.'
+        : 'AI models are currently overloaded. This is a city-specific demo placeholder. Try a real model in a few minutes or pick curated-stub explicitly.',
     };
 
     return {
