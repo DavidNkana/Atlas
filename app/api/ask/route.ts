@@ -32,6 +32,18 @@ const HANDLER_TIMEOUT_MS = 50_000;
 // fresh against the live request — no caching, no build-time eval.
 export const dynamic = "force-dynamic";
 
+// Day 12 hotfix: when an inner timeout (step_a, step_b, or a
+// per-model timeout) fires, we want to return a 200 with a
+// partial_timeout stub that includes the actual chain of
+// models we attempted + the model error from the last attempt.
+// These are module-level so handleAsk() can write to them
+// without a heavy refactor. Vercel's Node runtime processes one
+// request at a time per worker, so this is safe — no race
+// between concurrent requests on the same worker. We RESET
+// these at the top of every POST.
+let partialAttemptedChain: string[] = [];
+let partialModelError: string | null = null;
+
 /**
  * Day 5 hotfix v2 — per-step budgets.
  *
@@ -354,7 +366,21 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
 
   // Day 5 hotfix — track every model id we attempted so the user sees
   // exactly what was tried in the response.
+  // We use an array proxy that mirrors pushes to the module-level
+  // partialAttemptedChain so the outer POST can read the chain
+  // when constructing the partial_timeout stub. This avoids
+  // threading the chain through 7 different code paths.
   const attemptedChain: string[] = [];
+  // Override Array.push so every local push also updates the
+  // module-level var. We do this by reassigning .push (it works
+  // because we don't need to call it before or after, just
+  // through this local ref).
+  // Actually we can't safely override the prototype; instead, use
+  // a helper:
+  const pushAttempted = (id: string) => {
+    attemptedChain.push(id);
+    partialAttemptedChain.push(id);
+  };
 
   // Day 5 hotfix — if the user picks the curated stub explicitly, we skip
   // the entire chain (it's already a stub).
@@ -366,7 +392,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
     if (!activeModel.isAvailable()) {
       // Requested model has no key set — fall back to curated stub
       console.warn(`[/api/ask] model ${requestedModelId} not available, falling back to curated-stub`);
-      attemptedChain.push(requestedModelId);
+      pushAttempted(requestedModelId);
       activeModel = curatedStub;
       activeInfo = curatedStub.info;
       fallbackUsed = true;
@@ -375,7 +401,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   } catch {
     // Unknown model id — fall back to curated stub
     console.warn(`[/api/ask] unknown model ${requestedModelId}, falling back to curated-stub`);
-    attemptedChain.push(requestedModelId);
+    pushAttempted(requestedModelId);
     activeModel = curatedStub;
     activeInfo = curatedStub.info;
     fallbackUsed = true;
@@ -384,7 +410,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
 
   // Day 5 hotfix — if primary is the stub, don't bother cascading.
   if (!requestedIsStub && activeInfo.id !== "curated-stub") {
-    attemptedChain.push(activeInfo.id);
+    pushAttempted(activeInfo.id);
   }
 
   // 4. Step A — call the model (with 35s budget). If this throws or
@@ -490,7 +516,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
 
         let cascaded = false;
         for (const fallback of fallbackChain) {
-          attemptedChain.push(fallback.info.id);
+          pushAttempted(fallback.info.id);
           const fbResult = await callModel(fallback);
           if (fbResult.ok) {
             rankedSites = fbResult.sites;
@@ -519,7 +545,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
           // All fallbacks failed (or there were none available). Use curated
           // stub so the user never sees a 500. modelError captures every
           // failure in the chain so we can see why the stub fired.
-          attemptedChain.push("curated-stub");
+          pushAttempted("curated-stub");
           // curatedStub.call() can never fail (it's a pure function), but
           // wrap defensively anyway.
           const stubResult = await callModel(curatedStub);
@@ -553,13 +579,16 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
         modelError = cascaded
           ? errorChain[0]
           : errorChain.join("\n");
+        // Mirror to the module-level var so the outer POST's
+        // partial_timeout stub can include the full error chain.
+        partialModelError = modelError;
       } catch (modelErr) {
         // Last-resort catch — should be impossible since callModel() never
         // throws and the loop never throws. But just in case.
         const msg = modelErr instanceof Error ? modelErr.message : String(modelErr);
         console.error(`[/api/ask] Step A inner threw unexpectedly:`, modelErr);
         // Force stub so we still return something.
-        attemptedChain.push("curated-stub");
+        pushAttempted("curated-stub");
         const stubResult = await callModel(curatedStub);
         if (stubResult.ok) {
           rankedSites = stubResult.sites;
@@ -576,6 +605,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
           responseStatus = "stub_fallback";
         }
         modelError = `unexpected_step_a_error: ${msg}`;
+        partialModelError = modelError;
       }
     })(), STEP_A_TIMEOUT_MS, "step_a");
   } catch (stepAErr) {
@@ -796,6 +826,10 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
 
 export async function POST(req: NextRequest) {
   const t0 = Date.now();
+  // Reset partial-timeout data so the module-level vars don't
+  // leak state across requests on the same worker.
+  partialAttemptedChain = [];
+  partialModelError = null;
   // Day 5 hotfix v2 — partial-response pattern.
   //
   // When the handler exceeds its 50s budget (api_ask_timeout), the old
@@ -815,7 +849,15 @@ export async function POST(req: NextRequest) {
     const elapsed = Date.now() - t0;
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[/api/ask] handler timed out or threw after ${elapsed}ms:`, err);
-    if (msg === "api_ask_timeout") {
+    // Day 12 hotfix: any of our timeout labels should return
+    // the partial_timeout stub, not a 500. The previous code
+    // only matched "api_ask_timeout" which is the OUTER timeout
+    // label. Inner timeouts ("step_a_timeout", "step_b_timeout",
+    // "model:gemini-flash_timeout") were falling through to the
+    // 500 else branch even though they're exactly the
+    // "we ran out of time" case the partial stub is designed
+    // for. Now we match any "*_timeout" suffix.
+    if (msg.endsWith("_timeout") || msg === "api_ask_timeout") {
       timeoutFired = true;
     } else {
       // Unhandled error from inside the handler — still surface 500 so
@@ -836,17 +878,25 @@ export async function POST(req: NextRequest) {
     // Build the partial_timeout stub. We return 200 (not 504) so the
     // UI can render a graceful "we couldn't finish in time" state
     // instead of a hard Vercel error page.
+    //
+    // Day 12 hotfix: include the actual chain of models we
+    // attempted (mirrored to module-level vars by the inner
+    // Step A handler) so the UI can tell the user what to do
+    // next ("try again" vs "switch to curated-stub").
+    const actualElapsed = Date.now() - t0;
     const partialResult = {
       status: "partial_timeout",
-      error: "Request exceeded 50s budget. Try again or pick curated-stub for instant response.",
-      elapsedMs: HANDLER_TIMEOUT_MS,
+      error: "Request timed out. Try again or pick curated-stub for instant response.",
+      elapsedMs: actualElapsed,
+      timeoutMs: HANDLER_TIMEOUT_MS,
       ranked_sites: [],
       model: {
         id: "timeout",
         displayName: "Timed out",
         fallbackUsed: true,
-        attemptedChain: [],
+        attemptedChain: partialAttemptedChain,
       },
+      modelError: partialModelError || "No model produced a response within the time budget",
     };
     const res = NextResponse.json(partialResult);
     res.headers.set("x-atlas-elapsed-ms", String(partialResult.elapsedMs));
