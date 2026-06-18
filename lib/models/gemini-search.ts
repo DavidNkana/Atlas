@@ -116,7 +116,7 @@ export const geminiSearch: Model = {
       ];
       let text: string | undefined;
       let result: any;
-      let lastError: string | null = null;
+      const errorLog: string[] = [];
       for (const { model: modelId, tool: toolName } of modelIdsToTry) {
         try {
           const m = genAI.getGenerativeModel({
@@ -132,12 +132,15 @@ export const geminiSearch: Model = {
           break;
         } catch (modelErr) {
           const msg = modelErr instanceof Error ? modelErr.message : String(modelErr);
-          lastError = `${modelId}: ${msg.slice(0, 200)}`;
+          errorLog.push(`${modelId}: ${msg.slice(0, 150)}`);
           // Try the next model.
         }
       }
       if (!text || !result) {
-        return { ok: false, error: `All Gemini models failed. Last error: ${lastError}` } as any;
+        return {
+          ok: false,
+          error: `All Gemini models failed: ${errorLog.join(' | ')}`,
+        } as any;
       }
 
       // Extract grounding citations from the response metadata.
