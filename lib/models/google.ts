@@ -40,12 +40,13 @@ export const geminiFlash: Model = {
         return { ok: false, error: 'GEMINI_API_KEY not set' } as any;
       }
       const genAI = new GoogleGenerativeAI(key);
-      // Day 12 v22: gemini-2.5-flash and 2.0-flash both
-      // hit quota on the Vercel key. Falling back to
-      // gemini-1.5-flash which has the widest free-tier
-      // availability. Supports JSON output.
+      // Day 12 v25: switch back to gemini-2.0-flash which the
+      // new Vercel key has full free-tier access to (50 models
+      // including 2.0-flash, per test-keys diagnostic). The old
+      // key had limit: 0 on 2.0-flash but the new one is fine.
+      // Supports JSON output via responseMimeType.
       const model = genAI.getGenerativeModel({
-        model: 'gemini-1.5-flash',
+        model: 'gemini-2.0-flash',
         generationConfig: { responseMimeType: 'application/json' },
       });
       let text: string;

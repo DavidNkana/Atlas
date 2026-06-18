@@ -120,13 +120,18 @@ export const geminiSearch: Model = {
       //   tool is enabled. We parse the JSON from the text
       //   (stripping markdown code fences if present).
       //
-      // Day 12 v22: gemini-2.0-flash on the Vercel key has
-      // limit: 0 (no free-tier access). Try gemini-1.5-flash
-      // which has wider free-tier availability. Still supports
-      // google_search grounding.
+      // Day 12 v25: David's new key (the Vertex-format one with
+      // AQ.Ab8RN6 prefix) has access to 50 models including
+      // gemini-2.0-flash (the test-keys diagnostic confirmed it).
+      // The OLD key had limit: 0 on 2.0-flash but the NEW key
+      // has full free-tier access. Switch back to 2.0-flash
+      // which has more generous free quota + better quality
+      // than 1.5-flash. The google_search grounding tool name
+      // is "googleSearch" on 2.0-flash (not "googleSearchRetrieval"
+      // which is the 1.5-flash name).
       const model = genAI.getGenerativeModel({
-        model: 'gemini-1.5-flash',
-        tools: [{ googleSearchRetrieval: {} }] as any,
+        model: 'gemini-2.0-flash',
+        tools: [{ googleSearch: {} }] as any,
       });
       let text: string;
       let result: any;
