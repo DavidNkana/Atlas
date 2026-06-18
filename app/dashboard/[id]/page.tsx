@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/db";
+import { AppShell } from "@/components/AppShell";
 
 /**
  * Atlas Dashboard — single question detail view.
@@ -33,7 +34,7 @@ export default async function QuestionDetailPage({
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-4xl flex-col px-6 py-8">
+    <AppShell>
       {/* Header */}
       <header className="mb-8 flex items-center justify-between border-b border-atlas-border pb-4">
         <div>
@@ -81,6 +82,6 @@ export default async function QuestionDetailPage({
       <footer className="mt-auto pt-12 text-center text-xs text-atlas-muted">
         <p>Atlas · Question {question.id}</p>
       </footer>
-    </main>
+    </AppShell>
   );
 }

@@ -1,4 +1,5 @@
 import { Sidebar } from "@/components/Sidebar";
+import { AppShell } from "@/components/AppShell";
 import { AtlasLogo } from "@/components/AtlasLogo";
 import Link from "next/link";
 
@@ -18,11 +19,8 @@ import Link from "next/link";
  */
 export default function PricingPage() {
   return (
-    <div className="flex min-h-screen bg-atlas-bg text-atlas-text">
-      <Sidebar />
-
-      <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
-        <header className="flex items-center justify-between border-b border-atlas-border px-6 py-4">
+    <AppShell>
+      <header className="flex items-center justify-between border-b border-atlas-border px-6 py-4">
           <div className="flex items-center gap-3">
             <AtlasLogo size={24} />
             <h1 className="text-lg font-semibold tracking-tight text-atlas-text">
@@ -146,8 +144,7 @@ export default function PricingPage() {
             developers, property investors, and builders.
           </p>
         </footer>
-      </main>
-    </div>
+    </AppShell>
   );
 }
 

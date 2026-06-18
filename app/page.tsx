@@ -6,6 +6,7 @@ import { useUser } from "@clerk/nextjs";
 import { MODEL_INFO } from "@/lib/models/registry";
 import type { ModelInfo } from "@/lib/models/types";
 import { Sidebar } from "@/components/Sidebar";
+import { AppShell } from "@/components/AppShell";
 import { ThinkingLoader } from "@/components/ThinkingLoader";
 import { ChatGPTThinking } from "@/components/ChatGPTThinking";
 import { ModelIcon } from "@/components/ModelIcon";
@@ -366,9 +367,7 @@ export default function HomePage() {
   const placeholder = "Describe a site you need, in any city…";
 
   return (
-    <div className="flex h-screen overflow-hidden bg-atlas-bg text-atlas-text">
-      <Sidebar />
-
+    <AppShell>
       <outOfScope.Modal />
 
       {mismatchOpen && mismatchData && (
@@ -453,9 +452,8 @@ export default function HomePage() {
         />
       )}
 
-      <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
-        {/* Top bar: top-right links */}
-        <header className="flex items-center justify-end gap-3 px-6 py-3 text-xs text-atlas-muted">
+      {/* Top bar: top-right links */}
+      <header className="flex items-center justify-end gap-3 px-6 py-3 text-xs text-atlas-muted">
           <a href="/land" className="hover:text-atlas-accent">
             Land
           </a>
@@ -467,8 +465,8 @@ export default function HomePage() {
           </a>
         </header>
 
-        {/* Center stage */}
-        <div className="flex flex-1 flex-col items-center justify-center px-6">
+      {/* Center stage */}
+      <div className="flex flex-1 flex-col items-center justify-center px-6">
           {loading ? (
             showThinkingLoader ? (
               <ChatGPTThinking
@@ -798,7 +796,6 @@ export default function HomePage() {
             {new Date().getFullYear()}
           </p>
         </footer>
-      </main>
-    </div>
+    </AppShell>
   );
 }

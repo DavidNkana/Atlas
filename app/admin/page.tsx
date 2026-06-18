@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/db";
 import { Sidebar } from "@/components/Sidebar";
+import { AppShell } from "@/components/AppShell";
 import { AtlasLogo } from "@/components/AtlasLogo";
 
 /**
@@ -91,10 +92,8 @@ export default async function AdminPage() {
   ]);
 
   return (
-    <div className="flex min-h-screen bg-atlas-bg text-atlas-text">
-      <Sidebar />
-      <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
-        <header className="flex items-center justify-between border-b border-atlas-border px-6 py-4">
+    <AppShell>
+      <header className="flex items-center justify-between border-b border-atlas-border px-6 py-4">
           <div className="flex items-center gap-3">
             <AtlasLogo size={24} />
             <h1 className="text-lg font-semibold tracking-tight text-atlas-text">
@@ -290,14 +289,13 @@ export default async function AdminPage() {
         </div>
 
         <footer className="mt-auto px-6 py-6 text-center text-xs text-atlas-muted">
-          <p>
-            Atlas · {new Date().getFullYear()} · Internal admin view
-          </p>
-        </footer>
-      </main>
-    </div>
+           <p>
+             Atlas · {new Date().getFullYear()} · Internal admin view
+           </p>
+         </footer>
+    </AppShell>
   );
-}
+ }
 
 function Kpi({
   label,

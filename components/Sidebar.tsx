@@ -18,7 +18,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useUser, UserButton } from "@clerk/nextjs";
 import { AtlasLogo } from "./AtlasLogo";
 import { usePins } from "@/lib/hooks/usePins";
@@ -69,8 +69,19 @@ function truncate(s: string, n: number): string {
   return s.length > n ? s.slice(0, n - 1) + "…" : s;
 }
 
+// Day 12 v7: enforce the new sidebar layout rules.
+//   - Pinned: max 4 items, always visible, no inner scroll.
+//   - History: max 20 items, scrollable in its own area below pinned.
+//   - Active result: the row whose id matches the current URL
+//     /result/[id] is highlighted with a left accent bar and
+//     distinct background so the user always knows which result
+//     they're looking at.
+const MAX_PINNED = 4;
+const MAX_HISTORY = 20;
+
 export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boolean }) {
   const router = useRouter();
+  const pathname = usePathname();
   const { user, isLoaded } = useUser();
   const [collapsed, setCollapsed] = useState<boolean>(initialCollapsed);
   const [history, setHistory] = useState<HistoryItem[]>([]);
@@ -146,6 +157,15 @@ export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boole
     };
   }, [isLoaded, user, hiddenIds]);
 
+  // Day 12 v7: derive the active question id from the current URL.
+  // /result/<id> → that id is active. Anything else → no active item.
+  // The active item gets a left accent bar + distinct background so
+  // the user can see at a glance which result they're on.
+  const activeId =
+    pathname && pathname.startsWith("/result/")
+      ? pathname.split("/")[2] ?? null
+      : null;
+
   // When fully collapsed, the sidebar is 0px wide — only the expand
   // button floats over the main content. When expanded, it's the full
   // 280px rail.
@@ -207,91 +227,114 @@ export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boole
           </Link>
         </div>
 
-        {/* Pinned + History — hover reveals pin/delete icons on each row */}
+        {/* Day 12 v7: Pinned (max 4) + History (max 20) split.
+           - Pinned is rendered in its own area, NO inner scroll.
+             The 4 pinned items are always fully visible so the
+             user can see their most important results at a glance.
+           - History is rendered BELOW pinned in its own area
+             with its own scroll. Max 20 items, scrollable.
+           - Each row is highlighted with a left accent bar
+             when the current URL matches /result/[id].
+           - The "Pin" action is disabled (with a tooltip) when
+             4 items are already pinned, so the user can never
+             exceed the cap from the UI. */}
         <div className="mt-4 flex min-h-0 flex-1 flex-col px-3">
-          {!collapsed && (
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-atlas-muted">
-                Pinned
-              </span>
-              <span className="text-[10px] text-atlas-muted">
-                {pins.pinnedIds.length}
-              </span>
+          {/* Pinned section — always visible, no inner scroll */}
+          <div className="shrink-0">
+            {!collapsed && (
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-atlas-muted">
+                  Pinned
+                </span>
+                <span className="text-[10px] text-atlas-muted">
+                  {pins.pinnedIds.length} / {MAX_PINNED}
+                </span>
+              </div>
+            )}
+            <div className="space-y-1">
+              {(() => {
+                const pinnedItems = pins.pinnedIds
+                  .slice(0, MAX_PINNED)
+                  .map((id) => history.find((h) => h.id === id))
+                  .filter((h): h is HistoryItem => Boolean(h));
+                if (pinnedItems.length === 0 && !collapsed) {
+                  return (
+                    <p className="px-2 py-1 text-[10px] italic text-atlas-muted">
+                      Pin a result to keep it here.
+                    </p>
+                  );
+                }
+                return pinnedItems.map((h) => (
+                  <HistoryRow
+                    key={h.id}
+                    item={h}
+                    collapsed={collapsed}
+                    isPinned
+                    isActive={h.id === activeId}
+                    onNavigate={() => router.push(`/result/${h.id}`)}
+                    onTogglePin={() => pins.unpin(h.id)}
+                    onRequestDelete={() => setDeleteTarget(h)}
+                  />
+                ));
+              })()}
             </div>
+          </div>
+
+          {/* Divider between Pinned and History */}
+          {!collapsed && pins.pinnedIds.length > 0 && (
+            <div className="my-3 border-t border-atlas-border" />
           )}
-          <nav className="min-h-0 space-y-1 overflow-y-auto pr-1">
-            {(() => {
-              const pinnedItems = pins.pinnedIds
-                .map((id) => history.find((h) => h.id === id))
-                .filter((h): h is HistoryItem => Boolean(h));
-              const unpinned = history.filter(
-                (h) => !pins.pinnedIds.includes(h.id)
-              );
-              const allEmpty = pinnedItems.length === 0 && unpinned.length === 0;
-              if (allEmpty && !collapsed) {
-                return (
-                  <p className="mt-2 text-xs text-atlas-muted">
-                    No questions yet. Ask Atlas anything.
-                  </p>
-                );
-              }
-              return (
-                <>
-                  {pinnedItems.map((h) => (
-                    <HistoryRow
-                      key={h.id}
-                      item={h}
-                      collapsed={collapsed}
-                      isPinned
-                      onNavigate={() => router.push(`/result/${h.id}`)}
-                      onTogglePin={() => pins.unpin(h.id)}
-                      onRequestDelete={() => setDeleteTarget(h)}
-                    />
-                  ))}
-                  {pinnedItems.length > 0 && unpinned.length > 0 && !collapsed && (
-                    <div className="my-2 border-t border-atlas-border" />
-                  )}
-                  {pinnedItems.length > 0 && !collapsed && unpinned.length > 0 && (
-                    <div className="mb-1 mt-1 flex items-center justify-between">
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-atlas-muted">
-                        History
-                      </span>
-                      <Link
-                        href="/dashboard"
-                        className="text-[10px] text-atlas-accent hover:underline"
-                      >
-                        See all
-                      </Link>
-                    </div>
-                  )}
-                  {pinnedItems.length === 0 && !collapsed && (
-                    <div className="mb-2 flex items-center justify-between">
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-atlas-muted">
-                        History
-                      </span>
-                      <Link
-                        href="/dashboard"
-                        className="text-[10px] text-atlas-accent hover:underline"
-                      >
-                        See all
-                      </Link>
-                    </div>
-                  )}
-                  {unpinned.slice(0, 12).map((h) => (
+
+          {/* History section — scrollable, max 20 */}
+          <div className="flex min-h-0 flex-1 flex-col">
+            {!collapsed && (
+              <div className="mb-2 flex shrink-0 items-center justify-between">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-atlas-muted">
+                  History
+                </span>
+                <Link
+                  href="/dashboard"
+                  className="text-[10px] text-atlas-accent hover:underline"
+                >
+                  See all
+                </Link>
+              </div>
+            )}
+            <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
+              {(() => {
+                const unpinned = history
+                  .filter((h) => !pins.pinnedIds.includes(h.id))
+                  .slice(0, MAX_HISTORY);
+                if (unpinned.length === 0 && !collapsed) {
+                  return (
+                    <p className="mt-2 text-xs text-atlas-muted">
+                      No questions yet. Ask Atlas anything.
+                    </p>
+                  );
+                }
+                return unpinned.map((h) => {
+                  // Disable the pin button when 4 items are already
+                  // pinned so the user can never exceed MAX_PINNED.
+                  const pinDisabled = pins.pinnedIds.length >= MAX_PINNED;
+                  return (
                     <HistoryRow
                       key={h.id}
                       item={h}
                       collapsed={collapsed}
                       isPinned={false}
+                      isActive={h.id === activeId}
                       onNavigate={() => router.push(`/result/${h.id}`)}
-                      onTogglePin={() => pins.pin(h.id)}
+                      onTogglePin={() => {
+                        if (pinDisabled) return;
+                        pins.pin(h.id);
+                      }}
                       onRequestDelete={() => setDeleteTarget(h)}
                     />
-                  ))}
-                </>
-              );
-            })()}
-          </nav>
+                  );
+                });
+              })()}
+            </nav>
+          </div>
         </div>
 
         {/* Settings + Admin + User pill at the bottom */}
@@ -474,6 +517,7 @@ function HistoryRow({
   item,
   collapsed,
   isPinned,
+  isActive,
   onNavigate,
   onTogglePin,
   onRequestDelete,
@@ -481,13 +525,24 @@ function HistoryRow({
   item: HistoryItem;
   collapsed: boolean;
   isPinned: boolean;
+  isActive?: boolean;
   onNavigate: () => void;
   onTogglePin: () => void;
   onRequestDelete: () => void;
 }) {
   return (
     <div
-      className="group relative flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left text-xs text-atlas-text transition-colors hover:bg-atlas-surface2"
+      // Day 12 v7: when isActive, the row gets a 2px left accent bar
+      // (border-l-2 border-atlas-accent) and a tinted background
+      // (bg-atlas-accent/10). The non-active state keeps the default
+      // surface. The accent bar is the strongest "you are here"
+      // signal because the user sees it on every row, regardless
+      // of which row they hover.
+      className={`group relative flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors ${
+        isActive
+          ? "border-l-2 border-atlas-accent bg-atlas-accent/10 text-atlas-text"
+          : "border-l-2 border-transparent text-atlas-text hover:bg-atlas-surface2"
+      }`}
     >
       <button
         type="button"

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { notFound, redirect } from "next/navigation";
 import ResultMapClient from "@/components/ResultMapClient";
 import { Sidebar } from "@/components/Sidebar";
+import { AppShell } from "@/components/AppShell";
 import { RankedSiteCard } from "@/components/RankedSiteCard";
 import { FeedbackWidget } from "@/components/FeedbackWidget";
 import { RankingChart } from "@/components/RankingChart";
@@ -245,11 +246,8 @@ export default async function ResultPage({
   const stubReason = responseBody.stubReason;
 
   return (
-    <div className="flex h-screen overflow-hidden bg-atlas-bg text-atlas-text">
-      <Sidebar />
-
-      <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
-        <header className="flex items-center justify-between border-b border-atlas-border px-6 py-4">
+    <AppShell>
+      <header className="flex items-center justify-between border-b border-atlas-border px-6 py-4">
           <div className="min-w-0">
             <h1 className="text-lg font-semibold tracking-tight text-atlas-text">
               Result
@@ -423,6 +421,7 @@ export default async function ResultPage({
           initialMarket={marketPlots}
           cityFilter={cityFilter}
         />
+        </div>
 
         <FeedbackWidget questionId={id} />
 
@@ -431,8 +430,6 @@ export default async function ResultPage({
             Atlas · {new Date().getFullYear()}
           </p>
         </footer>
-        </div>
-      </main>
-    </div>
+    </AppShell>
   );
 }

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { LAND_VERTICALS, LAND_SAMPLE_QUESTIONS } from "@/lib/land/verticals";
 import type { LandVertical } from "@/lib/land/verticals";
+import { AppShell } from "@/components/AppShell";
 
 /**
  * Day 7: /land front door — focused page for land developers, property
@@ -67,7 +68,7 @@ export default function LandPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-3xl flex-col px-6 py-8">
+    <AppShell>
       <header className="mb-8 flex items-center justify-between border-b border-atlas-border pb-4">
         <h1 className="text-xl font-semibold tracking-tight">
           <a href="/" className="text-atlas-accent">
@@ -183,6 +184,6 @@ export default function LandPage() {
       <footer className="mt-auto pt-12 text-center text-xs text-atlas-muted">
         <p>Atlas · Land · {new Date().getFullYear()}</p>
       </footer>
-    </main>
+    </AppShell>
   );
 }

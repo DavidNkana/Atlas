@@ -3,6 +3,7 @@ import Link from "next/link";
 import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/db";
 import { Sidebar } from "@/components/Sidebar";
+import { AppShell } from "@/components/AppShell";
 import { AtlasLogo } from "@/components/AtlasLogo";
 
 /**
@@ -69,10 +70,7 @@ export default async function DashboardPage() {
   });
 
   return (
-    <div className="flex h-screen overflow-hidden bg-atlas-bg text-atlas-text">
-      <Sidebar />
-
-      <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
+    <AppShell>
         {/* Header */}
         <header className="flex items-center justify-between border-b border-atlas-border px-6 py-4">
           <div className="flex items-center gap-3">
@@ -161,7 +159,6 @@ export default async function DashboardPage() {
             </ul>
           )}
         </section>
-      </main>
-    </div>
+    </AppShell>
   );
 }

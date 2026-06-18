@@ -53,6 +53,44 @@ html.atlas-light .bg-atlas-accent\/10 {
   background-color: rgba(99, 102, 241, 0.1) !important;
 }
 
+/* Day 12 v7: comprehensive zinc/gray overrides for the light theme.
+   Several pages (result page, AddListingModal, ConfirmDialog) still
+   use the raw Tailwind zinc-* tokens because they were styled
+   directly against the dark palette. To make the theme toggle
+   actually flip them too, we remap each zinc shade in light mode
+   to its closest light-mode equivalent:
+
+   dark surface     light surface
+   zinc-900  (deep)  →  zinc-50  (near-white)
+   zinc-800  (dark)  →  zinc-100
+   zinc-700  (mid)   →  zinc-200
+   zinc-600  (mid)   →  zinc-300
+   zinc-500          →  zinc-500 (neutral, stays)
+   zinc-400          →  zinc-600 (slightly darker for muted text)
+   zinc-300          →  zinc-700
+   zinc-200          →  zinc-800
+   zinc-100          →  zinc-900
+*/
+html.atlas-light .bg-zinc-900 { background-color: #fafafa !important; }
+html.atlas-light .bg-zinc-950 { background-color: #ffffff !important; }
+html.atlas-light .bg-zinc-800 { background-color: #f4f4f5 !important; }
+html.atlas-light .bg-zinc-700 { background-color: #e4e4e7 !important; }
+html.atlas-light .bg-zinc-600 { background-color: #d4d4d8 !important; }
+html.atlas-light .text-zinc-100,
+html.atlas-light .text-zinc-200 { color: #18181b !important; }
+html.atlas-light .text-zinc-300 { color: #27272a !important; }
+html.atlas-light .text-zinc-400 { color: #52525b !important; }
+html.atlas-light .text-zinc-500 { color: #71717a !important; }
+html.atlas-light .border-zinc-800,
+html.atlas-light .border-zinc-700 { border-color: #e4e4e7 !important; }
+html.atlas-light .hover\:bg-zinc-700:hover,
+html.atlas-light .hover\:bg-zinc-800:hover { background-color: #f4f4f5 !important; }
+html.atlas-light .hover\:border-zinc-600:hover { border-color: #a1a1aa !important; }
+
+/* Brand color buttons (bg-atlas-accent) keep their indigo in light
+   mode but we lift the white-on-accent text slightly so it doesn't
+   feel over-saturated on a near-white page. */
+
 /* Subtle focus ring, Atlas brand color */
 :focus-visible {
   outline: 2px solid #6366f1;

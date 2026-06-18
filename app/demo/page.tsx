@@ -1,3 +1,5 @@
+import { AppShell } from "@/components/AppShell";
+
 /**
  * Day 7: /demo — investor-facing page.
  *
@@ -16,7 +18,7 @@
  */
 export default function DemoPage() {
   return (
-    <main className="mx-auto flex min-h-screen max-w-4xl flex-col px-6 py-12">
+    <AppShell>
       <header className="mb-12 flex items-center justify-between border-b border-atlas-border pb-4">
         <h1 className="text-xl font-semibold tracking-tight">
           <a href="/" className="text-atlas-accent">
@@ -272,6 +274,6 @@ export default function DemoPage() {
           {new Date().getFullYear()}
         </p>
       </footer>
-    </main>
+    </AppShell>
   );
 }
