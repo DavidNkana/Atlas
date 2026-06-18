@@ -34,6 +34,60 @@ model Question {
   @@index([vertical, rating])
 }
 
+// Day 10+: User-added listings (Path 4 — the "Add a listing" feature).
+// A Plot is a specific plot of land a user is tracking or has spotted
+// for sale. Plot rows are PRIVATE to the user who created them
+// (isPublic = false by default). v2 will let users share with their
+// team.
+//
+// We store both the user-typed fields (suburb, city, size, price,
+// agent) AND the provenance (source: user / property24_url / manual /
+// import, sourceUrl: the pasted URL). This lets us:
+//   - Show listings on the result page as priced markers
+//   - Build a per-suburb pricing database over time (the moat)
+//   - Dedupe listings by sourceUrl so the same Property24 link
+//     doesn't get added 5 times
+model Plot {
+  id          String   @id @default(cuid())
+  userId      String
+  // Optional — ties a plot to the question that surfaced it.
+  // Orphan plots (no questionId) appear in the user's "My plots"
+  // list but not in any result page overlay.
+  questionId  String?
+
+  // Location
+  suburb      String                       // "Sandton CBD", "Morningside"
+  city        String                       // "Sandton", "Cape Town", "Lusaka"
+  country     String   @default("South Africa")
+  lat         Float?                       // optional, from URL or manual
+  lng         Float?                       // optional
+
+  // Listing data
+  // BigInt for price so we can fit 7-digit ZAR prices (R 9,999,999)
+  // and 9-digit NGN prices (₦ 999,999,999) without overflow.
+  sizeM2      Int?
+  priceAmount BigInt?
+  currency    String   @default("ZAR")
+  listingType String   @default("for_sale") // for_sale | auction | tender | off_market
+  agentName   String?
+
+  // Provenance
+  source      String   @default("user")   // user | property24_url | manual | import
+  sourceUrl   String?                     // the pasted URL
+  notes       String?  @db.Text
+
+  // Privacy
+  isPublic    Boolean  @default(false)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, sourceUrl])             // dedupe same URL per user
+  @@index([userId, createdAt])
+  @@index([questionId])
+  @@index([city, suburb])
+}
+
 // Day 9: waitlist signups for the paid plan. We store a minimal
 // record so we can track interest, segment by vertical, and
 // follow up. No PII beyond name + email + vertical — the user
