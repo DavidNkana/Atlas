@@ -1,4 +1,5 @@
 import { geminiFlash } from './google';
+import { geminiSearch } from './gemini-search';
 import { llamaFree, mistralFree } from './openrouter';
 import { curatedStub } from './stub';
 import type { Model, ModelInfo } from './types';
@@ -7,7 +8,7 @@ import type { Model, ModelInfo } from './types';
 // their call() (see lib/models/openrouter.ts). The registry simply exposes
 // them as named Atlas model IDs. Discovery happens lazily on first call,
 // not at import time, so import is side-effect-free.
-export const ALL_MODELS: Model[] = [geminiFlash, llamaFree, mistralFree, curatedStub];
+export const ALL_MODELS: Model[] = [geminiSearch, geminiFlash, llamaFree, mistralFree, curatedStub];
 
 export const MODEL_INFO: ModelInfo[] = ALL_MODELS.map((m) => m.info);
 

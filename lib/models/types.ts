@@ -43,9 +43,27 @@ export interface ModelRequest {
  * to decide whether to move to the next model. This guarantees that
  * .call() never throws out — every error is captured into the {ok:false,error}
  * shape so the chain always terminates.
+ *
+ * Day 12 v16 — geminiSearch extends the success shape with optional
+ * `answer` (prose summary) and `sources` (citations). Models that
+ * don't produce a research-grade answer simply omit these. The route
+ * handler propagates them to the result page so the result page
+ * can render a real Perplexity-style summary with links.
  */
+export interface ModelCitation {
+  title?: string;
+  url: string;
+}
 export type ModelResponse =
-  | { ok: true; ranked_sites: RankedSite[]; raw?: string }
+  | {
+      ok: true;
+      ranked_sites: RankedSite[];
+      raw?: string;
+      /** v16: prose summary returned by Gemini Search. */
+      answer?: string;
+      /** v16: list of citation URLs returned by Gemini Search. */
+      sources?: ModelCitation[];
+    }
   | { ok: false; error: string };
 
 export interface ModelInfo {

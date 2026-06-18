@@ -176,6 +176,10 @@ type AskResponse = {
   country?: string;
   /** Day 6 — human-readable explanation of why the stub fired. */
   stubReason?: string;
+  /** Day 12 v16 — research answer from Gemini Search. */
+  answer?: string;
+  /** Day 12 v16 — citations from Gemini Search. */
+  sources?: Array<{ title?: string; url: string }>;
 };
 
 /**
@@ -440,6 +444,13 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   let rankedSites: RankedSite[] = [];
   let raw: string | undefined;
   let modelError: string | undefined;
+  // Day 12 v16: research-grade fields returned by Gemini Search
+  // (and any future model that uses web grounding). These are
+  // attached to responseBody below and the result page renders
+  // them as a prose answer + citation list. Most models omit
+  // these; the result page just hides the section if absent.
+  let modelAnswer: string | undefined;
+  let modelSources: Array<{ title?: string; url: string }> | undefined;
 
   // Helper — keep the model-call try-block small and readable.
   // Day 5 hotfix v2: every model.call() is wrapped in a 25s per-model
@@ -454,7 +465,16 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   const callModel = async (
     m: Model,
   ): Promise<
-    | { ok: true; sites: RankedSite[]; raw?: string; __stub?: StubPayload }
+    | {
+        ok: true;
+        sites: RankedSite[];
+        raw?: string;
+        __stub?: StubPayload;
+        // Day 12 v16: research answer + citations from Gemini Search.
+        // Optional — most models omit these.
+        answer?: string;
+        sources?: Array<{ title?: string; url: string }>;
+      }
     | { ok: false; error: string }
   > => {
     let result;
@@ -485,6 +505,11 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
         sites: r.ranked_sites,
         raw: r.raw,
         __stub: r.__stub,
+        // v16: pass research answer + sources from Gemini Search
+        // through to the result page so it can render citations
+        // and a prose summary.
+        answer: r.answer,
+        sources: r.sources,
       };
     }
     // Legacy shape (no ok flag) — support existing callers that still
@@ -502,6 +527,10 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
         if (result.ok) {
           rankedSites = result.sites;
           raw = result.raw;
+          // Day 12 v16: capture research answer + citations from
+          // Gemini Search. Most models omit these.
+          if (result.answer) modelAnswer = result.answer;
+          if (result.sources && result.sources.length > 0) modelSources = result.sources;
           // Day 6 — the stub tags its result with __stub. We capture it
           // so the response can surface status:"stub_demo" + city +
           // country + stubReason. Real models never set __stub.
@@ -540,6 +569,10 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
           if (fbResult.ok) {
             rankedSites = fbResult.sites;
             raw = fbResult.raw;
+            // v16: propagate research answer + citations from
+            // any model that returned them.
+            if (fbResult.answer) modelAnswer = fbResult.answer;
+            if (fbResult.sources && fbResult.sources.length > 0) modelSources = fbResult.sources;
             activeInfo = fallback.info;
             activeModel = fallback;
             fallbackUsed = true;
@@ -571,6 +604,9 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
           if (stubResult.ok) {
             rankedSites = stubResult.sites;
             raw = stubResult.raw;
+            // v16: stub doesn't produce research answer / sources.
+            // If a fallback model did, those are already captured
+            // above; we don't overwrite them here.
             // Day 6 — promote status to "stub_demo" and capture city
             // metadata. This is the path that fires when every real
             // model is unavailable (Gemini 500, OpenRouter rate limit).
@@ -612,6 +648,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
         if (stubResult.ok) {
           rankedSites = stubResult.sites;
           raw = stubResult.raw;
+          // v16: stub doesn't produce research answer / sources.
           if (stubResult.__stub) {
             stubMeta = stubResult.__stub;
             responseStatus = "stub_demo";
@@ -792,6 +829,17 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
     responseBody.city = sm.city;
     responseBody.country = sm.country;
     responseBody.stubReason = sm.stubReason;
+  }
+
+  // Day 12 v16: attach research answer + citations to the
+  // response body so the result page can render them. The
+  // fields are omitted entirely when the active model
+  // didn't produce them (most models).
+  if (modelAnswer) {
+    responseBody.answer = modelAnswer;
+  }
+  if (modelSources && modelSources.length > 0) {
+    responseBody.sources = modelSources;
   }
 
   // 7. Persist to Supabase via Prisma (best-effort).

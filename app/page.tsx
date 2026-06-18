@@ -74,7 +74,10 @@ function isCustomVertical(value: string): value is `custom:${string}` {
  */
 function isModelAvailable(modelId: string): boolean {
   if (modelId === "curated-stub") return true;
-  if (modelId === "gemini-flash") {
+  // Day 12 v16: gemini-search shares the same GEMINI_API_KEY as
+  // gemini-flash — just a different request format (with the
+  // google_search grounding tool). They live or die together.
+  if (modelId === "gemini-flash" || modelId === "gemini-search") {
     return process.env.NEXT_PUBLIC_HAS_GEMINI !== "false";
   }
   if (modelId === "llama-free" || modelId === "mistral-free") {

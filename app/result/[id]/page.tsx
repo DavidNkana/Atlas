@@ -100,6 +100,9 @@ type ResponseBody = {
   city?: string;
   country?: string;
   stubReason?: string;
+  // Day 12 v16 — research answer + citations from Gemini Search.
+  answer?: string;
+  sources?: Array<{ title?: string; url: string }>;
 };
 
 function statusBorder(status: string): string {
@@ -339,6 +342,47 @@ export default async function ResultPage({
               {responseBody.model.modelError}
             </span>
           </div>
+        )}
+
+        {/* Day 12 v16 — Research answer from Gemini Search.
+            Renders a prose summary + citation list when the active
+            model returned them. This is the "Perplexity-style" answer
+            that makes Gemini Search worth picking over plain Gemini
+            Flash. The section is hidden when the active model didn't
+            produce an answer (most models). */}
+        {responseBody.answer && (
+          <section
+            data-testid="atlas-research-answer"
+            className="mb-6 rounded-md border border-emerald-900 bg-emerald-500/5 p-4"
+          >
+            <h2 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-emerald-400">
+              Research answer
+            </h2>
+            <p className="text-sm leading-relaxed text-atlas-text">
+              {responseBody.answer}
+            </p>
+            {responseBody.sources && responseBody.sources.length > 0 && (
+              <div className="mt-3">
+                <h3 className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-atlas-muted">
+                  Sources
+                </h3>
+                <ul className="space-y-1">
+                  {responseBody.sources.map((s, i) => (
+                    <li key={`${i}-${s.url}`} className="text-xs">
+                      <a
+                        href={s.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="break-all text-emerald-400 underline-offset-2 transition-colors hover:text-emerald-300 hover:underline"
+                      >
+                        {s.title || s.url}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </section>
         )}
 
         {/* Demo placeholder banner — fires when Atlas answered with
