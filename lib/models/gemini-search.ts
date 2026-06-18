@@ -120,18 +120,13 @@ export const geminiSearch: Model = {
       //   tool is enabled. We parse the JSON from the text
       //   (stripping markdown code fences if present).
       //
-      // Day 12 v21: switched from 'gemini-2.5-flash' to
-      // 'gemini-2.0-flash'. v18 diagnostic showed the
-      // 2.5-flash free tier has a 20 RPD (requests per day)
-      // hard limit, not 1500 RPD as the docs imply.
-      // gemini-2.0-flash has the same google_search tool
-      // support but a more generous free tier (15 RPM,
-      // 1500 RPD). This unblocks real research answers for
-      // all cities without burning through the daily quota
-      // in 20 clicks.
+      // Day 12 v22: gemini-2.0-flash on the Vercel key has
+      // limit: 0 (no free-tier access). Try gemini-1.5-flash
+      // which has wider free-tier availability. Still supports
+      // google_search grounding.
       const model = genAI.getGenerativeModel({
-        model: 'gemini-2.0-flash',
-        tools: [{ googleSearch: {} }] as any,
+        model: 'gemini-1.5-flash',
+        tools: [{ googleSearchRetrieval: {} }] as any,
       });
       let text: string;
       let result: any;
