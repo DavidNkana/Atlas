@@ -13,7 +13,8 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "postinstall": "prisma generate",
-    "migrate:waitlist": "tsx scripts/migrate-waitlist.ts"
+    "migrate:waitlist": "tsx scripts/migrate-waitlist.ts",
+    "migrate:rating": "tsx scripts/migrate-rating.ts"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.0.0",

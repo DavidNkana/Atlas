@@ -20,7 +20,18 @@ model Question {
   responseJson Json
   createdAt    DateTime @default(now())
 
+  // Day 10: user feedback. The user can rate each result with a
+  // thumbs up (1), thumbs down (-1), or no rating (null). The
+  // optional note is a free-form comment up to 500 chars — what
+  // did the user actually do with the result, what was wrong.
+  // This is the start of Atlas's data moat: every rated result
+  // teaches us which site recommendations were actually useful.
+  rating     Int?     // -1 = thumbs down, 1 = thumbs up, null = not rated
+  ratingNote String?  @db.Text
+  ratedAt    DateTime?
+
   @@index([userId, createdAt])
+  @@index([vertical, rating])
 }
 
 // Day 9: waitlist signups for the paid plan. We store a minimal

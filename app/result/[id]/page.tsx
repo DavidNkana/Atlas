@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import ResultMapClient from "@/components/ResultMapClient";
 import { Sidebar } from "@/components/Sidebar";
 import { RankedSiteCard } from "@/components/RankedSiteCard";
+import { FeedbackWidget } from "@/components/FeedbackWidget";
 import { RankingChart } from "@/components/RankingChart";
 
 /**
@@ -304,6 +305,8 @@ export default async function ResultPage({
             ))}
           </ol>
         </section>
+
+        <FeedbackWidget questionId={id} />
 
         <footer className="mt-auto pt-12 text-center text-xs text-atlas-muted">
           <p>
