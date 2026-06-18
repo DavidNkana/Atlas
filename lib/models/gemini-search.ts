@@ -101,41 +101,112 @@ export const geminiSearch: Model = {
         return { ok: false, error: 'GEMINI_API_KEY not set' } as any;
       }
       const genAI = new GoogleGenerativeAI(key);
-      // The google_search tool is what enables Perplexity-style
-      // real-time web grounding. Without it, Gemini answers from
-      // training data only. With it, Gemini searches Google
-      // before answering and cites the sources in the response.
+      // Day 12 v17 CRITICAL FIX:
+      //
+      //   The `google_search` grounding tool is INCOMPATIBLE with
+      //   `responseMimeType: "application/json"`. Google rejects
+      //   the request with HTTP 400:
+      //     "The response_mime_type field cannot be set when
+      //      using the google_search tool."
+      //
+      //   When v16 shipped with both, every Gemini Search call
+      //   failed silently at the SDK level and the route cascaded
+      //   to the curated stub. Users saw the persistent
+      //   "Demo placeholder" banner that the v16 commit was
+      //   supposed to eliminate.
+      //
+      //   Fix: drop `responseMimeType` entirely. Gemini returns
+      //   plain text with inline citations when the grounding
+      //   tool is enabled. We parse the JSON from the text
+      //   (stripping markdown code fences if present).
       const model = genAI.getGenerativeModel({
         model: 'gemini-2.5-flash',
         tools: [{ googleSearch: {} }] as any,
-        generationConfig: { responseMimeType: 'application/json' },
       });
       let text: string;
+      let result: any;
       try {
-        const result = await model.generateContent(buildPrompt(req));
+        result = await model.generateContent(buildPrompt(req));
         text = result.response.text();
       } catch (innerErr) {
         const msg = innerErr instanceof Error ? innerErr.message : String(innerErr);
         return { ok: false, error: `Gemini Search request failed: ${msg}` } as any;
       }
-      let parsed: any;
+
+      // Extract grounding citations from the response metadata.
+      // Gemini puts citation URLs in groundingMetadata.groundingChunks[].
+      // We surface them as the "sources" array the result page renders.
+      let groundingSources: Array<{ title?: string; url: string }> = [];
       try {
-        parsed = JSON.parse(text);
-      } catch (parseErr) {
-        const msg = parseErr instanceof Error ? parseErr.message : String(parseErr);
-        return { ok: false, error: `Gemini Search returned non-JSON: ${msg}` } as any;
+        const candidates = result.response.candidates ?? [];
+        for (const cand of candidates) {
+          const gm = cand?.groundingMetadata;
+          if (!gm) continue;
+          const chunks = gm.groundingChunks ?? [];
+          for (const ch of chunks) {
+            if (ch?.web?.uri) {
+              groundingSources.push({
+                title: ch.web.title ?? ch.web.uri,
+                url: ch.web.uri,
+              });
+            }
+          }
+          // Also check searchEntryPoint renderedContent for the
+          // search queries Gemini used (useful for debugging).
+        }
+        // Dedupe by URL
+        const seen = new Set<string>();
+        groundingSources = groundingSources.filter((s) => {
+          if (seen.has(s.url)) return false;
+          seen.add(s.url);
+          return true;
+        });
+      } catch {
+        // Grounding metadata is optional — never fail the call
+        // because we couldn't read it.
       }
-      if (!parsed || !Array.isArray(parsed.ranked_sites)) {
-        return { ok: false, error: 'Gemini Search response missing ranked_sites array' } as any;
+
+      // Parse JSON from the model's text. Gemini may wrap the
+      // object in ```json ... ``` fences; strip them.
+      let parsed: any = null;
+      const cleaned = (text ?? '').trim();
+      const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        try {
+          parsed = JSON.parse(jsonMatch[0]);
+        } catch {
+          // Fall through to null
+        }
       }
-      // v16: validate lat/lng. Gemini sometimes returns suburbs
-      // without coordinates. Fall back to the city centre or the
-      // nearest real catalog site so the map still shows
-      // something useful instead of nothing.
+      // If we still don't have JSON, build a minimal response
+      // from the raw text so the user still sees something
+      // useful (the prose summary + grounding citations).
+      if (!parsed || typeof parsed !== 'object') {
+        // Detect "no real suburbs" failure: when the model
+        // returns an empty array or a string saying "I don't
+        // know", don't pretend we have 5 sites. Just surface
+        // the prose answer + citations with NO ranked_sites.
+        // The result page will render the "Research answer"
+        // section at the top, then show an empty list below
+        // (curated stub never fires because we returned ok:true).
+        return {
+          ranked_sites: [],
+          raw: text,
+          answer: cleaned,
+          sources: groundingSources,
+        } as any;
+      }
+
+      // Normalise ranked_sites: Gemini may omit the array if it
+      // can't find anything. We treat that the same as a missing
+      // JSON parse — still ok:true, but no sites to plot.
+      const rawSites = Array.isArray(parsed.ranked_sites)
+        ? parsed.ranked_sites
+        : [];
       const city = detectCity(req.question ?? '');
       const realSites = getRealSiteCandidates(city.id, req.vertical);
       const fallbackSite = realSites && realSites.length > 0 ? realSites[0] : null;
-      const sites: RankedSite[] = parsed.ranked_sites.map((s: any, i: number) => {
+      const sites: RankedSite[] = rawSites.map((s: any, i: number) => {
         const hasLat = typeof s.lat === 'number' && isFinite(s.lat) && Math.abs(s.lat) <= 90;
         const hasLng = typeof s.lng === 'number' && isFinite(s.lng) && Math.abs(s.lng) <= 180;
         const lat = hasLat ? s.lat : (fallbackSite?.lat ?? city.lat);
@@ -150,17 +221,30 @@ export const geminiSearch: Model = {
           lng,
         };
       });
-      // Attach the research answer + sources to the result so
-      // the result page can render them. We use the raw field
-      // to pass the full JSON through; the route handler
-      // already supports reading the answer + sources off the
-      // response body.
+
+      // Merge model-provided sources (from the JSON "sources"
+      // field) with the grounding metadata URLs. Grounding is
+      // authoritative because those are the actual pages Gemini
+      // cited; the JSON "sources" field is the model being
+      // helpful but may be wrong.
+      const modelSources = Array.isArray(parsed.sources)
+        ? parsed.sources
+            .filter((s: any) => s && typeof s.url === 'string' && s.url.length > 0)
+            .map((s: any) => ({ title: s.title, url: s.url }))
+        : [];
+      const seen = new Set<string>();
+      const merged: Array<{ title?: string; url: string }> = [];
+      for (const s of [...groundingSources, ...modelSources]) {
+        if (seen.has(s.url)) continue;
+        seen.add(s.url);
+        merged.push(s);
+      }
+
       return {
         ranked_sites: sites,
         raw: text,
-        // Extra fields consumed by the result page:
-        answer: parsed.answer,
-        sources: Array.isArray(parsed.sources) ? parsed.sources : [],
+        answer: typeof parsed.answer === 'string' ? parsed.answer : cleaned,
+        sources: merged,
       } as any;
     } catch (outerErr) {
       const msg = outerErr instanceof Error ? outerErr.message : String(outerErr);
