@@ -66,15 +66,26 @@ let partialUserId: string = "";
 const STEP_A_TIMEOUT_MS = 35_000;
 const STEP_B_TIMEOUT_MS = 12_000;
 
+// Day 12 v4: per-model timeout dropped from 25s to 8s. The 25s
+// cap was originally set to give slow models (e.g. Gemini 3.5 Flash
+// during quota exhaustion) enough time to respond. In practice
+// that meant 1 model + 1 fallback could each take 25s, blowing
+// the 35s Step A budget on a SINGLE model + fallback. With 8s
+// per model we can try the primary + 2 fallbacks + curated
+// stub in 24s, leaving 11s for everything else (overpass
+// queries, scoring). The fast-fail is the right call for a UX
+// that values "always something" over "perfect answer eventually".
+const MODEL_TIMEOUT_MS = 8_000;
+
 /**
  * Day 5 hotfix v2 — per-model timeout.
  *
  * If a single model hangs (network stall, server-side hang), kill it
- * after 25s and move to the next model in the chain. The error
+ * after 8s and move to the next model in the chain. The error
  * message uses the prefix "model_<id>_timeout" so catch blocks can
  * distinguish per-model timeouts from the outer api_ask_timeout.
+ * (Value is set at line 78 above; the duplicate was removed.)
  */
-const MODEL_TIMEOUT_MS = 25_000;
 
 /**
  * Day 5 hotfix — fallback chain cap.

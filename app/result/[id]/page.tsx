@@ -147,13 +147,23 @@ export default async function ResultPage({
   // and sees ZERO listings because none are linked to the new
   // questionId. The right behaviour: show ALL of the user's
   // own plots in the owner section regardless of which
-  // question they were added on. The market section still
-  // filters by questionId only for the user's OWN plots
-  // (so they don't see their own plot twice) — but their
-  // owner section shows everything.
+  // question they were added on.
+  //
+  // Day 12 v4: but the owner query was then UNFILTERED by
+  // city, so a Sandton listing showed on a Nairobi search.
+  // That's confusing — the header says "Nairobi" but the
+  // card is for Sandton. The fix: filter by city so the
+  // section only shows listings relevant to this question's
+  // detected city. A user with cross-city listings can still
+  // see them all in their /dashboard watchlist.
   const detectedCity = detectCity(question.questionText ?? "");
+  const cityFilter = detectedCity?.name ?? null;
+  const ownerWhere: any = { userId };
+  if (cityFilter) {
+    ownerWhere.city = { equals: cityFilter, mode: "insensitive" };
+  }
   const ownerPlotsRaw = await prisma.plot.findMany({
-    where: { userId },
+    where: ownerWhere,
     orderBy: { createdAt: "desc" },
     take: 50,
   });
@@ -180,7 +190,6 @@ export default async function ResultPage({
   // hasn't shared. Same logic as the API route's
   // serializeForMarket — kept here to avoid a server-side fetch
   // round-trip.
-  const cityFilter = detectedCity?.name ?? null;
   let marketPlots: Array<any> = [];
   if (cityFilter) {
     const marketRaw = await prisma.plot.findMany({
