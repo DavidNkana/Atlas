@@ -47,11 +47,26 @@ async function main() {
       "sourceUrl" TEXT,
       "notes" TEXT,
       "isPublic" BOOLEAN NOT NULL DEFAULT false,
+      "publishToMarket" BOOLEAN NOT NULL DEFAULT true,
+      "revealContact" BOOLEAN NOT NULL DEFAULT false,
       "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
       "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `);
   console.log("  OK: Plot table ready");
+
+  // Day 11 migration: add the new privacy columns to an EXISTING
+  // Plot table (the original migration only had isPublic). Use
+  // ADD COLUMN IF NOT EXISTS so re-running this script is safe.
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE "Plot" ADD COLUMN IF NOT EXISTS "publishToMarket" BOOLEAN NOT NULL DEFAULT true`
+  );
+  console.log("  OK: publishToMarket column ready");
+
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE "Plot" ADD COLUMN IF NOT EXISTS "revealContact" BOOLEAN NOT NULL DEFAULT false`
+  );
+  console.log("  OK: revealContact column ready");
 
   await prisma.$executeRawUnsafe(
     `CREATE UNIQUE INDEX IF NOT EXISTS "Plot_userId_sourceUrl_key" ON "Plot"("userId", "sourceUrl")`
@@ -72,6 +87,14 @@ async function main() {
     `CREATE INDEX IF NOT EXISTS "Plot_city_suburb_idx" ON "Plot"("city", "suburb")`
   );
   console.log("  OK: city+suburb index ready");
+
+  // Cross-user market index. The "(publishToMarket, city, suburb)"
+  // composite is what powers "show me published plots in
+  // Sandton" queries in O(log n) time.
+  await prisma.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS "Plot_publishToMarket_city_suburb_idx" ON "Plot"("publishToMarket", "city", "suburb")`
+  );
+  console.log("  OK: publishToMarket+city+suburb index ready");
 
   // Add a foreign key from Plot.questionId -> Question.id so we
   // can join cleanly. IF NOT EXISTS for the FK is not supported

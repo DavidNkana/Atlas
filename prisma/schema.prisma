@@ -77,7 +77,29 @@ model Plot {
   notes       String?  @db.Text
 
   // Privacy
-  isPublic    Boolean  @default(false)
+  //
+  // Day 11 LinkedIn-style privacy:
+  //
+  // isPublic was a single bit. v1.1 splits it into two so the
+  // user controls:
+  //
+  //   publishToMarket: should this listing appear in OTHER
+  //     users' "Listings in this area" sections? Default true.
+  //     The "data fields" (suburb, city, size, price, currency,
+  //     listing type, lat/lng) are always shared when this is
+  //     true. The "contact fields" (agent name, source URL,
+  //     notes) are gated separately below.
+  //
+  //   revealContact: should OTHER users see the contact fields
+  //     (agent name, source URL)? Default false. Set to true to
+  //     let other users click through to the original Property24
+  //     listing. We never share `notes` to other users — that's
+  //     a private field the owner keeps for themselves.
+  //
+  // The owner always sees everything regardless of these flags.
+  isPublic       Boolean  @default(false)    // legacy: kept for backward compat
+  publishToMarket Boolean @default(true)    // share data fields with the Atlas market
+  revealContact  Boolean  @default(false)   // share contact fields (agent, sourceUrl) with the market
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -86,6 +108,9 @@ model Plot {
   @@index([userId, createdAt])
   @@index([questionId])
   @@index([city, suburb])
+  // Cross-user market: queries like "show published plots in
+  // Sandton" hit this index for O(log n) lookup.
+  @@index([publishToMarket, city, suburb])
 }
 
 // Day 9: waitlist signups for the paid plan. We store a minimal
