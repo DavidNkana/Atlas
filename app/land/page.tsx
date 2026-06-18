@@ -69,7 +69,12 @@ export default function LandPage() {
 
   return (
     <AppShell>
-      <header className="mb-8 flex items-center justify-between border-b border-atlas-border pb-4">
+      {/* Day 12 v7: outer padding so content doesn't touch the
+          inner walls of the scrollable area. px-6 = 24px each
+          side on mobile, px-8 = 32px on sm+. py-8 keeps the
+          existing vertical rhythm. */}
+      <div className="px-6 py-8 sm:px-8">
+        <header className="mb-8 flex items-center justify-between border-b border-atlas-border pb-4">
         <h1 className="text-xl font-semibold tracking-tight">
           <a href="/" className="text-atlas-accent">
             Atlas
@@ -184,6 +189,7 @@ export default function LandPage() {
       <footer className="mt-auto pt-12 text-center text-xs text-atlas-muted">
         <p>Atlas · Land · {new Date().getFullYear()}</p>
       </footer>
+      </div>
     </AppShell>
   );
 }
