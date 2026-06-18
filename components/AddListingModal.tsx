@@ -46,7 +46,21 @@ const VALID_CURRENCIES = [
 interface AddListingModalProps {
   questionId: string;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (plot: PlotCard) => void;
+}
+
+interface PlotCard {
+  id: string;
+  suburb: string;
+  city: string;
+  sizeM2: number | null;
+  priceAmount: number | null;
+  currency: string;
+  listingType: string;
+  agentName: string | null;
+  sourceUrl: string | null;
+  lat: number | null;
+  lng: number | null;
 }
 
 export function AddListingModal({
@@ -154,9 +168,11 @@ export function AddListingModal({
       } else {
         setInfo("Saved.");
       }
+      const saved = data.plot as PlotCard | undefined;
+      if (saved) onSaved(saved);
       // Brief delay so the user sees the "Saved" message, then close.
       setTimeout(() => {
-        onSaved();
+        onSaved(saved as PlotCard);
         onClose();
       }, 600);
     } catch (err) {

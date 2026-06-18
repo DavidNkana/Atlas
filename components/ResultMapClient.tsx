@@ -5,11 +5,14 @@ import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 
 /**
- * Day 4 commit 3 + Day 5 commit 4: render one marker per ranked site with a
- * popup, auto-fit the map bounds to all markers, show a sidebar list that
- * flies the map to a clicked site, AND show the per-site Signals + AI→signals
- * score breakdown next to each site so the user sees the score is now
- * evidence-based.
+ * Day 4 commit 3 + Day 5 commit 4 + Day 10+ Path 4:
+ *   - Render one marker per ranked site with a popup (indigo)
+ *   - Auto-fit the map bounds to all markers
+ *   - Show a sidebar list that flies the map to a clicked site
+ *   - Per-site Signals + AI→signals score breakdown next to each site
+ *   - Day 10+: ALSO render user-added plots as green markers with
+ *     price + size + agent in the popup. Plots without lat/lng are
+ *     shown in the sidebar but not on the map.
  */
 
 type Signal = {
@@ -51,6 +54,33 @@ type RankedSite = {
   scoreBreakdown?: ScoreBreakdown;
 };
 
+function formatMoney(value: number, currency: string): string {
+  if (currency === "ZAR") {
+    if (value >= 1_000_000) return `R ${(value / 1_000_000).toFixed(2)}M`;
+    if (value >= 1_000) return `R ${Math.round(value / 1_000)}K`;
+    return `R ${value.toLocaleString()}`;
+  }
+  if (currency === "ZMW") {
+    if (value >= 1_000_000) return `K ${(value / 1_000_000).toFixed(2)}M`;
+    if (value >= 1_000) return `K ${Math.round(value / 1_000)}K`;
+    return `K ${value.toLocaleString()}`;
+  }
+  if (currency === "NGN") {
+    if (value >= 1_000_000) return `₦ ${(value / 1_000_000).toFixed(2)}M`;
+    if (value >= 1_000) return `₦ ${Math.round(value / 1_000)}K`;
+    return `₦ ${value.toLocaleString()}`;
+  }
+  if (currency === "KES") {
+    if (value >= 1_000_000) return `KSh ${(value / 1_000_000).toFixed(2)}M`;
+    if (value >= 1_000) return `KSh ${Math.round(value / 1_000)}K`;
+    return `KSh ${value.toLocaleString()}`;
+  }
+  // Generic fallback for USD/EUR/GBP
+  if (value >= 1_000_000) return `${currency} ${(value / 1_000_000).toFixed(2)}M`;
+  if (value >= 1_000) return `${currency} ${Math.round(value / 1_000)}K`;
+  return `${currency} ${value.toLocaleString()}`;
+}
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
@@ -72,14 +102,30 @@ function statusColor(status: string): string {
   return "bg-rose-500/10 text-rose-400 border-rose-900";
 }
 
+export interface PlotMarker {
+  id: string;
+  suburb: string;
+  city: string;
+  sizeM2: number | null;
+  priceAmount: number | null;
+  currency: string;
+  listingType: string;
+  agentName: string | null;
+  sourceUrl: string | null;
+  lat: number | null;
+  lng: number | null;
+}
+
 export default function ResultMapClient({
   rankedSites,
+  plots = [],
   status,
   city,
   country,
   stubReason,
 }: {
   rankedSites: RankedSite[];
+  plots?: PlotMarker[];
   status?: string;
   city?: string;
   country?: string;
@@ -118,6 +164,7 @@ export default function ResultMapClient({
       const bounds = new mapboxgl.LngLatBounds();
       let placed = 0;
       let skipped = 0;
+      let plotsPlaced = 0;
 
       for (const site of rankedSites) {
         if (
@@ -149,6 +196,49 @@ export default function ResultMapClient({
         placed += 1;
       }
 
+      // Day 10+ Path 4: user-added listings. These show as GREEN
+      // markers (vs. indigo for AI recommendations) so the
+      // developer can visually distinguish "Atlas's recommendation"
+      // from "actual plot I can buy". We also auto-fit bounds to
+      // include plot markers.
+      for (const plot of plots) {
+        if (
+          typeof plot.lat !== "number" ||
+          typeof plot.lng !== "number" ||
+          Number.isNaN(plot.lat) ||
+          Number.isNaN(plot.lng)
+        ) {
+          continue;
+        }
+        const lngLat: [number, number] = [plot.lng, plot.lat];
+        const priceStr = plot.priceAmount != null
+          ? formatMoney(plot.priceAmount, plot.currency)
+          : "Price on request";
+        const sizeStr = plot.sizeM2 != null
+          ? `${plot.sizeM2.toLocaleString()} m²`
+          : "Size on request";
+        const agentStr = plot.agentName
+          ? escapeHtml(plot.agentName)
+          : "Agent not listed";
+        const linkStr = plot.sourceUrl
+          ? `<a href="${escapeHtml(plot.sourceUrl)}" target="_blank" rel="noopener" style="color:#10b981;text-decoration:underline;display:inline-block;margin-top:4px;">View listing →</a>`
+          : "";
+        const popupHtml =
+          `<h3 style=\"margin:0 0 4px;font-size:14px;font-weight:600;color:#10b981;\">${escapeHtml(
+            plot.suburb
+          )}</h3>` +
+          `<p style=\"margin:0 0 4px;font-size:13px;font-weight:600;color:#fafafa;\">${priceStr} &middot; ${sizeStr}</p>` +
+          `<p style=\"margin:0 0 4px;font-size:12px;color:#e4e4e7;\">${agentStr}</p>` +
+          linkStr;
+        const marker = new mapboxgl.Marker({ color: "#10b981" })
+          .setLngLat(lngLat)
+          .setPopup(new mapboxgl.Popup({ offset: 18 }).setHTML(popupHtml))
+          .addTo(map);
+        markersRef.current.push(marker);
+        bounds.extend(lngLat);
+        plotsPlaced += 1;
+      }
+
       setMissingCoords(skipped);
 
       if (placed > 0 && !bounds.isEmpty()) {
@@ -166,7 +256,7 @@ export default function ResultMapClient({
       map.remove();
       mapRef.current = null;
     };
-  }, [rankedSites]);
+  }, [rankedSites, plots]);
 
   function flyToSite(site: RankedSite) {
     const map = mapRef.current;
@@ -214,6 +304,7 @@ export default function ResultMapClient({
         className="h-[480px] w-full rounded-md"
         data-testid="atlas-result-map"
         data-sites={rankedSites.length}
+        data-plots={plots.length}
       />
       <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
         <div>

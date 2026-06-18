@@ -6,6 +6,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { RankedSiteCard } from "@/components/RankedSiteCard";
 import { FeedbackWidget } from "@/components/FeedbackWidget";
 import { RankingChart } from "@/components/RankingChart";
+import { ListingsOverlay } from "@/components/ListingsOverlay";
 
 /**
  * Day 4 commit 1 + Day 5 commit 4:
@@ -126,6 +127,30 @@ export default async function ResultPage({
   const connectorsRun = Array.isArray(responseBody.connectorsRun)
     ? responseBody.connectorsRun
     : [];
+
+  // Day 10+ Path 4: fetch the user's plots linked to this
+  // question. These get overlaid on the result map as green
+  // markers and shown as cards in a "Listings I know about in
+  // this area" section. Plots are private to the user — we
+  // only ever fetch rows owned by the current user.
+  const plotRows = await prisma.plot.findMany({
+    where: { userId, questionId: id },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+  });
+  const plots = plotRows.map((p) => ({
+    id: p.id,
+    suburb: p.suburb,
+    city: p.city,
+    sizeM2: p.sizeM2,
+    priceAmount: p.priceAmount != null ? Number(p.priceAmount) : null,
+    currency: p.currency,
+    listingType: p.listingType,
+    agentName: p.agentName,
+    sourceUrl: p.sourceUrl,
+    lat: p.lat,
+    lng: p.lng,
+  }));
   const connectorsError = responseBody.connectorsError;
   const plan = responseBody.plan;
   // Day 6 — stub_demo banner surfaces the detected city + reason.
@@ -249,6 +274,7 @@ export default async function ResultPage({
         <section className="mb-6">
           <ResultMapClient
             rankedSites={rankedSites}
+            plots={plots}
             status={responseStatus}
             city={stubCity}
             country={stubCountry}
@@ -305,6 +331,8 @@ export default async function ResultPage({
             ))}
           </ol>
         </section>
+
+        <ListingsOverlay questionId={id} initialPlots={plots} />
 
         <FeedbackWidget questionId={id} />
 
