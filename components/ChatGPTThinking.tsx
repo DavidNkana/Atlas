@@ -31,9 +31,7 @@ import { useEffect, useState } from "react";
 interface ThinkingLoaderProps {
   firstName: string | null;
   question: string;
-  // Day 19 v3: vertical is optional now. The home page no longer
-  // picks a vertical — chat handles everything.
-  vertical?: string;
+  vertical: string;
   cityName?: string | null;
   onDone?: () => void;
 }
@@ -41,13 +39,13 @@ interface ThinkingLoaderProps {
 function buildParagraphs(opts: {
   firstName: string | null;
   question: string;
-  vertical?: string;
+  vertical: string;
   cityName: string | null | undefined;
 }): string[] {
   const name = opts.firstName || "there";
   const q = opts.question.trim();
   const qShort = q.length > 60 ? q.slice(0, 60).trim() + "…" : q;
-  const v = (opts.vertical ?? "your question").replace(/_/g, " ");
+  const v = opts.vertical.replace(/_/g, " ");
   const city = opts.cityName || "your area";
 
   // 5 paragraphs in ChatGPT register. Each one is a full thought,

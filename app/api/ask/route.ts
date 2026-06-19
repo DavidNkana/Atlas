@@ -419,16 +419,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   partialQuestionText = trimmedQuestion;
 
   // 3. Resolve model — default to gemini-flash
-  // Day 18: accept modelOverride as an alternative key. The chat
-  // page's View Data button calls /api/ask via /api/messages/[id]/view-data
-  // and passes modelOverride so we don't clash with any future
-  // top-level "model" field semantics.
-  const requestedModelId =
-    (model && typeof model === "string" ? model : null) ??
-    (body && typeof (body as any).modelOverride === "string"
-      ? (body as any).modelOverride
-      : null) ??
-    "gemini-flash";
+  const requestedModelId = (model && typeof model === "string") ? model : "gemini-flash";
   let activeModel: Model;
   let activeInfo: ModelInfo;
   let fallbackUsed = false;

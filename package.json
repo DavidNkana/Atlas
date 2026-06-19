@@ -16,8 +16,7 @@
     "migrate:waitlist": "tsx scripts/migrate-waitlist.ts",
     "migrate:rating": "tsx scripts/migrate-rating.ts",
     "migrate:plot": "tsx scripts/migrate-plot.ts",
-    "migrate:user": "tsx scripts/migrate-user.ts",
-    "migrate:thread": "tsx scripts/migrate-thread.ts"
+    "migrate:user": "tsx scripts/migrate-user.ts"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.0.0",
