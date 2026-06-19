@@ -12,6 +12,7 @@
 
 import type { Vertical } from "@/lib/models/types";
 import type { Plan, PlanStep } from "./types";
+import { ALL_CONNECTORS } from "@/lib/connectors/registry";
 
 export type PlannerSite = {
   id?: string;
@@ -32,6 +33,12 @@ function siteKey(site: PlannerSite, idx: number): string {
  * Build the plan. `location` is the user's query region (lat/lng + label).
  * `sites` is the AI's ranked_sites — we plan ONE step per site.
  *
+ * Day 16: iterates ALL_CONNECTORS so adding a new connector to the
+ * registry automatically makes it part of every plan. Previously this
+ * function hardcoded the 4 connector IDs and would silently skip any
+ * new ones — which is why property developers only ever saw 1-2
+ * signals per site even after more connectors were added.
+ *
  * If a site is missing lat/lng we still emit a step but mark it with
  * `__skip: true` in input — the API route filters those out before calling
  * connectors. We do this so the UI can show "plan issued N steps" matching
@@ -43,6 +50,9 @@ export function buildPlan(
   sites: PlannerSite[],
 ): Plan {
   const steps: PlanStep[] = [];
+  // Snapshot connector IDs once. Re-deriving per iteration is fine but
+  // pulling them out makes the diff against the old hardcoded list obvious.
+  const connectorIds = ALL_CONNECTORS.map((c) => c.id);
 
   for (let i = 0; i < sites.length; i++) {
     const site = sites[i];
@@ -55,12 +65,7 @@ export function buildPlan(
 
     if (!hasCoords) {
       // Still emit one step per connector so the UI's plan counter matches.
-      for (const connectorId of [
-        "overpass",
-        "real_estate_listings",
-        "stats_sa",
-        "google_places",
-      ]) {
+      for (const connectorId of connectorIds) {
         steps.push({
           connectorId,
           input: { siteId: id, __skip: true },
@@ -70,12 +75,7 @@ export function buildPlan(
       continue;
     }
 
-    for (const connectorId of [
-      "overpass",
-      "real_estate_listings",
-      "stats_sa",
-      "google_places",
-    ]) {
+    for (const connectorId of connectorIds) {
       steps.push({
         connectorId,
         input: { siteId: id },

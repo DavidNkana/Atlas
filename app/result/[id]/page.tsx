@@ -427,30 +427,79 @@ export default async function ResultPage({
             className="mb-6 rounded-md border border-atlas-border bg-atlas-surface p-4"
             data-testid="atlas-connectors-row"
           >
-            <h2 className="mb-2 text-xs font-medium text-atlas-text">Connectors</h2>
-            <div className="flex flex-wrap gap-2">
-              {connectorsRun.map((c) => (
-                <span
-                  key={c.id}
-                  className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] ${statusBorder(
-                    c.status,
-                  )}`}
-                >
-                  <span className="font-medium">{c.id}</span>
-                  <span className="text-atlas-muted">·</span>
-                  <span>{c.signalCount} signals</span>
-                  <span className="text-atlas-muted">·</span>
-                  <span className="font-mono text-[10px] uppercase tracking-wide">
-                    {c.status}
-                  </span>
-                </span>
-              ))}
-              {plan && (
+            <div className="mb-3 flex items-baseline justify-between">
+              <h2 className="text-xs font-medium text-atlas-text">Decision Intelligence</h2>
+              <div className="flex items-baseline gap-2">
+                {(() => {
+                  const totalSignals = connectorsRun.reduce((sum, c) => sum + c.signalCount, 0);
+                  const liveConnectors = connectorsRun.filter(
+                    (c) => c.status === "ok" && c.signalCount > 0,
+                  ).length;
+                  const totalConnectors = connectorsRun.length;
+                  const allLive = liveConnectors === totalConnectors && totalConnectors > 0;
+                  return (
+                    <>
+                      <span
+                        className={`text-2xl font-bold ${
+                          allLive ? "text-emerald-400" : "text-atlas-text"
+                        }`}
+                        data-testid="signals-used-count"
+                      >
+                        {totalSignals}
+                      </span>
+                      <span className="text-[11px] text-atlas-muted">
+                        signals used · {liveConnectors}/{totalConnectors} sources live
+                      </span>
+                    </>
+                  );
+                })()}
+              </div>
+            </div>
+            {/* Per-source checkmark row — addresses the property developer
+                feedback "I want to see 18 signals, not 1". Today we ship 10
+                sources; this row grows as we add more connectors. */}
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-3 md:grid-cols-5">
+              {connectorsRun.map((c) => {
+                const live = c.status === "ok" && c.signalCount > 0;
+                const partial = c.status === "ok" && c.signalCount === 0;
+                const failed = c.status === "error" || c.status === "timeout";
+                return (
+                  <div
+                    key={c.id}
+                    className="flex items-center gap-1.5 text-[11px]"
+                    data-testid={`connector-${c.id}`}
+                  >
+                    {live ? (
+                      <span className="text-emerald-400" title="live">✓</span>
+                    ) : partial ? (
+                      <span className="text-atlas-muted" title="ok but no results">○</span>
+                    ) : (
+                      <span className="text-amber-400" title={c.status}>!</span>
+                    )}
+                    <span className={live ? "text-atlas-text" : failed ? "text-amber-400" : "text-atlas-muted"}>
+                      {c.id}
+                    </span>
+                    <span className="ml-auto text-[10px] text-atlas-muted">
+                      {c.signalCount}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+            {plan && (
+              <div className="mt-3 flex flex-wrap gap-2 border-t border-atlas-border pt-3">
                 <span className="inline-flex items-center gap-1 rounded-full border border-atlas-border bg-atlas-surface2 px-2.5 py-1 text-[11px] text-atlas-muted">
                   plan · {plan.steps.length} step{plan.steps.length === 1 ? "" : "s"} · {plan.vertical}
                 </span>
-              )}
-            </div>
+                <span className="inline-flex items-center gap-1 rounded-full border border-atlas-border bg-atlas-surface2 px-2.5 py-1 text-[11px] text-atlas-muted">
+                  {(() => {
+                    const m = responseBody?.model;
+                    const id = typeof m === "string" ? m : m?.id;
+                    return `model · ${id ?? "unknown"}`;
+                  })()}
+                </span>
+              </div>
+            )}
           </section>
         )}
 

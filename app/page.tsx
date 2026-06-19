@@ -503,11 +503,13 @@ export default function HomePage() {
                   Hi {firstName}, I&apos;m Atlas.
                 </h1>
                 <p className="text-lg text-atlas-muted">
-                  What do you want to find?
+                  An AI Operating System for Decision Intelligence.
                 </p>
                 <p className="mt-2 text-xs text-atlas-muted">
-                  Atlas blends multiple data sources, models, and live signals
-                  into one answer.
+                  Where should you build, open, or invest? Atlas reasons across
+                  live signals — schools, transit, healthcare, road network,
+                  competition, environmental risk, demographics, and listings —
+                  to recommend the site that beats the alternatives.
                 </p>
               </div>
 
