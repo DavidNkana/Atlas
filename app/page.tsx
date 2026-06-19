@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 import { MODEL_INFO } from "@/lib/models/registry";
 import type { ModelInfo } from "@/lib/models/types";
+import { classifyIntent } from "@/lib/intent/classify";
 import { Sidebar } from "@/components/Sidebar";
 import { AppShell } from "@/components/AppShell";
 import { ThinkingLoader } from "@/components/ThinkingLoader";
@@ -317,6 +319,35 @@ export default function HomePage() {
     const v = override?.vertical ?? vertical;
     const q = (override?.question ?? question).trim();
 
+    // Day 18 v2: if the intent classifier routes this question to
+    // "conversational", hand off to the chat surface instead of the
+    // spatial /api/ask flow. The chat engine (Tavily + Gemini) is
+    // not user-selectable; it always handles the prose answer. The
+    // user can still click "View data on map" later to switch to the
+    // spatial view with their preferred model.
+    const intent = classifyIntent(q);
+    if (intent.primary === "conversational") {
+      try {
+        const chatRes = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content: q }),
+        });
+        const chatJson = await chatRes.json().catch(() => ({}));
+        if (chatRes.ok && chatJson?.threadId) {
+          router.push(`/chat/${chatJson.threadId}`);
+          return;
+        }
+        // If /api/chat failed (e.g. Thread table doesn't exist yet
+        // because migrate:thread hasn't been run), fall through to
+        // /api/ask as the legacy path so the user still gets an
+        // answer.
+        console.warn("[/] chat handoff failed, falling back to spatial:", chatJson);
+      } catch (e) {
+        console.warn("[/] chat handoff threw, falling back to spatial:", e);
+      }
+    }
+
     try {
       const res = await fetch("/api/ask", {
         method: "POST",
@@ -507,11 +538,28 @@ export default function HomePage() {
                 </p>
                 <p className="mt-2 text-xs text-atlas-muted">
                   Where should you build, open, or invest? Atlas reasons across
-                  live signals — schools, transit, healthcare, road network,
-                  competition, environmental risk, demographics, and listings —
-                  to recommend the site that beats the alternatives.
-                </p>
-              </div>
+                   live signals — schools, transit, healthcare, road network,
+                   competition, environmental risk, demographics, and listings —
+                   to recommend the site that beats the alternatives.
+                 </p>
+                 {/* Day 18 v2: chat entry point. The hero now has two paths:
+                     - Spatial (existing form below): "where in X should I build Y"
+                     - Chat (this link): "which province/city is best for X",
+                       "why is X good for Y", or any conversational question.
+                     The classifier in lib/intent/classify.ts already routes
+                     between the two. */}
+                 <div className="mt-3 flex items-center justify-center gap-2 text-[11px]">
+                   <Link
+                     href="/chat/new"
+                     className="rounded-full border border-atlas-accent/40 bg-atlas-accent/10 px-3 py-1 font-medium text-atlas-accent hover:bg-atlas-accent/20"
+                   >
+                     Or ask in chat →
+                   </Link>
+                   <span className="text-atlas-muted">
+                     best for &quot;which city / which province / why X&quot;
+                   </span>
+                 </div>
+               </div>
 
               <form onSubmit={onSubmit} className="w-full max-w-2xl">
                 {/* Vertical picker as a row of chips ABOVE the command bar */}
