@@ -1,4 +1,3 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import type { Model, ModelRequest, ModelResponse, RankedSite } from './types';
 import { detectCity } from '../stub/detect';
 import { getRealSiteCandidates } from '../stub/real-sites';
@@ -26,38 +25,32 @@ function humanVertical(v: string): string {
  * Day 12 v23 — Tavily + Gemini Flash synthesis.
  *
  * Day 17 v2 — switched synthesis model from gemini-1.5-flash to
- * gemini-2.0-flash. David's Vercel Gemini key has confirmed free-tier
- * access to 2.0-flash but 1.5-flash hits 429 quota exhausted. This was
- * the silent failure mode that made Atlas cascade from "Tavily picked"
- * to gemini-search even though Tavily itself was returning data.
+ * gemini-2.0-flash + added graceful degradation.
  *
- * Day 17 v2 — also added a Tavily-answer-only path that returns
- * ok:true with Tavily's own answer + sources + site matches from
- * REAL_SITE_CATALOG, even when Gemini synthesis is unavailable.
- * This means Atlas now ALWAYS returns Tavily's answer when Tavily
- * succeeded, regardless of Gemini quota state.
+ * Day 17 v3 — REMOVED Gemini synthesis entirely. The Gemini
+ * synthesis was returning sites that looked identical to our
+ * curated stub (same suburb names, same lat/lng, same templated
+ * rationales) because Gemini was drawing on its general training
+ * knowledge instead of using the Tavily sources we fed it. This
+ * made the result page misleading: model said "Tavily" but the
+ * sites were Gemini's pre-training knowledge with no actual
+ * Tavily provenance.
  *
- * Two-step model that gives Atlas Perplexity-style answers even
- * when the Gemini Search grounding tool is rate-limited:
+ * Now Tavily alone does the work:
+ *   1. Tavily search returns up to 5 web results + its own answer.
+ *   2. We extract real place names from Tavily's `answer` field +
+ *      each result's title+url by matching against REAL_SITE_CATALOG.
+ *      This produces real, current, web-sourced sites on the map.
+ *   3. The result page renders Tavily's prose answer + the clickable
+ *      web sources + the catalog-matched sites on the map.
  *
- *   1. POST https://api.tavily.com/search with the question.
- *      Tavily returns up to 5 web results with title, url, content.
- *   2. (optional) Feed those results to Gemini 2.0 Flash as
- *      context. Ask Gemini to produce the same Perplexity-shape
- *      JSON: answer paragraph + ranked_sites + sources.
- *      If this step fails (quota, network, etc.), we still
- *      return Tavily's own answer + sources + REAL_SITE_CATALOG
- *      matches. Never cascade.
- *
- * The Tavily search gives us real, current web data (Wikipedia,
- * property portals, news). 2.0 Flash has the cheapest free tier
- * of the Gemini family. We use it just to structure the Tavily
- * results into Atlas's shape.
- *
- * Why this works even when Gemini Search fails: this path uses
- * 2.0-flash without the grounding tool (so no 429 from
- * generate_content_free_tier). Tavily does the search; Gemini
- * does the formatting. Both have generous free tiers.
+ * Why this is honest:
+ *   - Every site shown has a citation (Tavily result URL).
+ *   - Sites NOT mentioned in Tavily's answer don't appear on the map
+ *     (better than showing fake-looking Gemini hallucinations).
+ *   - If 0 sites match the catalog, the map shows just the city
+ *     center with a "no specific sites mentioned in research" message.
+ *     Honest about what Tavily actually found.
  *
  * Tavily free tier: 1,000 credits/month, no card.
  *   1 search = 1 credit. 1 user question = 1 search.
@@ -228,19 +221,17 @@ export const tavily: Model = {
     logoPath:
       'M5 4h14v3h-4v13h-6V7H5V4z',
   },
-  isAvailable: () => !!(process.env.TAVILY_API_KEY && process.env.GEMINI_API_KEY),
+  isAvailable: () => !!process.env.TAVILY_API_KEY,
   call: async (req: ModelRequest): Promise<ModelResponse> => {
     try {
       const tavilyKey = process.env.TAVILY_API_KEY;
-      const geminiKey = process.env.GEMINI_API_KEY;
       if (!tavilyKey) {
         return { ok: false, error: 'TAVILY_API_KEY not set' } as any;
       }
-      if (!geminiKey) {
-        return { ok: false, error: 'GEMINI_API_KEY not set' } as any;
-      }
 
-      // Step 1: Tavily search.
+      // Step 1: Tavily search (the only step — Day 17 v3 dropped
+      // the Gemini synthesis that was producing fake-looking
+      // sites from Gemini's training data).
       let tavily: TavilyResponse;
       try {
         tavily = await callTavilySearch(req.question, tavilyKey);
@@ -252,99 +243,78 @@ export const tavily: Model = {
         return { ok: false, error: 'Tavily returned 0 results' } as any;
       }
 
-      // Step 2: Gemini 2.0 Flash synthesis (optional). Day 17 v2:
-      // if this fails, we still return ok:true with Tavily's own
-      // answer + sources + REAL_SITE_CATALOG matches below.
-      // Previously a Gemini failure here meant the whole model
-      // returned ok:false and cascaded to gemini-search — even
-      // though Tavily had already done the real work.
-      const genAI = new GoogleGenerativeAI(geminiKey);
-      const model = genAI.getGenerativeModel({
-        model: 'gemini-2.0-flash',
-      });
-      let text: string;
-      try {
-        const result = await model.generateContent(buildSynthesisPrompt(req, tavily));
-        text = result.response.text();
-      } catch (innerErr) {
-        const msg = innerErr instanceof Error ? innerErr.message : String(innerErr);
-        // Day 17 v2: graceful degradation. Tavily succeeded; don't
-        // throw away the data. Return Tavily's own answer + sources
-        // + REAL_SITE_CATALOG matches.
-        console.warn(
-          `[tavily] Gemini synthesis failed (${msg}); returning Tavily answer + catalog matches`,
-        );
-        return buildTavilyOnlyResponse(req, tavily) as any;
-      }
+      // Build citations from Tavily results — these are the real,
+      // authoritative sources for this query.
+      const sources: Array<{ title?: string; url: string }> = tavily.results.map(
+        (r) => ({ title: r.title, url: r.url }),
+      );
 
-      // Parse JSON from the model's text.
-      let parsed: any = null;
-      const cleaned = (text ?? '').trim();
-      const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        try {
-          parsed = JSON.parse(jsonMatch[0]);
-        } catch {
-          // Fall through to null
+      // Day 17 v3: extract real place names from Tavily's actual
+      // answer text + each result's title+url. Match against the
+      // 350-entry REAL_SITE_CATALOG so the map shows sites that are
+      // BOTH in our known-cities catalog AND mentioned in the live
+      // Tavily research. No more Gemini synthesis = no more
+      // hallucinated sites that look like our curated stub.
+      const city = detectCity(req.question ?? '');
+      const realSites = getRealSiteCandidates(city.id, req.vertical) ?? [];
+      const haystack = [
+        tavily.answer ?? "",
+        ...tavily.results.map((r) => `${r.title} ${r.url} ${r.content?.slice(0, 200) ?? ""}`),
+      ].join(" \n ").toLowerCase();
+
+      const seen = new Set<string>();
+      const sites: RankedSite[] = [];
+      for (const entry of realSites) {
+        const name = String(entry?.name ?? "").trim();
+        if (!name || name.length < 4 || seen.has(name.toLowerCase())) continue;
+        const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        if (new RegExp(`\\b${escaped}\\b`, "i").test(haystack)) {
+          // Find which Tavily source mentioned this place.
+          const matchingSource = tavily.results.find((r) =>
+            new RegExp(`\\b${escaped}\\b`, "i").test(
+              `${r.title} ${r.url} ${r.content?.slice(0, 400) ?? ""}`,
+            ),
+          );
+          sites.push({
+            rank: sites.length + 1,
+            name,
+            suburb: entry.suburb,
+            score: 0.75,
+            confidence: 0.7,
+            rationale: matchingSource
+              ? `Mentioned by Tavily in "${matchingSource.title}". ${entry.rationale ?? ""}`
+              : (entry.rationale ?? "Mentioned by Tavily in research answer"),
+            lat: entry.lat,
+            lng: entry.lng,
+          });
+          seen.add(name.toLowerCase());
+          if (sites.length >= 5) break;
         }
       }
 
-      // Build citations from Tavily results (authoritative) +
-      // model's "sources" field (helpful but unverified).
-      const tavilySources: Array<{ title?: string; url: string }> = tavily.results.map(
-        (r) => ({ title: r.title, url: r.url }),
-      );
-      const modelSources: Array<{ title?: string; url: string }> = Array.isArray(
-        parsed?.sources,
-      )
-        ? parsed.sources
-            .filter((s: any) => s && typeof s.url === 'string' && s.url.length > 0)
-            .map((s: any) => ({ title: s.title, url: s.url }))
-        : [];
-      const seen = new Set<string>();
-      const merged: Array<{ title?: string; url: string }> = [];
-      for (const s of [...tavilySources, ...modelSources]) {
-        if (seen.has(s.url)) continue;
-        seen.add(s.url);
-        merged.push(s);
-      }
-
-      // If we still don't have JSON, return the Tavily answer verbatim.
-      if (!parsed || typeof parsed !== 'object') {
-        return {
-          ranked_sites: [],
-          raw: text,
-          answer: tavily.answer ?? cleaned,
-          sources: merged,
-        } as any;
-      }
-
-      // Normalise ranked_sites with city-centre fallback for missing lat/lng.
-      const rawSites = Array.isArray(parsed.ranked_sites) ? parsed.ranked_sites : [];
-      const city = detectCity(req.question ?? '');
-      const realSites = getRealSiteCandidates(city.id, req.vertical);
-      const fallbackSite = realSites && realSites.length > 0 ? realSites[0] : null;
-      const sites: RankedSite[] = rawSites.map((s: any, i: number) => {
-        const hasLat = typeof s.lat === 'number' && isFinite(s.lat) && Math.abs(s.lat) <= 90;
-        const hasLng = typeof s.lng === 'number' && isFinite(s.lng) && Math.abs(s.lng) <= 180;
-        const lat = hasLat ? s.lat : (fallbackSite?.lat ?? city.lat);
-        const lng = hasLng ? s.lng : (fallbackSite?.lng ?? city.lng);
-        return {
-          rank: s.rank ?? i + 1,
-          name: s.name ?? 'Unknown',
-          score: typeof s.score === 'number' ? s.score : 0.7,
-          confidence: typeof s.confidence === 'number' ? s.confidence : 0.7,
-          rationale: s.rationale ?? '',
-          lat,
-          lng,
-        };
-      });
-
+      // The honest answer: Tavily's prose + the clickable sources +
+      // any sites we could match. If 0 sites matched, that's OK —
+      // we still show Tavily's prose research answer. The map will
+      // show the city center with a "no specific sites in research"
+      // message instead of fake-looking catalog filler.
       return {
+        ok: true,
         ranked_sites: sites,
-        raw: text,
-        answer: typeof parsed.answer === 'string' ? parsed.answer : (tavily.answer ?? cleaned),
-        sources: merged,
+        raw: JSON.stringify({
+          tavilyAnswer: tavily.answer,
+          tavilyResults: tavily.results.map((r) => ({
+            title: r.title,
+            url: r.url,
+            contentPreview: r.content?.slice(0, 300),
+          })),
+          extractedSites: sites.map((s) => s.name),
+          matchedFromCatalog: sites.length,
+          catalogTotalForCity: realSites.length,
+        }),
+        answer: tavily.answer ??
+          `Tavily returned ${tavily.results.length} web sources for "${req.question}". ${sources.slice(0, 3).map((s) => s.title).join("; ")}.`,
+        sources,
+        extractionStatus: "tavily_only",
       } as any;
     } catch (outerErr) {
       const msg = outerErr instanceof Error ? outerErr.message : String(outerErr);
