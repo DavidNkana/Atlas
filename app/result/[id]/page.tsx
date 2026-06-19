@@ -387,23 +387,62 @@ export default async function ResultPage({
 
         {/* Demo placeholder banner — fires when Atlas answered with
             the curated stub (all real AIs were down or unavailable).
-            This is the single source of truth for "AI is overloaded". */}
-        {responseStatus === "stub_demo" && (
-          <div
-            role="alert"
-            data-testid="atlas-stub-demo-banner"
-            className="mb-6 rounded-md border border-amber-800 bg-amber-950 px-4 py-3 text-xs text-amber-200"
-          >
-            <strong className="font-semibold text-amber-100">
-              Demo placeholder
-              {stubCity ? ` — ${stubCity}${stubCountry ? `, ${stubCountry}` : ""}` : ""}:
-            </strong>{" "}
-            <span className="text-amber-200">
-              {stubReason ??
-                "AI models are currently overloaded. This is a city-specific demo placeholder. Try a real model in a few minutes."}
-            </span>
-          </div>
-        )}
+            Day 16 v2: when connectors ALSO succeeded (LLM failed but
+            signals were pulled), show a "hybrid" version of the banner
+            that highlights the live signal count + which sources fired.
+            This addresses developer feedback "I want to see 18 signals
+            not 1" — even in degraded mode, the badge tells the truth. */}
+        {responseStatus === "stub_demo" && (() => {
+          const liveConnectorCount = connectorsRun.filter(
+            (c) => c.status === "ok" && c.signalCount > 0,
+          ).length;
+          const totalSignals = connectorsRun.reduce(
+            (sum, c) => sum + c.signalCount,
+            0,
+          );
+          const liveSources = connectorsRun
+            .filter((c) => c.status === "ok" && c.signalCount > 0)
+            .map((c) => c.id);
+          const isHybrid = liveConnectorCount > 0;
+          return (
+            <div
+              role="alert"
+              data-testid="atlas-stub-demo-banner"
+              className={`mb-6 rounded-md border px-4 py-3 text-xs ${
+                isHybrid
+                  ? "border-emerald-800 bg-emerald-950 text-emerald-100"
+                  : "border-amber-800 bg-amber-950 text-amber-200"
+              }`}
+            >
+              <strong
+                className={`font-semibold ${
+                  isHybrid ? "text-emerald-50" : "text-amber-100"
+                }`}
+              >
+                {isHybrid ? "Hybrid result" : "Demo placeholder"}
+                {stubCity
+                  ? ` — ${stubCity}${stubCountry ? `, ${stubCountry}` : ""}`
+                  : ""}
+                :
+              </strong>{" "}
+              <span>
+                {stubReason ??
+                  "Atlas couldn't reach a research model right now. Pick a different model in the picker to retry."}
+              </span>
+              {isHybrid && (
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
+                  <span className="font-semibold">
+                    ✓ {totalSignals} live signals from {liveConnectorCount} of{" "}
+                    {connectorsRun.length} sources:
+                  </span>
+                  <span className="font-mono text-emerald-300">
+                    {liveSources.join(", ")}
+                  </span>
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {connectorsError && (
           <div

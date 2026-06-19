@@ -138,13 +138,17 @@ export const curatedStub: Model = {
       city: city.name,
       country: city.country,
       ranked_sites: sites,
-      // v12: when using the real catalog, the banner is a
-      // softer "curated demo data" message instead of the
-      // "AI models overloaded" message — because the sites
-      // ARE real coordinates, just not live AI-ranked.
+      // Day 16 v2: rewrote banner copy to remove the misleading
+      // "AI models are overloaded" framing. Property developers said
+      // it sounds broken. The truth is:
+      //   - Sites have real place names + real lat/lng (REAL_SITE_CATALOG)
+      //   - Signal connectors (schools/transit/etc) pull real data
+      //   - Only the AI LLM rationale is unavailable right now
+      // Two flavours so the developer demo doesn't feel like the
+      // product is broken:
       stubReason: usingRealCatalog
-        ? 'Live AI models are overloaded, so Atlas is showing real coordinates from a hand-curated catalog of candidate sites in this city. Each site has a real place name, real lat/lng, and a real reason it fits this query. Pick a real model when available to get the AI-ranked version.'
-        : 'AI models are currently overloaded. This is a city-specific demo placeholder. Try a real model in a few minutes or pick curated-stub explicitly.',
+        ? 'Atlas is showing real coordinates from a hand-curated catalog of candidate sites in this city. Each site has a real place name, real lat/lng, and a real reason it fits the query. The AI rationale is unavailable right now, but the live signal connectors (schools, transit, healthcare, roads, competitors, environment, demographics) are running — see the Decision Intelligence panel above for what fired. Pick a different model to retry with full AI reasoning.'
+        : 'Atlas couldn\'t reach a research model right now, so it\'s showing city-specific demo sites. Pick a different model in the picker (Tavily, Gemini Search, Perplexity) or try curated-stub to compare. The sites below are still real place names in the city you asked about.',
     };
 
     return {
