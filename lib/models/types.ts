@@ -29,6 +29,14 @@ export interface RankedSite {
   // carry through the suburb the model mentioned (e.g. "Observatory"
   // is a suburb of Cape Town).
   suburb?: string;
+  // Day 17 v5: optional payload for per-site metadata the UI can
+  // surface (e.g. Tavily source URLs that cite this site, attribution
+  // label). Not required by the Signal type so connectors can omit.
+  payload?: {
+    sourceUrls?: string[];
+    attribution?: string;
+    [key: string]: unknown;
+  };
 }
 
 export interface ModelRequest {
