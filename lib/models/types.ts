@@ -25,6 +25,10 @@ export interface RankedSite {
   rationale: string;
   lat?: number;
   lng?: number;
+  // Day 17 v1: optional suburb label so the lenient parser can
+  // carry through the suburb the model mentioned (e.g. "Observatory"
+  // is a suburb of Cape Town).
+  suburb?: string;
 }
 
 export interface ModelRequest {

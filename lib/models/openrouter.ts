@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import type { Model, ModelRequest, ModelResponse } from './types';
 import { fetchOpenRouterFreeModelIds } from './openrouter-discovery';
+import { parseModelOutput } from './lenient-parser';
 
 function humanVertical(v: string): string {
   // "gas_station" -> "gas station", "custom:residential_land" -> "residential land"
@@ -9,7 +10,18 @@ function humanVertical(v: string): string {
 }
 
 function buildPrompt(req: ModelRequest): string {
-  return 'You are Atlas, a site-selection intelligence engine. The user wants to find the best location for a ' + humanVertical(req.vertical) + ' given this question: "' + req.question + '".\n\nReturn STRICT JSON only, in this exact shape:\n{"ranked_sites":[{"rank":1,"name":"<place>","score":<0-1>,"confidence":<0-1>,"rationale":"<1-2 sentences>","lat":<decimal latitude>,"lng":<decimal longitude>}]}\n\nProvide up to 5 ranked sites.\n\nFor each site, also include "lat" and "lng" as decimal coordinates (e.g. -15.3875 for Lusaka latitude). Use real-world coordinates for the place you name.';
+  // Day 17 v1: drop response_format requirement, allow prose. The
+  // lenient parser extracts sites from either shape.
+  return (
+    'You are Atlas, a site-selection intelligence engine. The user wants to find the best location for a ' +
+    humanVertical(req.vertical) +
+    ' given this question: "' +
+    req.question +
+    '".\n\n' +
+    'Either return JSON in this shape:\n' +
+    '{"ranked_sites":[{"rank":1,"name":"<place>","suburb":"<suburb label>","score":<0-1>,"confidence":<0-1>,"rationale":"<1-2 sentences>","lat":<decimal latitude>,"lng":<decimal longitude>}]}\n\n' +
+    'Or return a natural prose answer naming up to 5 real place names with their city context (e.g. "Observatory, Cape Town"). Use real suburb names. Be specific.'
+  );
 }
 
 /**
@@ -78,7 +90,8 @@ function makeOpenRouterModel(
             const completion: any = await client.chat.completions.create({
               model: modelId,
               messages: [{ role: 'user', content: buildPrompt(req) }],
-              response_format: { type: 'json_object' },
+              // Day 17 v1: no response_format — let the model emit
+              // prose OR JSON. The lenient parser handles both.
             });
             // Defensive: completion.choices may be missing or empty.
             const choice = completion?.choices?.[0];
@@ -87,19 +100,18 @@ function makeOpenRouterModel(
               lastError = `OpenRouter (${modelId}): empty response`;
               continue;
             }
-            let parsed: any;
-            try {
-              parsed = JSON.parse(text);
-            } catch (parseErr) {
-              const msg = parseErr instanceof Error ? parseErr.message : String(parseErr);
-              lastError = `OpenRouter (${modelId}) returned non-JSON: ${msg}`;
+            // Day 17 v1: lenient parse. Accept strict JSON OR prose
+            // with real place names matched against REAL_SITE_CATALOG.
+            const parsed = parseModelOutput(text, (req as any).cityKey ?? null);
+            if (!parsed.ok) {
+              lastError = `OpenRouter (${modelId}): ${parsed.error}`;
               continue;
             }
-            if (!parsed || !Array.isArray(parsed.ranked_sites)) {
-              lastError = `OpenRouter (${modelId}): missing ranked_sites array`;
-              continue;
-            }
-            return { ranked_sites: parsed.ranked_sites, raw: text } as any;
+            return {
+              ranked_sites: parsed.ranked_sites,
+              raw: text,
+              extractionStatus: parsed.status,
+            } as any;
           } catch (perModelErr) {
             const msg = perModelErr instanceof Error ? perModelErr.message : String(perModelErr);
             lastError = `OpenRouter (${modelId}) call failed: ${msg}`;
