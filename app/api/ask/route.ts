@@ -11,6 +11,7 @@ import { combine } from "@/lib/scoring/engine";
 import type { ScoreBreakdown, ScoreFactor } from "@/lib/scoring/types";
 import { buildPlan } from "@/lib/plan/planner";
 import type { Plan } from "@/lib/plan/types";
+import { classifyIntent } from "@/lib/intent/classify";
 import { withTimeout } from "@/lib/util/timeout";
 import { sanitizeForJson } from "@/lib/util/json-sanitize";
 
@@ -207,6 +208,20 @@ type AskResponse = {
   answer?: string;
   /** Day 12 v16 — citations from Gemini Search. */
   sources?: Array<{ title?: string; url: string }>;
+  /** Day 17 v6 — which engine answered (tavily_plus_gemini | gemini_search | curated). */
+  primaryEngine?: string;
+  /** Day 17 v6 — intent classification (spatial | conversational). */
+  intent?: "spatial" | "conversational";
+  /** Day 17 v6 — pattern scores that drove the intent decision. */
+  intentScore?: {
+    spatial: number;
+    conversational: number;
+  };
+  /** Day 17 v6 — the actual matched patterns (shown in UI). */
+  matchedPatterns?: {
+    spatial: string[];
+    conversational: string[];
+  };
 };
 
 /**
@@ -828,6 +843,13 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   }
 
   // 6. Build response body (sans id; id comes from prisma row)
+  //
+  // Day 17 v6: add the intent classifier result so the UI can route
+  // to the spatial (/result/[id]) or conversational (/chat/[id])
+  // view. Both views share the same data; the classifier picks
+  // the primary one. The result page always links to the chat
+  // view (and vice versa) so users can switch.
+  const intentResult = classifyIntent(trimmedQuestion);
   const responseBody: Omit<AskResponse, "id"> = {
     status: responseStatus,
     model: modelInfoToBlock(activeInfo, fallbackUsed, modelError, attemptedChain),
@@ -837,6 +859,20 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
     ranked_sites: rankedSites,
     plan,
     connectorsRun,
+    // Day 17 v6: routing + chat surface. primaryEngine tells the UI
+    // which engine answered. matchedPatterns shows the user why we
+    // classified the question that way. chatViewUrl is the URL for
+    // the conversational view of this same query.
+    primaryEngine: activeInfo.id,
+    intent: intentResult.primary,
+    intentScore: {
+      spatial: intentResult.spatialScore,
+      conversational: intentResult.conversationalScore,
+    },
+    matchedPatterns: {
+      spatial: intentResult.matchedSpatialPatterns,
+      conversational: intentResult.matchedConversationalPatterns,
+    },
   };
   if (allConnectorsFailed) {
     responseBody.connectorsError = "all connectors failed";

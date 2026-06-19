@@ -2,6 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/db";
 import { notFound, redirect } from "next/navigation";
+import Link from "next/link";
 import ResultMapClient from "@/components/ResultMapClient";
 import { Sidebar } from "@/components/Sidebar";
 import { AppShell } from "@/components/AppShell";
@@ -103,6 +104,16 @@ type ResponseBody = {
   // Day 12 v16 — research answer + citations from Gemini Search.
   answer?: string;
   sources?: Array<{ title?: string; url: string }>;
+  // Day 17 v6 — intent classification for routing to /chat/[id].
+  intent?: "spatial" | "conversational";
+  intentScore?: {
+    spatial: number;
+    conversational: number;
+  };
+  matchedPatterns?: {
+    spatial: string[];
+    conversational: string[];
+  };
 };
 
 function statusBorder(status: string): string {
@@ -467,7 +478,30 @@ export default async function ResultPage({
             data-testid="atlas-connectors-row"
           >
             <div className="mb-3 flex items-baseline justify-between">
-              <h2 className="text-xs font-medium text-atlas-text">Decision Intelligence</h2>
+              <div className="flex items-baseline gap-3">
+                <h2 className="text-xs font-medium text-atlas-text">Decision Intelligence</h2>
+                {/* Day 17 v6: surface the intent classification so the
+                    user sees which view Atlas picked as primary.
+                    Clicking the link switches to the alternate view. */}
+                {responseBody.intent === "conversational" && (
+                  <Link
+                    href={`/chat/${id}`}
+                    data-testid="atlas-chat-link"
+                    className="rounded-full bg-atlas-accent/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-atlas-accent hover:bg-atlas-accent/25"
+                  >
+                    Intelligence answer ↗
+                  </Link>
+                )}
+                {responseBody.intent === "spatial" && responseBody.answer && (
+                  <Link
+                    href={`/chat/${id}`}
+                    data-testid="atlas-chat-link"
+                    className="rounded-full border border-atlas-border bg-atlas-surface2 px-2 py-0.5 text-[10px] text-atlas-muted hover:text-atlas-text"
+                  >
+                    See research answer ↗
+                  </Link>
+                )}
+              </div>
               <div className="flex items-baseline gap-2">
                 {(() => {
                   const totalSignals = connectorsRun.reduce((sum, c) => sum + c.signalCount, 0);
