@@ -1,4 +1,5 @@
 import { AppShell } from "@/components/AppShell";
+import { ScheduleDemoForm } from "@/components/ScheduleDemoForm";
 
 /**
  * Day 7: /demo — investor-facing page.
@@ -11,7 +12,7 @@ import { AppShell } from "@/components/AppShell";
  *   4. The roadmap (vertical by vertical)
  *   5. The data model (the architecture, in plain text)
  *   6. Trust signals (commits, build status)
- *   7. CTA (book a demo)
+ *   7. CTA (book a demo) — Day 13: now a real form, not a mailto:
  *
  * Brand rule: never mention "Property24" or "Private Property" by name in
  * user copy. The connector registry has them internally; the brand is Atlas.
@@ -208,30 +209,27 @@ export default function DemoPage() {
         </ul>
       </section>
 
-      {/* CTA */}
-      <section className="rounded-lg border border-atlas-accent bg-atlas-surface p-8 text-center">
-        <h3 className="mb-3 text-xl font-semibold text-atlas-text">
+      {/* CTA — Day 13: real Schedule Demo form replaces the mailto: link */}
+      <section className="rounded-lg border border-atlas-accent bg-atlas-surface p-6 sm:p-8">
+        <h3 className="mb-2 text-center text-xl font-semibold text-atlas-text">
           Want to see it for your city?
         </h3>
-        <p className="mb-6 text-sm text-atlas-muted">
+        <p className="mx-auto mb-6 max-w-xl text-center text-sm text-atlas-muted">
           Atlas is open to design partners: land developers, property
           investors, and builders who want to evaluate 10x more sites per week
-          than they do today.
+          than they do today. David replies within 1 business day.
         </p>
-        <div className="flex flex-wrap items-center gap-3">
-          <a
-            href="mailto:david@atlas.local?subject=Atlas%20demo%20request"
-            className="inline-block rounded-md bg-atlas-accent px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-atlas-accent2"
-          >
-            Get a demo
-          </a>
+        <div className="mx-auto max-w-2xl">
+          <ScheduleDemoForm />
+        </div>
+        <div className="mt-6 flex justify-center">
           {/* Day 10: downloadable one-pager for investors. PDF is in
               /public, served as a static asset. The download attribute
               hints the browser to save rather than navigate. */}
           <a
             href="/atlas-investor-one-pager.pdf"
             download="atlas-investor-one-pager.pdf"
-            className="inline-flex items-center gap-2 rounded-md border border-atlas-border bg-atlas-bg px-6 py-3 text-sm font-medium text-atlas-text transition-colors hover:border-atlas-accent hover:text-atlas-text"
+            className="inline-flex items-center gap-2 rounded-md border border-atlas-border bg-atlas-bg px-4 py-2 text-xs font-medium text-atlas-text transition-colors hover:border-atlas-accent hover:text-atlas-text"
           >
             <svg
               width="14"
@@ -247,7 +245,7 @@ export default function DemoPage() {
               <polyline points="7 10 12 15 17 10" />
               <line x1="12" y1="15" x2="12" y2="3" />
             </svg>
-            Download investor one-pager
+            Download investor one-pager (PDF)
           </a>
         </div>
       </section>
