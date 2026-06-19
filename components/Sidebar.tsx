@@ -227,6 +227,22 @@ export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boole
           </Link>
         </div>
 
+        {/* Day 18 v3: Chat entry. Conversational research, Perplexity-style.
+            Always opens a new thread; full thread history lives at
+            /chat/[threadId]. */}
+        <div className="mt-1.5 px-3">
+          <Link
+            href="/chat/new"
+            className="flex w-full items-center gap-2 rounded-md border border-atlas-accent/30 bg-atlas-accent/5 px-3 py-2 text-sm text-atlas-accent transition-colors hover:bg-atlas-accent/15"
+            title="Ask in chat — best for which/why questions"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+            {!collapsed && <span>Ask in chat</span>}
+          </Link>
+        </div>
+
         {/* Day 12 v7: Pinned (max 4) + History (max 20) split.
            - Pinned is rendered in its own area, NO inner scroll.
              The 4 pinned items are always fully visible so the

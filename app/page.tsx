@@ -276,6 +276,19 @@ export default function HomePage() {
     e.preventDefault();
     if (!question.trim()) return;
 
+    // Day 18 v3: Run the intent classifier BEFORE the out-of-scope
+    // gate. Conversational queries ("Which province has fastest-growing
+    // middle class?", "Why Lusaka for a stadium?", "What is Atlas?")
+    // have zero vertical keywords so the old out-of-scope gate was
+    // blocking them. Now: conversational queries ALWAYS go to the
+    // chat surface (Tavily + Gemini). Only spatial queries hit the
+    // out-of-scope gate.
+    const intent = classifyIntent(question.trim());
+    if (intent.primary === "conversational") {
+      await submitToChat();
+      return;
+    }
+
     // Out-of-scope prompt gate. If the question doesn't look like a
     // location intelligence question, show the modal and don't submit.
     if (outOfScope.checkQuestion(question.trim())) {
@@ -315,38 +328,40 @@ export default function HomePage() {
   // this same handler still has the OLD values. Passing the new
   // values explicitly here avoids a stale-state submit and a
   // potential auth race that we were seeing.
+  /**
+   * Day 18 v3: chat submission helper. Always sends to /api/chat
+   * (Tavily + Gemini). On success navigates to /chat/[threadId].
+   * On failure (e.g. Thread table doesn't exist yet), falls back
+   * to /api/ask so the user always sees SOMETHING.
+   */
+  async function submitToChat() {
+    setLoading(true);
+    setError(null);
+    try {
+      const chatRes = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: question.trim() }),
+      });
+      const chatJson = await chatRes.json().catch(() => ({}));
+      if (chatRes.ok && chatJson?.threadId) {
+        router.push(`/chat/${chatJson.threadId}`);
+        return;
+      }
+      console.warn("[/] chat handoff failed, falling back to spatial:", chatJson);
+      // Fall through to spatial /api/ask so the user still gets an answer.
+      await doSubmit();
+    } catch (e) {
+      console.warn("[/] chat handoff threw, falling back to spatial:", e);
+      await doSubmit();
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function doSubmit(override?: { vertical?: string; question?: string }) {
     const v = override?.vertical ?? vertical;
     const q = (override?.question ?? question).trim();
-
-    // Day 18 v2: if the intent classifier routes this question to
-    // "conversational", hand off to the chat surface instead of the
-    // spatial /api/ask flow. The chat engine (Tavily + Gemini) is
-    // not user-selectable; it always handles the prose answer. The
-    // user can still click "View data on map" later to switch to the
-    // spatial view with their preferred model.
-    const intent = classifyIntent(q);
-    if (intent.primary === "conversational") {
-      try {
-        const chatRes = await fetch("/api/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content: q }),
-        });
-        const chatJson = await chatRes.json().catch(() => ({}));
-        if (chatRes.ok && chatJson?.threadId) {
-          router.push(`/chat/${chatJson.threadId}`);
-          return;
-        }
-        // If /api/chat failed (e.g. Thread table doesn't exist yet
-        // because migrate:thread hasn't been run), fall through to
-        // /api/ask as the legacy path so the user still gets an
-        // answer.
-        console.warn("[/] chat handoff failed, falling back to spatial:", chatJson);
-      } catch (e) {
-        console.warn("[/] chat handoff threw, falling back to spatial:", e);
-      }
-    }
 
     try {
       const res = await fetch("/api/ask", {
