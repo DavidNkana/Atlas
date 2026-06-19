@@ -39,6 +39,11 @@ export default async function AdminPage() {
     waitlistByVertical,
     recentSignups,
     recentQuestions,
+    demoRequestCount,
+    demoRequests,
+    payingUsers,
+    plotCount,
+    recentUsers,
   ] = await Promise.all([
     prisma.question.count(),
     prisma.question.count({
@@ -89,6 +94,37 @@ export default async function AdminPage() {
         createdAt: true,
       },
     }),
+    // Day 13: demo requests (saved as WaitlistSignup rows with
+    // userType='demo_request' and plan='demo'). Distinct count so
+    // David can see how many people asked for a demo vs joined the
+    // waitlist.
+    prisma.waitlistSignup.count({
+      where: { userType: "demo_request" },
+    }),
+    prisma.waitlistSignup.findMany({
+      where: { userType: "demo_request" },
+      orderBy: { createdAt: "desc" },
+      take: 10,
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        plan: true,
+        message: true,
+        createdAt: true,
+      },
+    }),
+    // Day 14: paying users (plan != 'free'). Uses the User table
+    // which the Stripe webhook populates. Returns 0 until
+    // STRIPE_SECRET_KEY is set in Vercel env.
+    prisma.user.count({ where: { plan: { not: "free" } } }).catch(() => 0),
+    prisma.plot.count().catch(() => 0),
+    prisma.user
+      .findMany({
+        orderBy: { planUpdatedAt: "desc" },
+        take: 10,
+      })
+      .catch(() => [] as any[]),
   ]);
 
   return (
@@ -119,6 +155,18 @@ export default async function AdminPage() {
               value={waitlistTotal}
               accent
             />
+          </section>
+
+          {/* Second KPI row — Day 13/14 */}
+          <section className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Kpi label="Demo requests" value={demoRequestCount} />
+            <Kpi
+              label="Paying users"
+              value={payingUsers}
+              accent={payingUsers > 0}
+            />
+            <Kpi label="Plot listings" value={plotCount} />
+            <Kpi label="Stripe users" value={recentUsers.length} />
           </section>
 
           {/* Waitlist breakdown */}
@@ -255,6 +303,107 @@ export default async function AdminPage() {
               )}
             </div>
           </section>
+
+          {/* Recent questions */}
+          <section className="mb-8">
+            <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-atlas-muted">
+              Demo requests
+            </h2>
+            <div className="overflow-hidden rounded-xl border border-atlas-border bg-atlas-surface">
+              {demoRequests.length === 0 ? (
+                <p className="px-4 py-8 text-center text-sm text-atlas-muted">
+                  No demo requests yet. Drive traffic to /demo.
+                </p>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead className="border-b border-atlas-border text-[10px] uppercase tracking-wider text-atlas-muted">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-medium">
+                        Email
+                      </th>
+                      <th className="px-3 py-2 text-left font-medium">Name</th>
+                      <th className="px-3 py-2 text-left font-medium">Company</th>
+                      <th className="px-3 py-2 text-left font-medium">Message</th>
+                      <th className="px-3 py-2 text-left font-medium">When</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {demoRequests.map((d) => (
+                      <tr
+                        key={d.id}
+                        className="border-b border-atlas-border last:border-0"
+                      >
+                        <td className="px-3 py-2 font-mono text-xs text-atlas-text">
+                          {d.email}
+                        </td>
+                        <td className="px-3 py-2 text-xs text-atlas-text">
+                          {d.name || "—"}
+                        </td>
+                        <td className="px-3 py-2 text-xs text-atlas-muted">
+                          {d.name?.match(/\(([^)]+)\)/)?.[1] || "—"}
+                        </td>
+                        <td className="px-3 py-2 text-xs text-atlas-muted">
+                          {d.message?.slice(0, 60) || "—"}
+                          {d.message && d.message.length > 60 ? "…" : ""}
+                        </td>
+                        <td className="px-3 py-2 text-[10px] text-atlas-muted">
+                          {relativeTime(d.createdAt)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </section>
+
+          {/* Paying users (Stripe) — Day 14 */}
+          {recentUsers.length > 0 && (
+            <section className="mb-8">
+              <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-atlas-muted">
+                Paying users (Stripe)
+              </h2>
+              <div className="overflow-hidden rounded-xl border border-atlas-border bg-atlas-surface">
+                <table className="w-full text-sm">
+                  <thead className="border-b border-atlas-border text-[10px] uppercase tracking-wider text-atlas-muted">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-medium">
+                        Email
+                      </th>
+                      <th className="px-3 py-2 text-left font-medium">Plan</th>
+                      <th className="px-3 py-2 text-left font-medium">
+                        Stripe ID
+                      </th>
+                      <th className="px-3 py-2 text-left font-medium">When</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recentUsers.map((u) => (
+                      <tr
+                        key={u.id}
+                        className="border-b border-atlas-border last:border-0"
+                      >
+                        <td className="px-3 py-2 font-mono text-xs text-atlas-text">
+                          {u.email}
+                        </td>
+                        <td className="px-3 py-2">
+                          <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-300">
+                            {u.plan}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 font-mono text-[10px] text-atlas-muted">
+                          {u.stripeCustomerId?.slice(0, 16) ?? "—"}…
+                        </td>
+                        <td className="px-3 py-2 text-[10px] text-atlas-muted">
+                          {relativeTime(u.planUpdatedAt ?? u.createdAt)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
 
           {/* Recent questions */}
           <section>

@@ -133,3 +133,40 @@ model WaitlistSignup {
   @@index([createdAt])
   @@index([plan])
 }
+
+// Day 14: User table with plan + Stripe customer linkage.
+//
+// Why we need this: the Stripe webhook at /api/stripe/webhook
+// receives checkout.session.completed events. It needs a place
+// to write "this Clerk user is now a paying Pro/Team subscriber"
+// so the rest of the app can gate features by plan.
+//
+// We use the Clerk user ID as the primary key. When a user signs
+// up, Clerk's auth() returns userId; we upsert a User row with
+// that ID. The Stripe webhook receives a client_reference_id
+// (which we set to the Clerk user ID) and updates the row.
+//
+// Plan values: "free" (default), "pro" (R250/mo), "team"
+// (R2,500/mo). Future plan values go in the same enum (e.g.
+// "enterprise").
+//
+// stripeCustomerId + stripeSubscriptionId are the Stripe side
+// of the linkage. They let us call Stripe later (e.g. when
+// the user clicks "Cancel subscription" in their dashboard, we
+// need the subscription ID to cancel it).
+model User {
+  id                   String   @id  // Clerk user ID (string, not numeric)
+  email                String   @unique
+  plan                 String   @default("free")  // "free" | "pro" | "team"
+  // Stripe linkage
+  stripeCustomerId     String?  @unique
+  stripeSubscriptionId String?  @unique
+  // When the subscription was last updated by the Stripe webhook
+  // (checkout.session.completed, subscription.deleted, etc.)
+  planUpdatedAt        DateTime?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([plan])
+  @@index([plan, updatedAt])
+}
