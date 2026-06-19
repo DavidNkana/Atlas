@@ -1,10 +1,11 @@
 /**
  * Day 18 — /api/chat — Perplexity-style threaded chat.
  *
- * Always uses Tavily + Gemini for the chat engine. No model picker
- * for chat — that's what David decided. Users pick a model only
- * when they click View Data on a chat message (transitions to the
- * spatial view via /api/ask).
+ * Day 19 — Unified entry point. Every question from the home page
+ * goes here. Always uses Tavily + Gemini for the chat engine. No
+ * model picker for chat. Users pick a model only when they click
+ * View Data on a chat message (transitions to the spatial view via
+ * /api/ask).
  *
  * POST /api/chat
  *   body: { threadId?: string, content: string }
@@ -14,12 +15,8 @@
  *   - If threadId is provided, appends a new user message, runs the
  *     engine, appends the assistant message.
  *
- * The chat engine always returns:
- *   - prose content (the answer body)
- *   - sources (Tavily URLs as clickable citations)
- *   - intent ("conversational" or "spatial")
- *   - matchedPatterns (so the UI can show "why this was classified
- *     this way")
+ * Self-healing: ensureChatSchema() runs on every POST so the Thread
+ * + Message tables exist before Prisma tries to query them. Idempotent.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -31,11 +28,74 @@ import { classifyIntent } from "@/lib/intent/classify";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
+let schemaEnsured = false;
+async function ensureChatSchema(): Promise<void> {
+  if (schemaEnsured) return;
+  try {
+    await prisma.$executeRawUnsafe(
+      `CREATE TABLE IF NOT EXISTS "Thread" (
+         "id" TEXT PRIMARY KEY,
+         "userId" TEXT NOT NULL,
+         "title" TEXT NOT NULL,
+         "messageCount" INTEGER NOT NULL DEFAULT 0,
+         "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+         "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+         CONSTRAINT "Thread_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE
+       )`,
+    );
+    await prisma.$executeRawUnsafe(
+      `CREATE INDEX IF NOT EXISTS "Thread_userId_updatedAt_idx" ON "Thread"("userId", "updatedAt")`,
+    );
+    await prisma.$executeRawUnsafe(
+      `CREATE INDEX IF NOT EXISTS "Thread_userId_createdAt_idx" ON "Thread"("userId", "createdAt")`,
+    );
+    await prisma.$executeRawUnsafe(
+      `CREATE TABLE IF NOT EXISTS "Message" (
+         "id" TEXT PRIMARY KEY,
+         "threadId" TEXT NOT NULL,
+         "role" TEXT NOT NULL,
+         "content" TEXT NOT NULL,
+         "question" TEXT,
+         "intent" TEXT,
+         "sources" JSONB,
+         "spatialQuestionId" TEXT,
+         "spatialModel" TEXT,
+         "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+         CONSTRAINT "Message_threadId_fkey" FOREIGN KEY ("threadId") REFERENCES "Thread"("id") ON DELETE CASCADE
+       )`,
+    );
+    await prisma.$executeRawUnsafe(
+      `CREATE INDEX IF NOT EXISTS "Message_threadId_createdAt_idx" ON "Message"("threadId", "createdAt")`,
+    );
+    schemaEnsured = true;
+  } catch (e) {
+    // Swallow — if the migration truly fails (e.g. permissions), the
+    // actual query below will surface the error with a clear message.
+    console.warn("[chat] self-healing migration failed:", e);
+  }
+}
+
+/**
+ * The chat engine always returns:
+ *   - prose content (the answer body)
+ *   - sources (Tavily URLs as clickable citations)
+ *   - intent ("conversational" or "spatial")
+ *   - matchedPatterns (so the UI can show "why this was classified
+ *     this way")
+ */
+
+
+
 export async function POST(req: NextRequest) {
   const { userId } = await auth();
   if (!userId) {
     return NextResponse.json({ error: "Sign in to chat with Atlas" }, { status: 401 });
   }
+
+  // Day 19: self-healing migration. If the Thread/Message tables don't
+  // exist yet (David never ran pnpm migrate:thread), run the migration
+  // here so the first /api/chat POST after deploy doesn't 500.
+  await ensureChatSchema();
 
   let body: any;
   try {

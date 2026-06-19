@@ -6,13 +6,11 @@ import { useRouter } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 import { MODEL_INFO } from "@/lib/models/registry";
 import type { ModelInfo } from "@/lib/models/types";
-import { classifyIntent } from "@/lib/intent/classify";
 import { Sidebar } from "@/components/Sidebar";
 import { AppShell } from "@/components/AppShell";
 import { ThinkingLoader } from "@/components/ThinkingLoader";
 import { ChatGPTThinking } from "@/components/ChatGPTThinking";
 import { ModelIcon } from "@/components/ModelIcon";
-import { OutOfScopeModal, useOutOfScopeGate } from "@/components/OutOfScopeModal";
 import { VerticalMismatchModal, suggestVertical } from "@/components/VerticalMismatchModal";
 import { readPrefs, DEFAULT_PREFS, type AtlasPrefs } from "@/components/SettingsDrawer";
 
@@ -125,7 +123,6 @@ export default function HomePage() {
     suggested: string;
   } | null>(null);
   const modelButtonRef = useRef<HTMLButtonElement | null>(null);
-  const outOfScope = useOutOfScopeGate();
   const [customInputOpen, setCustomInputOpen] = useState<boolean>(false);
   const [customInputValue, setCustomInputValue] = useState<string>("");
   const [customError, setCustomError] = useState<string | null>(null);
@@ -275,64 +272,26 @@ export default function HomePage() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!question.trim()) return;
-
-    // Day 18 v3: Run the intent classifier BEFORE the out-of-scope
-    // gate. Conversational queries ("Which province has fastest-growing
-    // middle class?", "Why Lusaka for a stadium?", "What is Atlas?")
-    // have zero vertical keywords so the old out-of-scope gate was
-    // blocking them. Now: conversational queries ALWAYS go to the
-    // chat surface (Tavily + Gemini). Only spatial queries hit the
-    // out-of-scope gate.
-    const intent = classifyIntent(question.trim());
-    if (intent.primary === "conversational") {
-      await submitToChat();
-      return;
-    }
-
-    // Out-of-scope prompt gate. If the question doesn't look like a
-    // location intelligence question, show the modal and don't submit.
-    if (outOfScope.checkQuestion(question.trim())) {
-      return;
-    }
-
-    // Vertical mismatch gate. If the question clearly points to a
-    // different vertical than the one selected, show the warning
-    // modal and let the user decide. Custom verticals are user-defined
-    // so we skip the check for those.
-    if (!vertical.startsWith("custom:")) {
-      const suggested = suggestVertical(question.trim(), vertical);
-      if (suggested) {
-        setMismatchData({
-          question: question.trim(),
-          current: vertical,
-          suggested,
-        });
-        setMismatchOpen(true);
-        return;
-      }
-    }
-
-    setLoading(true);
-    setError(null);
-
-    await doSubmit();
+    // Day 19: ONE unified input box. Every question — whether
+    // "Where in Sandton for a restaurant" or "Which province has the
+    // fastest-growing middle class" — goes to /api/chat. Tavily +
+    // Gemini handle the prose answer behind the scenes. The user
+    // clicks "View data on map" at the end of the chat answer to
+    // trigger the spatial view (/api/ask + /result/[id]) if they
+    // want map + signals.
+    //
+    // No more out-of-scope gate. No more vertical mismatch gate.
+    // No more model picker for chat. Per David's call.
+    await submitToChat();
   }
 
-  // Extracted so the "Ask anyway" override on the vertical-mismatch
-  // modal can also call it after the user dismisses the warning.
-  //
-  // Optional `override` argument lets the caller pass fresh values
-  // that should be used INSTEAD of the closed-over state. This
-  // matters for the "Switch to {suggested}" one-click flow: when
-  // the user clicks Switch we update state, but the closure inside
-  // this same handler still has the OLD values. Passing the new
-  // values explicitly here avoids a stale-state submit and a
-  // potential auth race that we were seeing.
   /**
-   * Day 18 v3: chat submission helper. Always sends to /api/chat
+   * Day 19: chat submission helper. ALWAYS sends to /api/chat
    * (Tavily + Gemini). On success navigates to /chat/[threadId].
-   * On failure (e.g. Thread table doesn't exist yet), falls back
-   * to /api/ask so the user always sees SOMETHING.
+   * On failure (e.g. Thread table doesn't exist yet, or Tavily
+   * quota is hit), shows the error inline in the form so the user
+   * can retry or rephrase. NO fallback to /api/ask — the chat
+   * engine handles both spatial and conversational questions.
    */
   async function submitToChat() {
     setLoading(true);
@@ -348,17 +307,27 @@ export default function HomePage() {
         router.push(`/chat/${chatJson.threadId}`);
         return;
       }
-      console.warn("[/] chat handoff failed, falling back to spatial:", chatJson);
-      // Fall through to spatial /api/ask so the user still gets an answer.
-      await doSubmit();
+      const errMsg =
+        typeof chatJson?.error === "string"
+          ? chatJson.error
+          : `Chat failed (HTTP ${chatRes.status}). Try again or check /api/chat/diagnostic.`;
+      setError(errMsg);
+      console.warn("[/] chat failed:", chatJson);
     } catch (e) {
-      console.warn("[/] chat handoff threw, falling back to spatial:", e);
-      await doSubmit();
+      setError(e instanceof Error ? e.message : String(e));
+      console.warn("[/] chat threw:", e);
     } finally {
       setLoading(false);
     }
   }
 
+  // Legacy /api/ask submitter. Still used by the example-prompt buttons
+  // in the hero so users can see the spatial flow (map + signals) for
+  // a known-good spatial query. The main input box no longer routes
+  // through here — see submitToChat above.
+  //
+  // Optional `override` argument lets the caller pass fresh values
+  // that should be used INSTEAD of the closed-over state.
   async function doSubmit(override?: { vertical?: string; question?: string }) {
     const v = override?.vertical ?? vertical;
     const q = (override?.question ?? question).trim();
@@ -430,8 +399,6 @@ export default function HomePage() {
 
   return (
     <AppShell>
-      <outOfScope.Modal />
-
       {mismatchOpen && mismatchData && (
         <VerticalMismatchModal
           question={mismatchData.question}
@@ -561,20 +528,9 @@ export default function HomePage() {
                      - Spatial (existing form below): "where in X should I build Y"
                      - Chat (this link): "which province/city is best for X",
                        "why is X good for Y", or any conversational question.
-                     The classifier in lib/intent/classify.ts already routes
-                     between the two. */}
-                 <div className="mt-3 flex items-center justify-center gap-2 text-[11px]">
-                   <Link
-                     href="/chat/new"
-                     className="rounded-full border border-atlas-accent/40 bg-atlas-accent/10 px-3 py-1 font-medium text-atlas-accent hover:bg-atlas-accent/20"
-                   >
-                     Or ask in chat →
-                   </Link>
-                   <span className="text-atlas-muted">
-                     best for &quot;which city / which province / why X&quot;
-                   </span>
-                 </div>
-               </div>
+                      The classifier in lib/intent/classify.ts already routes
+                      between the two. */}
+                </div>
 
               <form onSubmit={onSubmit} className="w-full max-w-2xl">
                 {/* Vertical picker as a row of chips ABOVE the command bar */}
