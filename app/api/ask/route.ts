@@ -12,6 +12,7 @@ import type { ScoreBreakdown, ScoreFactor } from "@/lib/scoring/types";
 import { buildPlan } from "@/lib/plan/planner";
 import type { Plan } from "@/lib/plan/types";
 import { classifyIntent } from "@/lib/intent/classify";
+import { enrichSitesWithCatalog } from "@/lib/stub/enrich-sites";
 import { withTimeout } from "@/lib/util/timeout";
 import { sanitizeForJson } from "@/lib/util/json-sanitize";
 
@@ -568,7 +569,13 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
       try {
         const result = await callModel(activeModel);
         if (result.ok) {
-          rankedSites = result.sites;
+          // Day 21 v2: enrich AI-returned sites with REAL_SITE_CATALOG
+          // property data (corner stand, facing, price range, etc).
+          // The catalog has 25 SA sites with hand-curated data; the
+          // AI returns site names from its general knowledge. Matching
+          // by name/suburb bridges the two so the user always sees
+          // the property data on the result card.
+          rankedSites = enrichSitesWithCatalog(result.sites);
           raw = result.raw;
           // Day 12 v16: capture research answer + citations from
           // Gemini Search. Most models omit these.
@@ -610,7 +617,8 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
           pushAttempted(fallback.info.id);
           const fbResult = await callModel(fallback);
           if (fbResult.ok) {
-            rankedSites = fbResult.sites;
+            // Day 21 v2: enrich with REAL_SITE_CATALOG property data.
+            rankedSites = enrichSitesWithCatalog(fbResult.sites);
             raw = fbResult.raw;
             // v16: propagate research answer + citations from
             // any model that returned them.
