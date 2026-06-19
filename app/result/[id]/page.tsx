@@ -603,6 +603,20 @@ export default async function ResultPage({
                 lng: s.lng,
                 signals: s.signals,
                 scoreBreakdown: s.scoreBreakdown,
+                // Day 21: property-level data (passed through from
+                // REAL_SITE_CATALOG enrichment to the card UI).
+                suburb: (s as any).suburb,
+                cornerStand: (s as any).cornerStand,
+                facing: (s as any).facing,
+                plotSizeHectares: (s as any).plotSizeHectares,
+                priceRange: (s as any).priceRange,
+                zoning: (s as any).zoning,
+                titleType: (s as any).titleType,
+                arterial: (s as any).arterial,
+                nearestHighwayKm: (s as any).nearestHighwayKm,
+                competition: (s as any).competition,
+                medianIncome: (s as any).medianIncome,
+                dataProvenance: (s as any).dataProvenance,
               }))}
             />
           </section>
@@ -631,6 +645,18 @@ export default async function ResultPage({
                   lng: s.lng,
                   signals: s.signals,
                   scoreBreakdown: s.scoreBreakdown,
+                  suburb: (s as any).suburb,
+                  cornerStand: (s as any).cornerStand,
+                  facing: (s as any).facing,
+                  plotSizeHectares: (s as any).plotSizeHectares,
+                  priceRange: (s as any).priceRange,
+                  zoning: (s as any).zoning,
+                  titleType: (s as any).titleType,
+                  arterial: (s as any).arterial,
+                  nearestHighwayKm: (s as any).nearestHighwayKm,
+                  competition: (s as any).competition,
+                  medianIncome: (s as any).medianIncome,
+                  dataProvenance: (s as any).dataProvenance,
                 }}
                 fallbackLatLng={streetViewAnchor}
               />

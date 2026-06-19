@@ -61,6 +61,21 @@ type Site = {
   lng?: number;
   signals?: Signal[];
   scoreBreakdown?: ScoreBreakdown;
+  // Day 21: property-level details from REAL_SITE_CATALOG
+  // enrichment. All optional — only set for sites with hand-curated
+  // or live data. UI renders the data section only if any field is set.
+  suburb?: string;
+  cornerStand?: boolean;
+  facing?: "N" | "S" | "E" | "W" | "NE" | "NW" | "SE" | "SW";
+  plotSizeHectares?: number;
+  priceRange?: string;
+  zoning?: string;
+  titleType?: "freehold" | "leasehold";
+  arterial?: string;
+  nearestHighwayKm?: number;
+  competition?: string[];
+  medianIncome?: number;
+  dataProvenance?: string;
 };
 
 const SOURCE_LABEL: Record<string, string> = {
@@ -185,6 +200,97 @@ export function RankedSiteCard({
           <p className="ml-8 mt-1 font-mono text-[10px] text-atlas-muted">
             {site.lat.toFixed(4)}, {site.lng.toFixed(4)}
           </p>
+        )}
+
+        {/* Day 21: Property facts row + Competition. Only renders if the
+            site has hand-curated property data. The badges + plain-text
+            property row is what Perplexity-style real estate answers
+            look like (corner stand, facing, plot size, price range). */}
+        {(site.cornerStand != null ||
+          site.facing ||
+          site.plotSizeHectares != null ||
+          site.priceRange ||
+          site.zoning ||
+          site.titleType ||
+          site.arterial ||
+          site.nearestHighwayKm != null ||
+          (site.competition && site.competition.length > 0)) && (
+          <div className="ml-8 mt-2 space-y-1.5 text-[11px]">
+            <div className="flex flex-wrap items-center gap-1.5">
+              {site.cornerStand === true && (
+                <span
+                  className="rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-amber-300"
+                  title="Two street frontages — typically commands a 10-20% premium in SA"
+                >
+                  ⌐ Corner stand
+                </span>
+              )}
+              {site.facing && (
+                <span
+                  className="rounded border border-sky-500/30 bg-sky-500/10 px-1.5 py-0.5 text-sky-300"
+                  title={`Compass orientation — N-facing preferred in SA (sun + prevailing wind)`}
+                >
+                  ↑ {site.facing}-facing
+                </span>
+              )}
+              {site.titleType && (
+                <span className="rounded border border-atlas-border bg-atlas-surface2 px-1.5 py-0.5 text-atlas-text">
+                  {site.titleType}
+                </span>
+              )}
+              {site.zoning && (
+                <span className="rounded border border-atlas-border bg-atlas-surface2 px-1.5 py-0.5 text-atlas-text">
+                  {site.zoning}
+                </span>
+              )}
+              {site.plotSizeHectares != null && (
+                <span className="rounded border border-atlas-border bg-atlas-surface2 px-1.5 py-0.5 text-atlas-text">
+                  {site.plotSizeHectares >= 1
+                    ? `${site.plotSizeHectares} ha`
+                    : `${Math.round(site.plotSizeHectares * 10000)} m²`}
+                </span>
+              )}
+              {site.priceRange && (
+                <span className="rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 font-mono text-emerald-300">
+                  {site.priceRange}
+                </span>
+              )}
+              {site.medianIncome != null && (
+                <span
+                  className="rounded border border-atlas-border bg-atlas-surface2 px-1.5 py-0.5 text-atlas-muted"
+                  title="Median household income, Stats SA Census 2022"
+                >
+                  R {Math.round(site.medianIncome / 1000)}k/mo income
+                </span>
+              )}
+            </div>
+            {(site.arterial || site.nearestHighwayKm != null) && (
+              <p className="text-atlas-muted">
+                {site.arterial && (
+                  <>
+                    On <span className="text-atlas-text">{site.arterial}</span>
+                  </>
+                )}
+                {site.arterial && site.nearestHighwayKm != null && " · "}
+                {site.nearestHighwayKm != null && (
+                  <>
+                    {site.nearestHighwayKm} km to nearest highway
+                  </>
+                )}
+              </p>
+            )}
+            {site.competition && site.competition.length > 0 && (
+              <p className="text-atlas-muted">
+                <span className="text-atlas-text">Competition:</span>{" "}
+                {site.competition.join(" · ")}
+              </p>
+            )}
+            {site.dataProvenance && (
+              <p className="font-mono text-[10px] text-atlas-muted">
+                Sources: {site.dataProvenance}
+              </p>
+            )}
+          </div>
         )}
       </button>
 
