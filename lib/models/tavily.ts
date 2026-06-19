@@ -280,6 +280,7 @@ export const tavily: Model = {
     let modelAnswer: string | undefined;
     let extractionStatus = 'tavily_cited';
     let geminiSucceeded = false;
+    let geminiFailed = false;
 
     try {
       const result = await model.generateContent(buildSynthesisPrompt(req, tavily));
@@ -319,18 +320,35 @@ export const tavily: Model = {
             extractionStatus = geminiSucceeded ? 'tavily_plus_gemini' : 'gemini_returned_empty';
           }
         } catch (parseErr) {
-          console.warn('[tavily] Gemini returned non-JSON, falling back to catalog-match');
+          console.warn('[tavily] Gemini returned non-JSON, using Tavily answer directly');
         }
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      console.warn(`[tavily] Gemini synthesis failed (${msg}); falling back to catalog-match`);
+      // Day 19 v2: when Gemini quota fails (429), don't try catalog
+      // fallback (which produces fake-looking sites from general
+      // knowledge). Instead: use Tavily's own answer verbatim. The
+      // user gets a real Perplexity-style answer backed by real web
+      // sources, just without Gemini's structured site ranking.
+      // The "View data on map" button still works for the spatial
+      // view with the user's preferred model.
+      console.warn(`[tavily] Gemini synthesis failed (${msg}); using Tavily answer directly`);
+      geminiFailed = true;
+      modelAnswer = tavily.answer ??
+        `Tavily returned ${tavily.results.length} web sources for "${req.question}". See the citations below.`;
     }
 
-    // Day 17 v4 safety net: if Gemini returned 0 sites, use catalog-match.
-    if (sites.length === 0) {
+    // Day 17 v4 safety net: only fall back to catalog-match when
+    // Gemini returned 0 sites (parse worked but no ranked_sites
+    // array). When Gemini threw (quota etc), we already set
+    // modelAnswer above and we should NOT inject fake-looking
+    // catalog sites into the chat. The chat shows prose + sources
+    // only; the spatial view is a separate user action.
+    if (sites.length === 0 && !geminiFailed) {
       sites = buildCatalogFallbackSites(req, tavily);
       extractionStatus = 'catalog_fallback';
+    } else if (geminiFailed) {
+      extractionStatus = 'tavily_only_gemini_quota_exhausted';
     }
 
     return {
