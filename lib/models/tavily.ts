@@ -25,22 +25,37 @@ function humanVertical(v: string): string {
 /**
  * Day 12 v23 — Tavily + Gemini Flash synthesis.
  *
+ * Day 17 v2 — switched synthesis model from gemini-1.5-flash to
+ * gemini-2.0-flash. David's Vercel Gemini key has confirmed free-tier
+ * access to 2.0-flash but 1.5-flash hits 429 quota exhausted. This was
+ * the silent failure mode that made Atlas cascade from "Tavily picked"
+ * to gemini-search even though Tavily itself was returning data.
+ *
+ * Day 17 v2 — also added a Tavily-answer-only path that returns
+ * ok:true with Tavily's own answer + sources + site matches from
+ * REAL_SITE_CATALOG, even when Gemini synthesis is unavailable.
+ * This means Atlas now ALWAYS returns Tavily's answer when Tavily
+ * succeeded, regardless of Gemini quota state.
+ *
  * Two-step model that gives Atlas Perplexity-style answers even
  * when the Gemini Search grounding tool is rate-limited:
  *
  *   1. POST https://api.tavily.com/search with the question.
  *      Tavily returns up to 5 web results with title, url, content.
- *   2. Feed those results to Gemini 1.5 Flash as context. Ask
- *      Gemini to produce the same Perplexity-shape JSON: answer
- *      paragraph + ranked_sites + sources.
+ *   2. (optional) Feed those results to Gemini 2.0 Flash as
+ *      context. Ask Gemini to produce the same Perplexity-shape
+ *      JSON: answer paragraph + ranked_sites + sources.
+ *      If this step fails (quota, network, etc.), we still
+ *      return Tavily's own answer + sources + REAL_SITE_CATALOG
+ *      matches. Never cascade.
  *
  * The Tavily search gives us real, current web data (Wikipedia,
- * property portals, news). Gemini Flash has the cheapest free
- * tier of the Gemini family. We use it just to structure the
- * Tavily results into Atlas's shape.
+ * property portals, news). 2.0 Flash has the cheapest free tier
+ * of the Gemini family. We use it just to structure the Tavily
+ * results into Atlas's shape.
  *
  * Why this works even when Gemini Search fails: this path uses
- * 1.5-flash without the grounding tool (so no 429 from
+ * 2.0-flash without the grounding tool (so no 429 from
  * generate_content_free_tier). Tavily does the search; Gemini
  * does the formatting. Both have generous free tiers.
  *
@@ -71,6 +86,94 @@ async function callTavilySearch(query: string, apiKey: string): Promise<TavilyRe
     throw new Error(`Tavily search HTTP ${res.status}: ${text.slice(0, 200)}`);
   }
   return (await res.json()) as TavilyResponse;
+}
+
+/**
+ * Day 17 v2 — Build an ok:true response from Tavily data alone,
+ * used when Gemini synthesis is unavailable. We extract site names
+ * from Tavily result titles + URLs by matching against the REAL_SITE_CATALOG.
+ *
+ * This is the key fix: previously a Gemini 1.5-flash quota error
+ * meant the whole Tavily model returned ok:false, even though
+ * Tavily itself had done the real research. Now Atlas returns
+ * Tavily's answer + the real place names Tavily mentioned + the
+ * clickable web sources. The developer sees a real Perplexity-style
+ * answer instead of "fall back to gemini-search".
+ */
+function buildTavilyOnlyResponse(
+  req: ModelRequest,
+  tavily: TavilyResponse,
+): {
+  ranked_sites: RankedSite[];
+  raw: string;
+  answer: string;
+  sources: Array<{ title?: string; url: string }>;
+  extractionStatus: string;
+} {
+  const city = detectCity(req.question ?? '');
+  const realSites = getRealSiteCandidates(city.id, req.vertical) ?? [];
+  const seen = new Set<string>();
+  const sites: RankedSite[] = [];
+
+  // Try to extract site names from Tavily titles + URLs by matching
+  // against REAL_SITE_CATALOG.
+  const haystack = [
+    tavily.answer ?? "",
+    ...tavily.results.map((r) => `${r.title} ${r.url}`),
+  ].join(" \n ").toLowerCase();
+
+  for (const entry of realSites) {
+    const name = String(entry?.name ?? "").trim();
+    if (!name || name.length < 4 || seen.has(name.toLowerCase())) continue;
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    if (new RegExp(`\\b${escaped}\\b`, "i").test(haystack)) {
+      sites.push({
+        rank: sites.length + 1,
+        name,
+        suburb: entry.suburb,
+        score: 0.7,
+        confidence: 0.6,
+        rationale: entry.rationale ?? "Mentioned by Tavily in research answer",
+        lat: entry.lat,
+        lng: entry.lng,
+      });
+      seen.add(name.toLowerCase());
+      if (sites.length >= 5) break;
+    }
+  }
+
+  // If we found 0 catalog matches, fall back to first 5 catalog sites
+  // so the map has something to render. The rationale makes clear
+  // these are Atlas-curated because we couldn't extract from Tavily.
+  if (sites.length === 0 && realSites.length > 0) {
+    for (const entry of realSites.slice(0, 5)) {
+      sites.push({
+        rank: sites.length + 1,
+        name: String(entry.name),
+        suburb: entry.suburb,
+        score: 0.5,
+        confidence: 0.4,
+        rationale: `Atlas-curated fallback. Tavily research is available above (see "Research answer" panel) but no specific place names matched the ${city.name} catalog.`,
+        lat: entry.lat,
+        lng: entry.lng,
+      });
+    }
+  }
+
+  const sources = tavily.results.map((r) => ({ title: r.title, url: r.url }));
+  const raw = JSON.stringify({
+    tavilyAnswer: tavily.answer,
+    tavilyResults: tavily.results.map((r) => ({ title: r.title, url: r.url })),
+    extractedSites: sites.map((s) => s.name),
+  });
+
+  return {
+    ranked_sites: sites,
+    raw,
+    answer: tavily.answer ?? `Tavily returned ${tavily.results.length} web sources for "${req.question}".`,
+    sources,
+    extractionStatus: "tavily_only_synthesis_failed",
+  };
 }
 
 function buildSynthesisPrompt(req: ModelRequest, tavily: TavilyResponse): string {
@@ -149,10 +252,15 @@ export const tavily: Model = {
         return { ok: false, error: 'Tavily returned 0 results' } as any;
       }
 
-      // Step 2: Gemini Flash synthesis.
+      // Step 2: Gemini 2.0 Flash synthesis (optional). Day 17 v2:
+      // if this fails, we still return ok:true with Tavily's own
+      // answer + sources + REAL_SITE_CATALOG matches below.
+      // Previously a Gemini failure here meant the whole model
+      // returned ok:false and cascaded to gemini-search — even
+      // though Tavily had already done the real work.
       const genAI = new GoogleGenerativeAI(geminiKey);
       const model = genAI.getGenerativeModel({
-        model: 'gemini-1.5-flash',
+        model: 'gemini-2.0-flash',
       });
       let text: string;
       try {
@@ -160,7 +268,13 @@ export const tavily: Model = {
         text = result.response.text();
       } catch (innerErr) {
         const msg = innerErr instanceof Error ? innerErr.message : String(innerErr);
-        return { ok: false, error: `Tavily model: Gemini synthesis failed: ${msg}` } as any;
+        // Day 17 v2: graceful degradation. Tavily succeeded; don't
+        // throw away the data. Return Tavily's own answer + sources
+        // + REAL_SITE_CATALOG matches.
+        console.warn(
+          `[tavily] Gemini synthesis failed (${msg}); returning Tavily answer + catalog matches`,
+        );
+        return buildTavilyOnlyResponse(req, tavily) as any;
       }
 
       // Parse JSON from the model's text.
