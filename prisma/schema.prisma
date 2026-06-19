@@ -134,26 +134,26 @@ model WaitlistSignup {
   @@index([plan])
 }
 
-// Day 14: User table with plan + Stripe customer linkage.
+// Day 14: User table with plan + payment processor linkage.
 //
 // Why we need this: the Stripe webhook at /api/stripe/webhook
-// receives checkout.session.completed events. It needs a place
-// to write "this Clerk user is now a paying Pro/Team subscriber"
-// so the rest of the app can gate features by plan.
+// and PayFast ITN at /api/payfast/itn need a place to write
+// "this Clerk user is now a paying Pro/Team subscriber" so the
+// rest of the app can gate features by plan.
 //
 // We use the Clerk user ID as the primary key. When a user signs
 // up, Clerk's auth() returns userId; we upsert a User row with
-// that ID. The Stripe webhook receives a client_reference_id
-// (which we set to the Clerk user ID) and updates the row.
+// that ID. The Stripe/PayFast webhook receives a client_reference_id
+// (Stripe) or custom_str1 (PayFast) which is the Clerk user ID.
 //
 // Plan values: "free" (default), "pro" (R250/mo), "team"
 // (R2,500/mo). Future plan values go in the same enum (e.g.
 // "enterprise").
 //
-// stripeCustomerId + stripeSubscriptionId are the Stripe side
-// of the linkage. They let us call Stripe later (e.g. when
-// the user clicks "Cancel subscription" in their dashboard, we
-// need the subscription ID to cancel it).
+// stripeCustomerId + stripeSubscriptionId are the Stripe side of
+// the linkage. payfastPaymentId + payfastToken are the PayFast
+// side. Either set is sufficient — only one payment processor
+// is active at a time per user.
 model User {
   id                   String   @id  // Clerk user ID (string, not numeric)
   email                String   @unique
@@ -161,12 +161,15 @@ model User {
   // Stripe linkage
   stripeCustomerId     String?  @unique
   stripeSubscriptionId String?  @unique
-  // When the subscription was last updated by the Stripe webhook
-  // (checkout.session.completed, subscription.deleted, etc.)
+  // PayFast linkage
+  payfastPaymentId     String?  @unique
+  payfastToken         String?  @unique
+  payfastMPaymentId    String?  @unique
+  // When the subscription was last updated by either webhook
   planUpdatedAt        DateTime?
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 
   @@index([plan])
-  @@index([plan, updatedAt])
+  @@index([plan, planUpdatedAt])
 }

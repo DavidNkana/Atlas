@@ -221,17 +221,28 @@ function PricingCta({
     }
     setLoading(true);
     setError("");
+    // Try Stripe first (most popular in dev / international).
+    // Fall back to PayFast (SA-native, easier SA signup).
+    // Fall back to /waitlist if neither is configured.
     try {
-      const res = await fetch("/api/stripe/checkout", {
+      let res = await fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ plan: cta.plan }),
       });
+      // Stripe not configured → try PayFast
+      if (res.status === 503) {
+        res = await fetch("/api/payfast/checkout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ plan: cta.plan }),
+        });
+      }
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        // 503 = Stripe not configured yet. Fall back to waitlist.
         if (res.status === 503) {
-          router.push(`/waitlist?plan=${cta.plan}&reason=stripe-not-configured`);
+          // Neither Stripe nor PayFast configured → waitlist
+          router.push(`/waitlist?plan=${cta.plan}&reason=billing-not-configured`);
           return;
         }
         if (res.status === 401) {

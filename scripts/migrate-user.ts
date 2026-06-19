@@ -41,12 +41,37 @@ async function main() {
        "plan" TEXT NOT NULL DEFAULT 'free',
        "stripeCustomerId" TEXT UNIQUE,
        "stripeSubscriptionId" TEXT UNIQUE,
+       "payfastPaymentId" TEXT UNIQUE,
+       "payfastToken" TEXT,
+       "payfastMPaymentId" TEXT,
        "planUpdatedAt" TIMESTAMP(3),
        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
        "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
      )`,
   );
   console.log("  OK: User table created");
+
+  // Day 15: add the PayFast columns to existing User tables that
+  // were created without them (from the day 14 migration).
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "payfastPaymentId" TEXT`,
+  );
+  console.log("  OK: payfastPaymentId column ready");
+
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "payfastToken" TEXT`,
+  );
+  console.log("  OK: payfastToken column ready");
+
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "payfastMPaymentId" TEXT`,
+  );
+  console.log("  OK: payfastMPaymentId column ready");
+
+  await prisma.$executeRawUnsafe(
+    `CREATE UNIQUE INDEX IF NOT EXISTS "User_payfastPaymentId_key" ON "User"("payfastPaymentId") WHERE "payfastPaymentId" IS NOT NULL`,
+  );
+  console.log("  OK: payfastPaymentId unique index ready");
 
   await prisma.$executeRawUnsafe(
     `CREATE INDEX IF NOT EXISTS "User_plan_idx" ON "User"("plan")`,

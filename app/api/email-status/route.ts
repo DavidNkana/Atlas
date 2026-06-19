@@ -42,7 +42,20 @@ export async function GET() {
       note:
         stripeKey && pricePro && priceTeam && webhookSecret
           ? "Stripe is fully wired. Pro and Team Subscribe buttons will create real Checkout sessions."
-          : "Stripe is partially configured. Pricing page Subscribe buttons will fall back to /waitlist until STRIPE_SECRET_KEY, STRIPE_PRICE_PRO_MONTHLY, STRIPE_PRICE_TEAM_MONTHLY, and STRIPE_WEBHOOK_SECRET are all set.",
+          : "Stripe is NOT wired. Pricing buttons will fall back to PayFast → /waitlist. Recommended: PayFast (SA-native, signup with SA ID number, no business registration needed). Sign up at https://www.payfast.co.za — see .env.example.",
+    },
+    payfast: {
+      payfastConfigured: !!(
+        process.env.PAYFAST_MERCHANT_ID &&
+        process.env.PAYFAST_MERCHANT_KEY &&
+        process.env.PAYFAST_PASSPHRASE
+      ),
+      merchantIdPrefix: process.env.PAYFAST_MERCHANT_ID?.slice(0, 4) ?? null,
+      baseUrl: process.env.PAYFAST_BASE_URL ?? "https://www.payfast.co.za",
+      isSandbox: process.env.PAYFAST_BASE_URL?.includes("sandbox"),
+      note: process.env.PAYFAST_MERCHANT_ID
+        ? "PayFast is wired. Pricing buttons will create real recurring subscriptions."
+        : "PayFast NOT configured. Recommended for SA: sign up at https://www.payfast.co.za (use SA ID number, add bank account, copy merchant ID + key + passphrase into Vercel env). 30 min setup, 1-2 day bank verification.",
     },
   });
 }
