@@ -262,23 +262,38 @@ export const tavily: Model = {
         ...tavily.results.map((r) => `${r.title} ${r.url} ${r.content?.slice(0, 200) ?? ""}`),
       ].join(" \n ").toLowerCase();
 
+      // Day 17 v4: catalog-match against BOTH name and suburb so
+      // 'Woodlands' (which appears as a suburb label, not a primary
+      // name) gets matched.
       const seen = new Set<string>();
       const sites: RankedSite[] = [];
       for (const entry of realSites) {
         const name = String(entry?.name ?? "").trim();
+        const suburb = String(entry?.suburb ?? "").trim();
         if (!name || name.length < 4 || seen.has(name.toLowerCase())) continue;
-        const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        if (new RegExp(`\\b${escaped}\\b`, "i").test(haystack)) {
-          // Find which Tavily source mentioned this place.
-          const matchingSource = tavily.results.find((r) =>
-            new RegExp(`\\b${escaped}\\b`, "i").test(
-              `${r.title} ${r.url} ${r.content?.slice(0, 400) ?? ""}`,
-            ),
-          );
+        // Build candidate substrings to search for in the haystack.
+        const candidates = [name];
+        if (suburb && suburb.toLowerCase() !== name.toLowerCase() && suburb.length >= 4) {
+          candidates.push(suburb);
+        }
+        let matched = false;
+        let matchingSource: TavilyResult | undefined;
+        for (const candidate of candidates) {
+          const escaped = candidate.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          const re = new RegExp(`\\b${escaped}\\b`, "i");
+          if (re.test(haystack)) {
+            matched = true;
+            matchingSource = tavily.results.find((r) =>
+              re.test(`${r.title} ${r.url} ${r.content?.slice(0, 400) ?? ""}`),
+            );
+            break;
+          }
+        }
+        if (matched) {
           sites.push({
             rank: sites.length + 1,
             name,
-            suburb: entry.suburb,
+            suburb: suburb || undefined,
             score: 0.75,
             confidence: 0.7,
             rationale: matchingSource
@@ -290,6 +305,24 @@ export const tavily: Model = {
           seen.add(name.toLowerCase());
           if (sites.length >= 5) break;
         }
+      }
+
+      // Day 17 v4: city-centre fallback. If Tavily mentioned places
+      // but 0 matched the catalog (e.g. Ridgeway didn't exist in
+      // catalog until today), still plot the city centre so the map
+      // has SOMETHING to show — with a clear "research mentioned X,
+      // map pending" badge. Honest about the catalog gap.
+      if (sites.length === 0 && (tavily.answer ?? "").length > 0) {
+        sites.push({
+          rank: 1,
+          name: `${city.name} city centre`,
+          suburb: city.name,
+          score: 0.5,
+          confidence: 0.4,
+          rationale: `Tavily returned research for "${req.question}" but no specific place name matched the ${city.name} catalog. Map shows the city centre as a fallback. The Research Answer panel above names the actual sites Tavily found — see the web sources below for clickable citations.`,
+          lat: city.lat,
+          lng: city.lng,
+        });
       }
 
       // The honest answer: Tavily's prose + the clickable sources +

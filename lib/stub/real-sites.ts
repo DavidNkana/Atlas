@@ -2623,14 +2623,26 @@ export const REAL_SITE_CATALOG: Record<
         source: "OpenStreetMap + Kabulonga data",
       },
       {
-        name: "Roma / Chalala residential",
-        suburb: "Roma",
-        lat: -15.3920,
-        lng: 28.3100,
-        rationale:
-          "Established middle-income suburb, 10-50 unit infill developments, established schools, established market.",
-        source: "OpenStreetMap + Roma data",
-      },
+         name: "Roma / Chalala residential",
+         suburb: "Roma",
+         lat: -15.3920,
+         lng: 28.3100,
+         rationale:
+           "Established middle-income suburb, 10-50 unit infill developments, established schools, established market.",
+         source: "OpenStreetMap + Roma data",
+       },
+       {
+         // Day 17 v4: David confirmed Ridgeway is a real affluent
+         // Lusaka suburb that shows up in Tavily research answers.
+         // Added so the catalog-match regex finds it.
+         name: "Ridgeway residential estate belt",
+         suburb: "Ridgeway",
+         lat: -15.3850,
+         lng: 28.3050,
+         rationale:
+           "Affluent Ridgeway + Leopard's Hill fringe, established high-income residential market, 5-20 unit infill developments, embassy-adjacent premium catchment.",
+         source: "OpenStreetMap + Ridgeway data",
+       },
       {
         name: "Kafue peri-urban estate belt",
         suburb: "Kafue",
