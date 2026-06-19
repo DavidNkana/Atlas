@@ -172,4 +172,64 @@ model User {
 
   @@index([plan])
   @@index([plan, planUpdatedAt])
+  // Day 18: reverse relation so prisma includes threads + messages
+  // when fetching a user.
+  threads              Thread[]
+}
+
+// Day 18: Thread = a Perplexity-style chat conversation. Holds an
+// ordered list of Messages. One user can have many threads.
+//
+// A thread's first user message becomes its `title` (truncated to 80
+// chars) so the /dashboard list is scannable. The full chat history
+// lives in the messages relation, ordered by createdAt asc.
+model Thread {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  // Cached count of messages so the sidebar can render "12 messages"
+  // without an extra count query on every list render.
+  messageCount Int    @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages Message[]
+
+  @@index([userId, updatedAt])
+  @@index([userId, createdAt])
+}
+
+// Day 18: Message = one turn in a chat thread. Either a user prompt
+// or an assistant response. The assistant messages store the Tavily
+// + Gemini response: prose content, clickable sources, intent.
+//
+// When the user clicks 'View data' on an assistant message, the
+// spatial engine (/api/ask with selected model) runs on the same
+// question and stores the resulting questionId in
+// `spatialQuestionId`. The chat page renders this as a chip below
+// the message — click it to open /result/[spatialQuestionId].
+model Message {
+  id        String   @id @default(cuid())
+  threadId  String
+  role      String   // "user" | "assistant"
+  // User prompt OR assistant prose. For assistant messages this is
+  // the markdown-ish answer body from Tavily + Gemini.
+  content   String   @db.Text
+  // The user question that produced this message. Always set on
+  // user messages and on assistant messages that are replies to a
+  // user message. Used as the input to View Data.
+  question  String?
+  // Assistant-only: "spatial" or "conversational" intent classification.
+  intent    String?
+  // Assistant-only: array of {title, url} from Tavily. Stored as JSON.
+  sources   Json?
+  // Day 18: if the user clicked View Data on this assistant message,
+  // this is the questionId from /api/ask (the spatial view's row).
+  spatialQuestionId String?
+  // Day 18: which model produced the spatial view, if any.
+  spatialModel      String?
+  createdAt DateTime @default(now())
+  thread    Thread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@index([threadId, createdAt])
 }

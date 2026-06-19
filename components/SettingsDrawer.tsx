@@ -32,7 +32,7 @@ export type AtlasPrefs = {
 
 export const DEFAULT_PREFS: AtlasPrefs = {
   theme: "dark",
-  defaultModel: MODEL_INFO[0]?.id ?? "gemini-flash",
+  defaultModel: MODEL_INFO.filter((m) => m.id !== "tavily")[0]?.id ?? "gemini-flash",
   defaultVertical: "gas_station",
   showThinkingLoader: true,
 };
@@ -46,8 +46,11 @@ export function readPrefs(): AtlasPrefs {
     const merged: AtlasPrefs = { ...DEFAULT_PREFS, ...parsed };
     // If the stored defaultModel doesn't exist in the current registry,
     // fall back to the first registered model. This handles upgrades where
-    // a previous-version model id is no longer in MODEL_INFO.
-    const knownIds = new Set(MODEL_INFO.map((m) => m.id));
+    // Day 18: Tavily is the chat engine only, not user-selectable.
+    // Filter it out so a stale "tavily" preference doesn't survive.
+    const knownIds = new Set(
+      MODEL_INFO.filter((m) => m.id !== "tavily").map((m) => m.id),
+    );
     if (merged.defaultModel && !knownIds.has(merged.defaultModel)) {
       merged.defaultModel = DEFAULT_PREFS.defaultModel;
     }
@@ -164,7 +167,7 @@ export function SettingsDrawer({
             Default model
           </label>
           <div className="space-y-1">
-            {MODEL_INFO.map((info) => {
+            {MODEL_INFO.filter((m) => m.id !== "tavily").map((info) => {
               const isActive = prefs.defaultModel === info.id;
               return (
                 <button
