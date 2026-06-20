@@ -19,6 +19,10 @@ import {
 } from "@/lib/connectors/tavily-listings";
 
 export const dynamic = "force-dynamic";
+// Explicitly disable CDN caching so diagnostic output reflects
+// the latest code on every call.
+export const revalidate = 0;
+export const fetchCache = "force-no-store";
 
 export async function GET(req: NextRequest) {
   const t0 = Date.now();
@@ -110,5 +114,10 @@ export async function GET(req: NextRequest) {
   }
 
   diag.elapsedMs = Date.now() - t0;
-  return NextResponse.json(diag);
+  return NextResponse.json(diag, {
+    headers: {
+      "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+      "X-Atlas-Diag-Version": "v8-gridpage",
+    },
+  });
 }
