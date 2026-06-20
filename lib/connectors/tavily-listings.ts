@@ -332,6 +332,14 @@ export function parseListingFromExtract(
     /^On Show/i,
     /^Auctions? in/i,
     /^Repossessions? in/i,
+    /\.svg\?/i, // asset path fragments
+    /^\s*on_read_more/i,
+    /^\s*[a-z_]+\.svg$/i,
+    /^\[?(http|https):/i, // raw URLs
+    /^!\[/i, // markdown image syntax
+    /subject to .+ Terms/i,
+    /acebook\]/i, // markdown link fragments
+    /^\s*[\w-]+\s*$/i, // single-word lines (usually nav/junk)
   ];
   let title = "Property listing";
   for (const line of bodyLines.slice(0, 80)) {
