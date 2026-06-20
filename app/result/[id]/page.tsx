@@ -11,6 +11,7 @@ import { FeedbackWidget } from "@/components/FeedbackWidget";
 import { RankingChart } from "@/components/RankingChart";
 import { ListingsOverlay } from "@/components/ListingsOverlay";
 import { detectCity } from "@/lib/stub/detect";
+import { REAL_SITE_CATALOG } from "@/lib/stub/real-sites";
 import { SUBURB_PROFILES } from "@/lib/demographics/suburbs";
 
 /**
@@ -307,6 +308,45 @@ export default async function ResultPage({
     lat: p.lat,
     lng: p.lng,
   }));
+  // Day 22 v2: derive catalog listings from REAL_SITE_CATALOG for the
+  // detected city + vertical. Each entry becomes a yellow marker so
+  // every map has a baseline density of listings even with zero
+  // user-submitted Plots. Suburb color tint makes schools/healthcare/
+  // transit/roads/competitors visually distinguishable on the map.
+  // We cap at 25 per map to keep it readable.
+  const catalogListingsForMap: Array<{
+    name: string;
+    suburb?: string;
+    lat: number;
+    lng: number;
+    category: string;
+    priceRange?: string;
+    color: string;
+  }> = [];
+  if (detectedCity) {
+    const verticalKey = questionVertical || "residential_land";
+    const cityCatalog: any = (REAL_SITE_CATALOG as any)[detectedCity.id] ?? {};
+    const verticalEntries: any[] = cityCatalog[verticalKey] ?? [];
+    for (const entry of verticalEntries.slice(0, 25)) {
+      if (
+        typeof entry?.lat !== "number" ||
+        typeof entry?.lng !== "number"
+      ) {
+        continue;
+      }
+      catalogListingsForMap.push({
+        name: entry.name,
+        suburb: entry.suburb,
+        lat: entry.lat,
+        lng: entry.lng,
+        category: verticalKey,
+        priceRange: entry.priceRange,
+        // All catalog listings get the default yellow. Day 22 v3
+        // can tint by entry.competition presence etc.
+        color: "#eab308",
+      });
+    }
+  }
   const connectorsError = responseBody.connectorsError;
   const plan = responseBody.plan;
   // Day 6 — stub_demo banner surfaces the detected city + reason.
@@ -580,6 +620,7 @@ export default async function ResultPage({
           <ResultMapClient
             rankedSites={rankedSites}
             plots={plotsForMap}
+            catalogListings={catalogListingsForMap}
             status={responseStatus}
             city={stubCity}
             country={stubCountry}

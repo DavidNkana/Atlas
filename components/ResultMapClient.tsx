@@ -116,9 +116,32 @@ export interface PlotMarker {
   lng: number | null;
 }
 
+/**
+ * Day 22 v2: catalog-derived listing marker. Each REAL_SITE_CATALOG
+ * entry IS a known real estate listing (with verified place name,
+ * lat/lng, optional price range, optional competition list). Rendered
+ * as a yellow marker so every map shows a baseline density of listings
+ * even when no user-submitted Plots exist in the area.
+ */
+export interface CatalogListingMarker {
+  /** Display name e.g. "Constantia Upper / Belle Constantia estate belt" */
+  name: string;
+  suburb?: string;
+  lat: number;
+  lng: number;
+  /** Short label for the popup, e.g. "12 schools within 2km" */
+  category: string;
+  /** Optional price range from catalog */
+  priceRange?: string;
+  /** Color by category: schools=#3b82f6, healthcare=#10b981, transit=#f59e0b,
+   *  roads=#8b5cf6, competitors=#ef4444, listings=#eab308, etc. */
+  color: string;
+}
+
 export default function ResultMapClient({
   rankedSites,
   plots = [],
+  catalogListings = [],
   status,
   city,
   country,
@@ -126,6 +149,12 @@ export default function ResultMapClient({
 }: {
   rankedSites: RankedSite[];
   plots?: PlotMarker[];
+  /**
+   * Day 22 v2: catalog-derived listings. Each REAL_SITE_CATALOG entry
+   * becomes a yellow marker so every map has a baseline density.
+   * The result page derives these from the catalog at request time.
+   */
+  catalogListings?: CatalogListingMarker[];
   status?: string;
   city?: string;
   country?: string;
@@ -189,11 +218,54 @@ export default function ResultMapClient({
           )} &middot; Confidence ${site.confidence.toFixed(2)}</small>`;
         const marker = new mapboxgl.Marker({ color: "#6366f1" })
           .setLngLat(lngLat)
-          .setPopup(new mapboxgl.Popup({ offset: 18 }).setHTML(popupHtml))
-          .addTo(map);
+           .setPopup(new mapboxgl.Popup({ offset: 18 }).setHTML(popupHtml))
+           .addTo(map);
         markersRef.current.push(marker);
         bounds.extend(lngLat);
         placed += 1;
+      }
+
+      // Day 22 v2: catalog-derived listings. Each REAL_SITE_CATALOG
+      // entry becomes a yellow marker. This gives every map a
+      // baseline density of listings even when no user-submitted
+      // Plots exist in the area. Each marker uses a small custom
+      // HTML element so we control exact color + size per category.
+      // Color scheme:
+      //   - #eab308 yellow = listings (always default)
+      //   - the marker.color field overrides if a category-specific
+      //     hue is wanted (schools blue, healthcare green, etc).
+      let catalogPlaced = 0;
+      for (const listing of catalogListings) {
+        const lngLat: [number, number] = [listing.lng, listing.lat];
+        const el = document.createElement("div");
+        el.style.width = "10px";
+        el.style.height = "10px";
+        el.style.borderRadius = "50%";
+        el.style.background = listing.color || "#eab308";
+        el.style.border = "1.5px solid #1c1917";
+        el.style.boxShadow = "0 1px 3px rgba(0,0,0,0.5)";
+        el.style.cursor = "pointer";
+        el.title = `${listing.name}${listing.priceRange ? " · " + listing.priceRange : ""}`;
+        const popupHtml =
+          `<h3 style="margin:0 0 4px;font-size:13px;font-weight:600;color:#eab308;">${escapeHtml(
+            listing.name,
+          )}</h3>` +
+          `<p style="margin:0 0 2px;font-size:11px;color:#a1a1aa;">${escapeHtml(
+            listing.suburb ?? "",
+          )}</p>` +
+          (listing.priceRange
+            ? `<p style="margin:0 0 4px;font-size:12px;font-weight:600;color:#fafafa;">${escapeHtml(
+                listing.priceRange,
+              )}</p>`
+            : "") +
+          `<small style="font-size:10px;color:#71717a;">Atlas catalog listing</small>`;
+        const marker = new mapboxgl.Marker({ element: el })
+          .setLngLat(lngLat)
+          .setPopup(new mapboxgl.Popup({ offset: 10 }).setHTML(popupHtml))
+          .addTo(map);
+        markersRef.current.push(marker);
+        bounds.extend(lngLat);
+        catalogPlaced += 1;
       }
 
       // Day 10+ Path 4: user-added listings. Day 22 update: now YELLOW
@@ -271,7 +343,7 @@ export default function ResultMapClient({
       map.remove();
       mapRef.current = null;
     };
-  }, [rankedSites, plots]);
+  }, [rankedSites, plots, catalogListings]);
 
   function flyToSite(site: RankedSite) {
     const map = mapRef.current;
