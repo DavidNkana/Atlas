@@ -69,8 +69,10 @@ export async function GET(req: NextRequest) {
     {
       stage: "build_queries",
       ok: true,
-      property24Query: queries.property24Query,
-      privatePropertyQuery: queries.privatePropertyQuery,
+      queries: queries.queries.map((q) => ({
+        portal: q.portal,
+        query: q.query,
+      })),
     },
   ];
 

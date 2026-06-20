@@ -32,7 +32,7 @@ export interface LiveListing {
   id: string;
   suburb: string | null;
   city: string;
-  portal: "property24" | "privateproperty";
+  portal: SaPortalId;
   url: string;
   price: string | null;
   priceAmount: number | null; // numeric for sorting, ZAR
@@ -86,40 +86,107 @@ const VERTICAL_KEYWORDS: Record<string, string[]> = {
   civic_land: ["school", "clinic", "civic", "institutional", "place of worship"],
 };
 
-const PORTAL_DOMAINS = {
-  property24: "property24.com",
-  privateproperty: "privateproperty.co.za",
-} as const;
+/**
+ * Day 22 v6 — South African property portals indexed by Tavily.
+ *
+ * Verified 2026-06-20: each portal returns real listing URLs
+ * for a vacant-land query. PropertyFinder SA returns 0 — their
+ * site blocks Google/Tavily indexing — so we exclude it.
+ *
+ * Each entry: { domain, label, vacantLandPath }
+ *   vacantLandPath is the URL slug for vacant-land searches
+ *   (e.g. /vacant-land-for-sale/sandton/...). Used to build
+ *   portal-specific URLs when the user wants land only.
+ */
+export const SA_PORTALS = [
+  {
+    id: "property24",
+    label: "Property24",
+    domain: "property24.com",
+    vacantLandPath: "vacant-land-for-sale",
+    salePath: "for-sale",
+  },
+  {
+    id: "privateproperty",
+    label: "Private Property",
+    domain: "privateproperty.co.za",
+    vacantLandPath: "land-for-sale",
+    salePath: "for-sale",
+  },
+  {
+    id: "gumtree",
+    label: "Gumtree SA",
+    domain: "gumtree.co.za",
+    vacantLandPath: "land-plots-for-sale",
+    salePath: "for-sale",
+  },
+  {
+    id: "bidx1",
+    label: "BidX1 Auctions",
+    domain: "bidx1.com",
+    vacantLandPath: "property-for-auction",
+    salePath: "property-for-auction",
+  },
+  {
+    id: "pamgolding",
+    label: "Pam Golding",
+    domain: "pamgolding.co.za",
+    vacantLandPath: "vacant-land-properties-for-sale",
+    salePath: "properties-for-sale",
+  },
+  {
+    id: "seeff",
+    label: "Seeff",
+    domain: "seeff.com",
+    vacantLandPath: "vacant-land",
+    salePath: "for-sale",
+  },
+  {
+    id: "chaseveritt",
+    label: "Chas Everitt",
+    domain: "chaseveritt.co.za",
+    vacantLandPath: "vacant-land",
+    salePath: "for-sale",
+  },
+] as const;
+
+export type SaPortalId = (typeof SA_PORTALS)[number]["id"];
 
 /**
- * Day 22 — Build a portal-aware search query.
- * Includes the vertical keywords + city + optional price/erf hints.
+ * Day 22 v6 — Build portal-aware search queries for ALL indexed
+ * SA portals. Returns one query per portal (currently 6 indexed
+ * by Tavily). Vertical keywords + city + optional price/erf.
+ *
+ * Vacant-land verticals (gas_station, warehouse, commercial,
+ * industrial, civic) include "vacant land" as a secondary keyword
+ * so portals return their vacant-land grid pages instead of houses.
  */
 export function buildListingsQuery(opts: ListingsFetchOptions): {
-  property24Query: string;
-  privatePropertyQuery: string;
+  queries: Array<{ portal: SaPortalId; query: string; label: string }>;
 } {
-  const verticalKw = (VERTICAL_KEYWORDS[opts.vertical] ?? ["property"])[0];
+  const verticalKws = VERTICAL_KEYWORDS[opts.vertical] ?? ["property"];
+  const primaryKw = verticalKws[0];
+  const landVerticals = ["gas_station", "warehouse", "commercial_land", "industrial_land", "civic_land"];
+  const wantLand = landVerticals.includes(opts.vertical);
+  const secondaryKw = wantLand ? "vacant land" : verticalKws[1] ?? primaryKw;
+
   const city = opts.city.name;
-  const locationParts = opts.suburb
-    ? `${opts.suburb} ${city}`
-    : city;
+  const locationParts = opts.suburb ? `${opts.suburb} ${city}` : city;
 
-  let hint = "";
-  if (opts.priceBand) {
-    hint += ` ${opts.priceBand}`;
-  }
-  if (opts.plotSizeHectares) {
-    // Convert ha → m² for portal search syntax (Property24 uses m²)
+  let sizeHint = "";
+  if (opts.plotSizeHectares && opts.plotSizeHectares >= 0.1) {
     const m2 = Math.round(opts.plotSizeHectares * 10_000);
-    hint += ` erf ${m2.toLocaleString()} m²`;
+    sizeHint = ` erf ${m2.toLocaleString()} m2`;
   }
 
-  const base = `${verticalKw} ${locationParts}${hint}`.trim();
+  const base = `${primaryKw} ${secondaryKw} ${locationParts}${sizeHint}`.trim();
 
   return {
-    property24Query: `site:${PORTAL_DOMAINS.property24} ${base} for sale`,
-    privatePropertyQuery: `site:${PORTAL_DOMAINS.privateproperty} ${base} for sale`,
+    queries: SA_PORTALS.map((p) => ({
+      portal: p.id,
+      query: `site:${p.domain} ${base}`.trim(),
+      label: p.label,
+    })),
   };
 }
 
@@ -184,7 +251,7 @@ export function parseErfSize(text: string | null | undefined): {
 export function parseListingFromExtract(
   url: string,
   raw: string,
-  portal: "property24" | "privateproperty",
+  portal: SaPortalId,
   cityName: string,
 ): LiveListing | null {
   if (!raw || raw.length < 50) return null;
@@ -338,6 +405,23 @@ function escapeRegExp(s: string): string {
 }
 
 /** Stable hash for an ID — no need for crypto. */
+/**
+ * Fallback: detect portal from URL when _portal hint is missing
+ * (e.g. Tavily redirects a URL across domains).
+ */
+function inferPortalFromUrl(url: string): SaPortalId {
+  const lower = url.toLowerCase();
+  if (lower.includes("property24.com")) return "property24";
+  if (lower.includes("privateproperty.co.za")) return "privateproperty";
+  if (lower.includes("gumtree.co.za")) return "gumtree";
+  if (lower.includes("bidx1.com")) return "bidx1";
+  if (lower.includes("pamgolding.co.za")) return "pamgolding";
+  if (lower.includes("seeff.com")) return "seeff";
+  if (lower.includes("chaseveritt.co.za")) return "chaseveritt";
+  // Unknown — label as property24 as fallback (most common)
+  return "property24";
+}
+
 function hashUrl(url: string): string {
   let h = 0;
   for (let i = 0; i < url.length; i++) {
@@ -467,14 +551,29 @@ export async function fetchLiveListings(
   const queries = buildListingsQuery(opts);
 
   try {
-    // Step 1: parallel search across both portals (~5 credits each,
-    // so 10 total — but cap is 10 for the whole query)
-    const [p24Hits, ppHits] = await Promise.all([
-      tavilySearch(queries.property24Query, 3, apiKey).catch(() => []),
-      tavilySearch(queries.privatePropertyQuery, 3, apiKey).catch(() => []),
-    ]);
+    // Step 1: parallel search across ALL SA portals indexed by
+    // Tavily (6 currently). Property24, Private Property, Gumtree
+    // SA, BidX1, Pam Golding, Seeff. Each search ~3 credits on
+    // free tier — capped per query by opts.creditBudget.
+    //
+    // We only run a subset if creditBudget is tight. Otherwise
+    // we run all portals in parallel.
+    const queriesToRun = opts.creditBudget && opts.creditBudget < queries.queries.length * 2
+      ? queries.queries.slice(0, Math.max(2, Math.floor(opts.creditBudget / 2)))
+      : queries.queries;
 
-    const allHits = [...p24Hits, ...ppHits];
+    const portalResults = await Promise.allSettled(
+      queriesToRun.map((q) =>
+        tavilySearch(q.query, 2, apiKey).then((hits) =>
+          hits.map((h) => ({ ...h, _portal: q.portal })),
+        ),
+      ),
+    );
+
+    const allHits: Array<TavilySearchHit & { _portal: SaPortalId }> = [];
+    for (const r of portalResults) {
+      if (r.status === "fulfilled") allHits.push(...r.value);
+    }
     if (allHits.length === 0) return [];
 
     // Day 22 v5: filter out editorial/article URLs. Property24's
@@ -488,9 +587,16 @@ export async function fetchLiveListings(
       /\/to-rent\//i,
       /\/commercial-property-for-sale\//i,
       /\/commercial-property-to-rent\//i,
+      /\/vacant-land-for-sale\//i,
+      /\/land-for-sale\//i,
+      /\/land-plots-for-sale\//i,
+      /\/properties-for-sale\//i,
       /\/for-sale\/\d/i, // numeric listing ID
       /\/listing\//i,
       /\/property\/\d/i,
+      /\/property-search\//i,
+      /\/auction\//i,
+      /\/results\//i,
     ];
     const filteredHits = allHits.filter((h) => {
       // Reject explicit editorial URLs
@@ -510,13 +616,17 @@ export async function fetchLiveListings(
     const urlsToExtract = hitsToUse.slice(0, maxListings).map((h) => h.url);
     const extracted = await tavilyExtract(urlsToExtract, apiKey).catch(() => []);
 
-    // Step 3: parse each extracted page
+    // Step 3: parse each extracted page. Map URL back to its
+    // originating portal via the _portal hint we attached earlier.
+    const urlToPortal = new Map<string, SaPortalId>();
+    for (const h of hitsToUse) {
+      if (h._portal) urlToPortal.set(h.url, h._portal);
+    }
+
     const listings: LiveListing[] = [];
     for (let i = 0; i < extracted.length; i++) {
       const ex = extracted[i];
-      const portal = ex.url.includes("property24.com")
-        ? "property24"
-        : "privateproperty";
+      const portal = urlToPortal.get(ex.url) ?? inferPortalFromUrl(ex.url);
       const parsed = parseListingFromExtract(ex.url, ex.raw_content, portal, opts.city.name);
       if (parsed) listings.push(redactAgentInfo(parsed));
     }

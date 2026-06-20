@@ -76,13 +76,13 @@ type Site = {
   competition?: string[];
   medianIncome?: number;
   dataProvenance?: string;
-  // Day 22: live per-listing data from Property24 + Private Property
-  // via Tavily. Max 3 per site (free-tier cap). UI renders as
+  // Day 22: live per-listing data from SA property portals via
+  // Tavily. Max 3 per site (free-tier cap). UI renders as
   // "Live listings" section in the expanded card.
   liveListings?: Array<{
     id: string;
     suburb: string | null;
-    portal: "property24" | "privateproperty";
+    portal: "property24" | "privateproperty" | "gumtree" | "bidx1" | "pamgolding" | "seeff" | "chaseveritt";
     url: string;
     price: string | null;
     erfSize: string | null;
@@ -94,6 +94,27 @@ type Site = {
     snippet: string;
     matchTier: 1 | 2 | 3;
   }>;
+};
+
+// Portal branding for the live-listings badge.
+// Each portal gets a distinct hue so users can spot them at a glance.
+const PORTAL_LABEL: Record<string, string> = {
+  property24: "Property24",
+  privateproperty: "Private Property",
+  gumtree: "Gumtree",
+  bidx1: "BidX1",
+  pamgolding: "Pam Golding",
+  seeff: "Seeff",
+  chaseveritt: "Chas Everitt",
+};
+const PORTAL_BADGE: Record<string, string> = {
+  property24: "bg-blue-500/15 text-blue-300",
+  privateproperty: "bg-purple-500/15 text-purple-300",
+  gumtree: "bg-emerald-500/15 text-emerald-300",
+  bidx1: "bg-amber-500/15 text-amber-300",
+  pamgolding: "bg-rose-500/15 text-rose-300",
+  seeff: "bg-cyan-500/15 text-cyan-300",
+  chaseveritt: "bg-indigo-500/15 text-indigo-300",
 };
 
 const SOURCE_LABEL: Record<string, string> = {
@@ -327,13 +348,9 @@ export function RankedSiteCard({
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <span
-                            className={`inline-block rounded-sm px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${
-                              l.portal === "property24"
-                                ? "bg-blue-500/15 text-blue-300"
-                                : "bg-purple-500/15 text-purple-300"
-                            }`}
+                            className={`inline-block rounded-sm px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${PORTAL_BADGE[l.portal] ?? "bg-zinc-500/15 text-zinc-300"}`}
                           >
-                            {l.portal === "property24" ? "Property24" : "Private Property"}
+                            {PORTAL_LABEL[l.portal] ?? l.portal}
                           </span>
                           {l.matchTier === 1 && (
                             <span className="font-mono text-[9px] text-emerald-400">exact</span>
