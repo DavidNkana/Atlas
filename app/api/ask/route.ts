@@ -865,23 +865,39 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   // Day 22: fire Tavily live-listings search in parallel with Step B's
   // signal connectors. Same 12s budget cap. If Tavily fails or returns
   // nothing, the UI gets a non-fatal badge — never blocks the response.
+  //
+  // Suburb source priority:
+  //   1. site.suburb (some models populate this)
+  //   2. site.name — split on "," and take the first segment
+  //      (e.g. "Sandton CBD, Johannesburg" → "Sandton CBD")
+  //   3. detectCity(question).name — city-only fallback
   try {
+    const location = deriveLocation(rankedSites);
+    const cityName = (location as any)?.name ?? null;
     // Build per-site price/erf hints from enriched sites (so the query
     // matches what the developer asked for, not generic suburb terms).
     const hints = rankedSites
-      .filter((s) => Boolean((s as any).suburb))
-      .slice(0, 3)
       .map((s) => {
+        const explicitSuburb = ((s as any).suburb as string | undefined) ?? null;
+        const nameField = (s.name ?? "").trim();
+        // Extract suburb from name like "Constantia, Cape Town" → "Constantia"
+        const nameSuburb =
+          nameField.includes(",") ? nameField.split(",")[0].trim() : nameField || null;
+        const suburb = explicitSuburb || nameSuburb || null;
+        if (!suburb && !cityName) return null;
         const payload = ((s as any).payload ?? {}) as {
           priceBand?: string;
           plotSizeHectares?: number;
         };
         return {
-          suburb: ((s as any).suburb ?? null) as string | null,
+          suburb,
+          cityName: cityName || "",
           priceBand: payload.priceBand ?? null,
           plotSizeHectares: payload.plotSizeHectares ?? null,
         };
-      });
+      })
+      .filter((h): h is NonNullable<typeof h> => h !== null)
+      .slice(0, 3);
 
     // Run one search per hint (max 3) — gives Perplexity-style depth
     // (per-suburb) without blowing the free-tier budget.
@@ -889,7 +905,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
       hints.map((h) =>
         withTimeout(
           fetchLiveListings({
-            city: deriveLocation(rankedSites) as any,
+            city: { id: "", name: h.cityName, country: "" },
             suburb: h.suburb,
             vertical: effectiveVertical,
             priceBand: h.priceBand,
@@ -925,7 +941,13 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   // here we attach at site level using the AI-returned suburb.
   if (allLiveListings.length > 0) {
     for (const site of rankedSites) {
-      const siteSuburb = ((site as any).suburb ?? "").toLowerCase().trim();
+      // Build site search key from suburb OR name field (split on ",")
+      const explicitSuburb = ((site as any).suburb ?? "").toString().toLowerCase().trim();
+      const nameField = (site.name ?? "").toString().toLowerCase().trim();
+      const nameSuburb = nameField.includes(",")
+        ? nameField.split(",")[0].trim()
+        : nameField;
+      const siteSuburb = explicitSuburb || nameSuburb;
       if (!siteSuburb) continue;
       const matched = allLiveListings.filter((l) => {
         const listingSuburb = (l.suburb ?? "").toLowerCase().trim();
