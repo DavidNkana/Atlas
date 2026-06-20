@@ -196,11 +196,13 @@ export default function ResultMapClient({
         placed += 1;
       }
 
-      // Day 10+ Path 4: user-added listings. These show as GREEN
-      // markers (vs. indigo for AI recommendations) so the
-      // developer can visually distinguish "Atlas's recommendation"
-      // from "actual plot I can buy". We also auto-fit bounds to
-      // include plot markers.
+      // Day 10+ Path 4: user-added listings. Day 22 update: now YELLOW
+      // markers (vs. indigo for AI recommendations) so the developer
+      // can visually distinguish "Atlas's recommendation" (big indigo)
+      // from "actual plot I can buy" (smaller yellow). Custom HTML
+      // element gives us precise control over size + color (Mapbox's
+      // built-in Marker has only one size knob and yellow isn't a
+      // named color). We also auto-fit bounds to include plot markers.
       for (const plot of plots) {
         if (
           typeof plot.lat !== "number" ||
@@ -221,18 +223,31 @@ export default function ResultMapClient({
           ? escapeHtml(plot.agentName)
           : "Agent not listed";
         const linkStr = plot.sourceUrl
-          ? `<a href="${escapeHtml(plot.sourceUrl)}" target="_blank" rel="noopener" style="color:#10b981;text-decoration:underline;display:inline-block;margin-top:4px;">View listing →</a>`
+          ? `<a href="${escapeHtml(plot.sourceUrl)}" target="_blank" rel="noopener" style="color:#eab308;text-decoration:underline;display:inline-block;margin-top:4px;">View listing →</a>`
           : "";
         const popupHtml =
-          `<h3 style=\"margin:0 0 4px;font-size:14px;font-weight:600;color:#10b981;\">${escapeHtml(
+          `<h3 style=\"margin:0 0 4px;font-size:14px;font-weight:600;color:#eab308;\">${escapeHtml(
             plot.suburb
           )}</h3>` +
           `<p style=\"margin:0 0 4px;font-size:13px;font-weight:600;color:#fafafa;\">${priceStr} &middot; ${sizeStr}</p>` +
           `<p style=\"margin:0 0 4px;font-size:12px;color:#e4e4e7;\">${agentStr}</p>` +
           linkStr;
-        const marker = new mapboxgl.Marker({ color: "#10b981" })
+        // Day 22: smaller yellow circle marker for listings.
+        // Custom HTML element so we control size (12px diameter) +
+        // yellow fill + black stroke for contrast against the indigo
+        // AI-recommendation markers.
+        const el = document.createElement("div");
+        el.style.width = "12px";
+        el.style.height = "12px";
+        el.style.borderRadius = "50%";
+        el.style.background = "#eab308"; // atlas yellow
+        el.style.border = "2px solid #1c1917"; // dark stroke for contrast
+        el.style.boxShadow = "0 1px 4px rgba(0,0,0,0.5)";
+        el.style.cursor = "pointer";
+        el.title = `${plot.suburb} · ${priceStr}`;
+        const marker = new mapboxgl.Marker({ element: el })
           .setLngLat(lngLat)
-          .setPopup(new mapboxgl.Popup({ offset: 18 }).setHTML(popupHtml))
+          .setPopup(new mapboxgl.Popup({ offset: 12 }).setHTML(popupHtml))
           .addTo(map);
         markersRef.current.push(marker);
         bounds.extend(lngLat);
