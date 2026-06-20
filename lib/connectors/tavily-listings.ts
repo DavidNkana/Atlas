@@ -477,8 +477,37 @@ export async function fetchLiveListings(
     const allHits = [...p24Hits, ...ppHits];
     if (allHits.length === 0) return [];
 
+    // Day 22 v5: filter out editorial/article URLs. Property24's
+    // /articles/* paths are blog content (e.g. "where to buy
+    // property near top schools") — they don't have listings.
+    // Same for /news/* / /advice/* on most portals. Only keep
+    // URLs that look like actual listing detail or search result
+    // pages (have erf ID digits or /for-sale/ /to-rent/ in path).
+    const LISTING_URL_HINTS = [
+      /\/for-sale\//i,
+      /\/to-rent\//i,
+      /\/commercial-property-for-sale\//i,
+      /\/commercial-property-to-rent\//i,
+      /\/for-sale\/\d/i, // numeric listing ID
+      /\/listing\//i,
+      /\/property\/\d/i,
+    ];
+    const filteredHits = allHits.filter((h) => {
+      // Reject explicit editorial URLs
+      if (/\/articles?\//i.test(h.url)) return false;
+      if (/\/news\//i.test(h.url)) return false;
+      if (/\/advice\//i.test(h.url)) return false;
+      if (/\/editorial\//i.test(h.url)) return false;
+      // Accept if it has a listing-path hint
+      return LISTING_URL_HINTS.some((re) => re.test(h.url));
+    });
+    // If filter rejected everything, fall back to unfiltered list
+    // (better to show editorial pages than show nothing — David can
+    // still see real Property24 content even if it's an article).
+    const hitsToUse = filteredHits.length > 0 ? filteredHits : allHits;
+
     // Step 2: extract up to 3 URLs (1 credit each on free tier)
-    const urlsToExtract = allHits.slice(0, maxListings).map((h) => h.url);
+    const urlsToExtract = hitsToUse.slice(0, maxListings).map((h) => h.url);
     const extracted = await tavilyExtract(urlsToExtract, apiKey).catch(() => []);
 
     // Step 3: parse each extracted page
