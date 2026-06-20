@@ -190,37 +190,129 @@ export function parseListingFromExtract(
   if (!raw || raw.length < 50) return null;
 
   const id = `${portal}-${hashUrl(url)}`;
-  const titleMatch = raw.match(/^(?:#\s+|Title:\s*)?(.+?)(?:\n|$)/m);
-  const title = titleMatch ? titleMatch[1].trim().slice(0, 120) : "Property listing";
 
-  // Price — first R-amount in the document
-  const priceMatch = raw.match(/R\s*[\d,.]+\s*[MK]?\b/i);
-  const priceText = priceMatch ? priceMatch[0] : null;
-  const priceAmount = parsePrice(priceText);
+  // Day 22 v4: skip past the boilerplate. Property24/PrivateProperty
+  // pages render a header + cookie warning + nav menu BEFORE listing
+  // cards. Cut everything before the first real listing marker:
+  //   - Property24 starts listings after "Property for sale in" /
+  //     "Properties for sale in" / "Listed by"
+  //   - PrivateProperty starts after "Property details for" / "Properties"
+  // We find the EARLIEST such marker and parse from there.
+  const LISTING_MARKERS = [
+    /Properties for sale in\s+/i,
+    /Property for sale in\s+/i,
+    /Listed by\s+/i,
+    /Property details for\s+/i,
+    /\bListings\b.*\bfor sale\b/i,
+    /\d+\s+results?\s+found/i,
+    /R\s*[\d,]{6,}/i, // any 6-digit+ rand amount (real listing price)
+  ];
+  let cutIndex = 0;
+  for (const marker of LISTING_MARKERS) {
+    const m = raw.match(marker);
+    if (m && typeof m.index === "number") {
+      // back up a bit so we don't lose the first line of context
+      cutIndex = Math.max(cutIndex, m.index - 60);
+    }
+  }
+  // Skip the boilerplate section
+  const body = raw.slice(cutIndex);
 
-  // Erf size — first ha or m² match
+  // Price: find ALL R-amounts and pick the largest 6-digit+ one.
+  // Banner text like "R 1 " from "Please note that you are using an
+  // outdated browser..." has <6 digits — those are noise.
+  const priceCandidates: Array<{ text: string; amount: number }> = [];
+  const priceRegex = /R\s*([\d,]+(?:\.\d+)?)\s*([MKk])?\b/g;
+  let pm: RegExpExecArray | null;
+  while ((pm = priceRegex.exec(body)) !== null) {
+    const raw_n = pm[1].replace(/,/g, "");
+    const num = parseFloat(raw_n);
+    if (isNaN(num)) continue;
+    let amount = num;
+    if (pm[2]) {
+      const suffix = pm[2].toUpperCase();
+      if (suffix === "M") amount = num * 1_000_000;
+      else if (suffix === "K") amount = num * 1_000;
+    }
+    // Only accept realistic SA property prices: 100k to 500M
+    if (amount < 100_000 || amount > 500_000_000) continue;
+    priceCandidates.push({ text: pm[0], amount });
+  }
+  // Largest amount wins (real listings are R 1M+; banner noise is <R 100k)
+  priceCandidates.sort((a, b) => b.amount - a.amount);
+  const bestPrice = priceCandidates[0] ?? null;
+  const priceText = bestPrice?.text ?? null;
+  const priceAmount = bestPrice?.amount ?? null;
+
+  // Title: find the first line after cutIndex that looks like a
+  // listing description. Reject cookie/banner lines.
+  const bodyLines = body.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+  const TITLE_BLACKLIST = [
+    /^Please note/i,
+    /^Looking to/i,
+    /^Sign in/i,
+    /^Register/i,
+    /^Cookie/i,
+    /^Menu/i,
+    /^Home\s*$/i,
+    /^Property24/i,
+    /^Private Property/i,
+    /^South Africa$/i,
+    /^Loading/i,
+    /^Skip to/i,
+    /^For sale in/i, // nav link
+    /^To rent in/i,
+    /^On Show/i,
+    /^Auctions? in/i,
+    /^Repossessions? in/i,
+  ];
+  let title = "Property listing";
+  for (const line of bodyLines.slice(0, 80)) {
+    if (line.length < 12 || line.length > 200) continue;
+    if (TITLE_BLACKLIST.some((re) => re.test(line))) continue;
+    // Skip lines that are just nav-link style "X in Y"
+    if (/^[A-Z][a-z]+\s+in\s+[A-Z][a-z]+$/i.test(line) && line.length < 40) continue;
+    // Skip pure price lines
+    if (/^R\s*[\d,.]+/.test(line)) continue;
+    // Skip lines that are all caps short
+    if (line === line.toUpperCase() && line.length < 30) continue;
+    title = line.slice(0, 140);
+    break;
+  }
+
+  // Erf size — first ha or m² match in body
   const erfMatch =
-    raw.match(/([\d.,]+\s*(?:ha|hectare|hectares)\b)/i) ??
-    raw.match(/([\d,]+\s*(?:m²|sqm|sq\s*m)\b)/i);
+    body.match(/([\d.,]+)\s*(?:ha|hectare|hectares)\b/i) ??
+    body.match(/([\d,]+)\s*(?:m²|sqm|sq\s*m|square\s*meters?)\b/i);
   const erfText = erfMatch ? erfMatch[1] : null;
   const erf = parseErfSize(erfText);
 
   // Bedrooms / bathrooms — only on residential listings
-  const bedMatch = raw.match(/(\d+)\s*(?:bed|bedroom)/i);
-  const bathMatch = raw.match(/(\d+)\s*(?:bath|bathroom)/i);
+  const bedMatch = body.match(/(\d+)\s*(?:bed(?:room)?s?)\b/i);
+  const bathMatch = body.match(/(\d+)\s*(?:bath(?:room)?s?)\b/i);
 
-  // Address — first line that looks like a street address
-  const addrMatch = raw.match(
-    /\d+[A-Z]?\s+[A-Z][a-zA-Z\s]+(?:Road|Rd|Street|St|Avenue|Ave|Drive|Dr|Lane|Ln|Crescent|Cres|Close|Way)\b[^,\n]*,\s*[A-Za-z\s]+/,
+  // Address — find a line with street number + road type in the body
+  const addrMatch = body.match(
+    /\d+[A-Z]?\s+[A-Z][a-zA-Z\s'-]+(?:Road|Rd|Street|St|Avenue|Ave|Drive|Dr|Lane|Ln|Crescent|Cres|Close|Way|Place|Pl)\b[^,\n]{0,60}/,
   );
 
-  // Suburb detection — first capitalized phrase after city name
-  // Simple heuristic: pick the first 2-3 word capitalized phrase
-  // that isn't "South Africa", "Property24", etc.
-  const suburbMatch = raw.match(
-    new RegExp(`\\b([A-Z][a-z]+(?:\\s+[A-Z][a-z]+){0,2})\\s*,?\\s*${escapeRegExp(cityName)}`, "i"),
-  );
-  const suburb = suburbMatch ? suburbMatch[1].trim() : null;
+  // Suburb detection — find a phrase like "in {Suburb}" or "in {City}"
+  // near the title. Skip generic phrases like "for sale in".
+  const suburbCandidates = [
+    body.match(/\bin\s+([A-Z][a-zA-Z'-]+(?:\s+[A-Z][a-zA-Z'-]+){0,2})\b(?!\s+for\s+sale)/),
+    body.match(/\b([A-Z][a-zA-Z'-]+(?:\s+[A-Z][a-zA-Z'-]+){0,2}),\s*(?:Gauteng|Western Cape|KwaZulu-Natal|Eastern Cape|Limpopo|Mpumalanga|North West|Free State)/),
+  ];
+  let suburb: string | null = null;
+  for (const m of suburbCandidates) {
+    if (m && m[1]) {
+      const candidate = m[1].trim();
+      // Reject generic / blacklisted phrases
+      if (/^(Property|Listed|For Sale|Results?|Loading|South Africa|Property24|Private Property|Repossess|Auction|Bedroom|Bathroom)$/i.test(candidate)) continue;
+      if (candidate.length < 3 || candidate.length > 50) continue;
+      suburb = candidate;
+      break;
+    }
+  }
 
   return {
     id,
@@ -236,7 +328,7 @@ export function parseListingFromExtract(
     bathrooms: bathMatch ? parseInt(bathMatch[1], 10) : null,
     address: addrMatch ? addrMatch[0].trim().slice(0, 200) : null,
     title,
-    snippet: raw.slice(0, 240).replace(/\s+/g, " ").trim(),
+    snippet: body.slice(0, 240).replace(/\s+/g, " ").trim(),
     matchTier: 3, // recomputed in matcher
   };
 }
