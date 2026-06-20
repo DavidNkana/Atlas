@@ -81,19 +81,22 @@ export async function GET(req: NextRequest) {
   ];
 
   // Stage 2: fetch live listings (this calls Tavily search + extract)
+  // Day 22 v10: bump creditBudget to 12 so we actually exercise
+  // all 7 portals (2 per portal). Also bump maxListings to see
+  // everything parseListingsFromGridPage produces.
   try {
     const listings = await fetchLiveListings({
       city,
       suburb: null,
       vertical,
-      creditBudget: 4,
-      maxListings: 3,
+      creditBudget: 14,
+      maxListings: 20,
     });
     diag.stages.push({
       stage: "fetch_live_listings",
       ok: true,
       rawCount: listings.length,
-      sample: listings.slice(0, 3).map((l) => ({
+      sample: listings.slice(0, 8).map((l) => ({
         id: l.id,
         portal: l.portal,
         suburb: l.suburb,
@@ -102,6 +105,7 @@ export async function GET(req: NextRequest) {
         erfSize: l.erfSize,
         url: l.url?.slice(0, 100),
       })),
+      gridPageParserVersion: "v10",
     });
     diag.finalCount = listings.length;
   } catch (err) {
@@ -117,7 +121,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(diag, {
     headers: {
       "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
-      "X-Atlas-Diag-Version": "v8-gridpage",
+      "X-Atlas-Diag-Version": "v10-full-portals",
     },
   });
 }
