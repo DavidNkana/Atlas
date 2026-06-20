@@ -80,6 +80,12 @@ let partialUserId: string = "";
 // budget for the model call + cascade.
 const STEP_A_TIMEOUT_MS = 55_000;
 const STEP_B_TIMEOUT_MS = 5_000;
+// Day 22 v12: Tavily live-listings needs its OWN budget because
+// 7 parallel portal searches + extracts take 6-10s. The original
+// STEP_B_TIMEOUT_MS=5_000 budget was killing the fetcher before
+// it returned anything — which is why the UI showed Gemini's
+// reasoning but no Live listings section. Listings get 15s.
+const TAVILY_LISTINGS_TIMEOUT_MS = 15_000;
 
 // Day 12 v4: per-model timeout dropped from 25s to 8s. The 25s
 // cap was originally set to give slow models (e.g. Gemini 3.5 Flash
@@ -899,8 +905,11 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
       .filter((h): h is NonNullable<typeof h> => h !== null)
       .slice(0, 3);
 
-    // Run one search per hint (max 3) — gives Perplexity-style depth
-    // (per-suburb) without blowing the free-tier budget.
+    // Day 22 v12: run one search per hint (max 3) — gives Perplexity-
+    // style depth (per-suburb). Use TAVILY_LISTINGS_TIMEOUT_MS (15s)
+    // not STEP_B_TIMEOUT_MS (5s) — the listings pipeline takes 6-10s
+    // minimum for 7 portal searches + extracts. creditBudget=14
+    // covers all 7 portals.
     const perSuburbResults = await Promise.allSettled(
       hints.map((h) =>
         withTimeout(
@@ -910,12 +919,16 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
             vertical: effectiveVertical,
             priceBand: h.priceBand,
             plotSizeHectares: h.plotSizeHectares,
-            creditBudget: 4,
-            maxListings: 3,
+            creditBudget: 14,
+            maxListings: 20,
           }),
-          STEP_B_TIMEOUT_MS,
+          TAVILY_LISTINGS_TIMEOUT_MS,
           "tavily-listings",
-        ).catch(() => []),
+        ).catch((err) => {
+          // Surface error so we can see it in the response
+          console.warn("[/api/ask] tavily-listings fetch error:", err);
+          return [];
+        }),
       ),
     );
 
