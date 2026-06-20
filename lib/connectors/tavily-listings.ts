@@ -408,6 +408,62 @@ export function parseListingFromExtract(
   };
 }
 
+/**
+ * Day 22 v8 — Parse a grid page (search results page) into
+ * MANY listings. Property24 / PrivateProperty / Pam Golding all
+ * return 20-60 listings per grid page. Tavily extracts the whole
+ * page as one markdown blob; we split on listing separators and
+ * parse each chunk with parseListingFromExtract.
+ *
+ * Listing separator: a price line "R 1 149 000" followed by a
+ * short title-like line. We split on the price pattern and grab
+ * the next 600 chars after each price (enough for a full listing
+ * card).
+ */
+export function parseListingsFromGridPage(
+  url: string,
+  raw: string,
+  portal: SaPortalId,
+  cityName: string,
+): LiveListing[] {
+  if (!raw || raw.length < 50) return [];
+
+  // Find all positions of "R <amount>" patterns (>= R 100k to skip
+  // banner noise like "R 1 "). Each one is the start of a listing card.
+  const priceMatches = Array.from(
+    raw.matchAll(/\bR\s*[\d][\d,]+(?:\.\d+)?\s*(?:[Mm]|[Kk])?\b/g),
+  ).filter((m) => {
+    // Require at least 6 digits in the amount
+    const digits = m[0].replace(/\D/g, "");
+    return digits.length >= 6;
+  });
+
+  if (priceMatches.length === 0) {
+    // No prices — fall back to single-listing parse (might be a detail page)
+    const single = parseListingFromExtract(url, raw, portal, cityName);
+    return single ? [single] : [];
+  }
+
+  const listings: LiveListing[] = [];
+  for (let i = 0; i < priceMatches.length; i++) {
+    const start = priceMatches[i].index ?? 0;
+    // Each listing card spans ~600 chars from the price line forward
+    const end =
+      i + 1 < priceMatches.length
+        ? priceMatches[i + 1].index ?? raw.length
+        : Math.min(start + 1200, raw.length);
+    const chunk = raw.slice(Math.max(0, start - 200), end);
+    const parsed = parseListingFromExtract(url, chunk, portal, cityName);
+    if (parsed && parsed.priceAmount && parsed.priceAmount > 100_000) {
+      // Re-id with chunk index so multiple listings from the same
+      // page don't collide on the same hash.
+      parsed.id = `${portal}-${hashUrl(url)}-${i}`;
+      listings.push(parsed);
+    }
+  }
+  return listings;
+}
+
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -635,8 +691,19 @@ export async function fetchLiveListings(
     for (let i = 0; i < extracted.length; i++) {
       const ex = extracted[i];
       const portal = urlToPortal.get(ex.url) ?? inferPortalFromUrl(ex.url);
-      const parsed = parseListingFromExtract(ex.url, ex.raw_content, portal, opts.city.name);
-      if (parsed) listings.push(redactAgentInfo(parsed));
+
+      // Day 22 v8: each grid page contains MANY listings (Property24
+      // and PrivateProperty return 20-60 results per page). Split
+      // the page on listing boundaries and parse each as a
+      // separate LiveListing. This is the right fix — a search
+      // grid page IS a list of listings.
+      const pageListings = parseListingsFromGridPage(
+        ex.url,
+        ex.raw_content,
+        portal,
+        opts.city.name,
+      );
+      for (const l of pageListings) listings.push(redactAgentInfo(l));
     }
 
     // Step 4: rank by suburb match
