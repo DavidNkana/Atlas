@@ -698,6 +698,7 @@ export default async function ResultPage({
                   competition: (s as any).competition,
                   medianIncome: (s as any).medianIncome,
                   dataProvenance: (s as any).dataProvenance,
+                  liveListings: (s as any).liveListings,
                 }}
                 fallbackLatLng={streetViewAnchor}
               />

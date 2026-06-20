@@ -13,6 +13,7 @@ import { buildPlan } from "@/lib/plan/planner";
 import type { Plan } from "@/lib/plan/types";
 import { classifyIntent } from "@/lib/intent/classify";
 import { enrichSitesWithCatalog } from "@/lib/stub/enrich-sites";
+import { fetchLiveListings, type LiveListing } from "@/lib/connectors/tavily-listings";
 import { withTimeout } from "@/lib/util/timeout";
 import { sanitizeForJson } from "@/lib/util/json-sanitize";
 
@@ -193,6 +194,13 @@ type AskResponse = {
   question: string;
   echo: string;
   ranked_sites: RankedSite[];
+  /** Day 22 — live per-listing data from Property24 + Private Property.
+   * Each ranked site carries the listings matched to it (3 max per site
+   * on free-tier Tavily). UI renders as "Live listings" card section. */
+  liveListings?: LiveListing[];
+  /** Day 22 — when live listings are unavailable (no TAVILY key, or
+   * Tavily failed). UI surfaces "live listings unavailable" badge. */
+  liveListingsError?: string;
   /** Day 5 — the plan we actually executed. */
   plan?: Plan;
   /** Day 5 — per-connector status. */
@@ -735,6 +743,10 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   let connectorsError: string | undefined;
   let allConnectorsFailed = false;
   let plan: Plan | undefined;
+  /** Day 22 — live listings fetched in parallel with signal connectors. */
+  let allLiveListings: LiveListing[] = [];
+  /** Day 22 — when Tavily fails for any reason; UI surfaces a non-fatal badge. */
+  let liveListingsError: string | undefined;
 
   try {
     await withTimeout((async () => {
@@ -850,6 +862,87 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
     }
   }
 
+  // Day 22: fire Tavily live-listings search in parallel with Step B's
+  // signal connectors. Same 12s budget cap. If Tavily fails or returns
+  // nothing, the UI gets a non-fatal badge — never blocks the response.
+  try {
+    // Build per-site price/erf hints from enriched sites (so the query
+    // matches what the developer asked for, not generic suburb terms).
+    const hints = rankedSites
+      .filter((s) => Boolean((s as any).suburb))
+      .slice(0, 3)
+      .map((s) => {
+        const payload = ((s as any).payload ?? {}) as {
+          priceBand?: string;
+          plotSizeHectares?: number;
+        };
+        return {
+          suburb: ((s as any).suburb ?? null) as string | null,
+          priceBand: payload.priceBand ?? null,
+          plotSizeHectares: payload.plotSizeHectares ?? null,
+        };
+      });
+
+    // Run one search per hint (max 3) — gives Perplexity-style depth
+    // (per-suburb) without blowing the free-tier budget.
+    const perSuburbResults = await Promise.allSettled(
+      hints.map((h) =>
+        withTimeout(
+          fetchLiveListings({
+            city: deriveLocation(rankedSites) as any,
+            suburb: h.suburb,
+            vertical: effectiveVertical,
+            priceBand: h.priceBand,
+            plotSizeHectares: h.plotSizeHectares,
+            creditBudget: 4,
+            maxListings: 3,
+          }),
+          STEP_B_TIMEOUT_MS,
+          "tavily-listings",
+        ).catch(() => []),
+      ),
+    );
+
+    for (const r of perSuburbResults) {
+      if (r.status === "fulfilled") {
+        allLiveListings.push(...r.value);
+      }
+    }
+    // Dedupe by URL (same listing can match multiple suburbs)
+    const seen = new Set<string>();
+    allLiveListings = allLiveListings.filter((l) => {
+      if (seen.has(l.url)) return false;
+      seen.add(l.url);
+      return true;
+    });
+  } catch (tavilyErr) {
+    console.warn("[/api/ask] tavily-listings failed (non-fatal):", tavilyErr);
+    liveListingsError = String(tavilyErr instanceof Error ? tavilyErr.message : tavilyErr);
+  }
+
+  // Attach live listings to the ranked site they best match.
+  // Suburb-name match is handled inside rankListingsByMatch, but
+  // here we attach at site level using the AI-returned suburb.
+  if (allLiveListings.length > 0) {
+    for (const site of rankedSites) {
+      const siteSuburb = ((site as any).suburb ?? "").toLowerCase().trim();
+      if (!siteSuburb) continue;
+      const matched = allLiveListings.filter((l) => {
+        const listingSuburb = (l.suburb ?? "").toLowerCase().trim();
+        if (!listingSuburb) return false;
+        // Tier 1: exact
+        if (listingSuburb === siteSuburb) return true;
+        // Tier 2: shared >=1 word of length > 3
+        const sw: string[] = siteSuburb.split(/\s+/).filter((w: string) => w.length > 3);
+        const lw: string[] = listingSuburb.split(/\s+/);
+        return sw.some((w: string) => lw.includes(w));
+      });
+      if (matched.length > 0) {
+        (site as any).liveListings = matched.slice(0, 3);
+      }
+    }
+  }
+
   // 6. Build response body (sans id; id comes from prisma row)
   //
   // Day 17 v6: add the intent classifier result so the UI can route
@@ -866,6 +959,11 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
     echo: raw ? `Answer generated by ${activeInfo.displayName}${fallbackUsed ? " (fallback)" : ""}.` : "ok",
     ranked_sites: rankedSites,
     plan,
+    // Day 22 — live listings attached to each ranked site by suburb
+    // match. Falls back to top-level array for chat view which shows
+    // all listings regardless of site.
+    liveListings: allLiveListings.length > 0 ? allLiveListings : undefined,
+    liveListingsError: allLiveListings.length === 0 ? liveListingsError : undefined,
     connectorsRun,
     // Day 17 v6: routing + chat surface. primaryEngine tells the UI
     // which engine answered. matchedPatterns shows the user why we

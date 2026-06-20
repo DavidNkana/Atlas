@@ -76,6 +76,24 @@ type Site = {
   competition?: string[];
   medianIncome?: number;
   dataProvenance?: string;
+  // Day 22: live per-listing data from Property24 + Private Property
+  // via Tavily. Max 3 per site (free-tier cap). UI renders as
+  // "Live listings" section in the expanded card.
+  liveListings?: Array<{
+    id: string;
+    suburb: string | null;
+    portal: "property24" | "privateproperty";
+    url: string;
+    price: string | null;
+    erfSize: string | null;
+    erfSizeM2: number | null;
+    bedrooms: number | null;
+    bathrooms: number | null;
+    address: string | null;
+    title: string;
+    snippet: string;
+    matchTier: 1 | 2 | 3;
+  }>;
 };
 
 const SOURCE_LABEL: Record<string, string> = {
@@ -289,6 +307,69 @@ export function RankedSiteCard({
               <p className="font-mono text-[10px] text-atlas-muted">
                 Sources: {site.dataProvenance}
               </p>
+            )}
+
+            {/* Day 22 — live listings section. Shows up to 3 real
+                Property24 / Private Property listings matched to this
+                suburb. Each listing links out to the portal. Agent
+                names redacted per privacy policy. */}
+            {site.liveListings && site.liveListings.length > 0 && (
+              <div className="mt-3 border-t border-atlas-border/50 pt-3">
+                <p className="mb-2 font-mono text-[10px] uppercase tracking-wider text-atlas-muted">
+                  Live listings ({site.liveListings.length} on Property24 + Private Property)
+                </p>
+                <ul className="space-y-2">
+                  {site.liveListings.map((l) => (
+                    <li
+                      key={l.id}
+                      className="flex items-baseline justify-between gap-3 rounded border border-atlas-border/40 bg-atlas-surface/40 px-3 py-2 text-xs"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`inline-block rounded-sm px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${
+                              l.portal === "property24"
+                                ? "bg-blue-500/15 text-blue-300"
+                                : "bg-purple-500/15 text-purple-300"
+                            }`}
+                          >
+                            {l.portal === "property24" ? "Property24" : "Private Property"}
+                          </span>
+                          {l.matchTier === 1 && (
+                            <span className="font-mono text-[9px] text-emerald-400">exact</span>
+                          )}
+                          {l.matchTier === 2 && (
+                            <span className="font-mono text-[9px] text-amber-400">fuzzy</span>
+                          )}
+                        </div>
+                        <p className="mt-1 truncate text-atlas-text">{l.title}</p>
+                        {l.address && (
+                          <p className="truncate font-mono text-[10px] text-atlas-muted">
+                            {l.address}
+                          </p>
+                        )}
+                        <p className="mt-0.5 text-atlas-muted">
+                          {l.price && (
+                            <span className="text-atlas-text">{l.price}</span>
+                          )}
+                          {l.price && l.erfSize && " · "}
+                          {l.erfSize && <span>{l.erfSize}</span>}
+                          {l.bedrooms && ` · ${l.bedrooms} bed`}
+                          {l.bathrooms && ` · ${l.bathrooms} bath`}
+                        </p>
+                      </div>
+                      <a
+                        href={l.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="shrink-0 rounded border border-atlas-border px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-atlas-muted transition hover:border-atlas-accent hover:text-atlas-text"
+                      >
+                        View →
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
           </div>
         )}

@@ -37,6 +37,24 @@ export interface RankedSite {
     attribution?: string;
     [key: string]: unknown;
   };
+  // Day 22: live listings matched to this site by suburb name.
+  // Filled by the Tavily listings connector running in parallel
+  // with the signal connectors. Max 3 entries (free-tier cap).
+  liveListings?: Array<{
+    id: string;
+    suburb: string | null;
+    portal: 'property24' | 'privateproperty';
+    url: string;
+    price: string | null;
+    erfSize: string | null;
+    erfSizeM2: number | null;
+    bedrooms: number | null;
+    bathrooms: number | null;
+    address: string | null;
+    title: string;
+    snippet: string;
+    matchTier: 1 | 2 | 3;
+  }>;
 }
 
 export interface ModelRequest {
