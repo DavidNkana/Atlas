@@ -458,10 +458,53 @@ export function parseListingsFromGridPage(
       // Re-id with chunk index so multiple listings from the same
       // page don't collide on the same hash.
       parsed.id = `${portal}-${hashUrl(url)}-${i}`;
+      // Day 22 v11: extract listing-specific URL from the chunk.
+      // Pam Golding + Seeff + PrivateProperty grid pages link to
+      // /property-details/<slug>/<code> — that's the deep link
+      // to that ONE listing. Without this, all listings on a grid
+      // page share the same URL.
+      const listingUrl = extractListingUrlFromChunk(chunk, url);
+      if (listingUrl) parsed.url = listingUrl;
       listings.push(parsed);
     }
   }
   return listings;
+}
+
+/**
+ * Day 22 v11: pull the listing-specific URL out of a grid-page
+ * chunk. Most SA portals embed individual listing links as
+ * markdown `[text](URL)` pairs right after the title. The URL
+ * typically contains a portal-specific code (KTP..., EN..., T...,
+ * /listing/, /property-details/, etc).
+ *
+ * Strategy: scan the chunk for markdown links and pick the FIRST
+ * one whose path looks like a listing detail page (not the grid
+ * page itself).
+ */
+function extractListingUrlFromChunk(chunk: string, gridUrl: string): string | null {
+  const allLinks = Array.from(chunk.matchAll(/\[([^\]]+)\]\((https?:\/\/[^\s\)]+)\)/g));
+  // Patterns that indicate a listing detail page
+  const LISTING_DETAIL_PATTERNS = [
+    /\/property-details\//i, // Pam Golding, Seeff
+    /\/listing\//i, // Property24 detail
+    /\/for-sale\/[^/]+\/[^/]+\/\d+\/?/i, // Property24 grid detail
+    /\/to-rent\/[^/]+\/[^/]+\/\d+\/?/i,
+    /\/commercial-property-for-sale\/[^/]+\/\d+/i,
+    /\/commercial-property-to-rent\/[^/]+\/\d+/i,
+    /\/properties\//i,
+    /\/[Tt]\d{6,}/i, // PrivateProperty T1234567
+    /\/[Ee][Nn]\d{6,}/i, // Pam Golding EN1234567
+    /\/[Kk][Tt][Pp]\d{6,}/i, // Pam Golding KTP1234567
+  ];
+  for (const m of allLinks) {
+    const candidate = m[2];
+    if (candidate === gridUrl) continue;
+    if (LISTING_DETAIL_PATTERNS.some((re) => re.test(candidate))) {
+      return candidate;
+    }
+  }
+  return null;
 }
 
 function escapeRegExp(s: string): string {
