@@ -55,7 +55,7 @@ export function NewsFeedGrid() {
   const [error, setError] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
   const [retrying, setRetrying] = useState(false);
-  const [keyConfigured, setKeyConfigured] = useState<boolean | null>(null);
+  const [diag, setDiag] = useState<any>(null);
 
   const loadAll = async () => {
     setLoading(true);
@@ -70,19 +70,22 @@ export function NewsFeedGrid() {
     }
   };
 
+  const refreshDiag = async () => {
+    try {
+      const r = await fetch("/api/news/diag", { cache: "no-store" });
+      const d = await r.json();
+      setDiag(d);
+      return d;
+    } catch {
+      return null;
+    }
+  };
+
   useEffect(() => {
     let cancelled = false;
-    // Probe diag to learn whether NEWS_API_KEY is actually configured
-    // in this environment. Surfaces the truth to the user without
-    // making them open /api/news/diag manually.
-    fetch("/api/news/diag", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d) => {
-        if (!cancelled) setKeyConfigured(d?.newsApi?.keyConfigured ?? null);
-      })
-      .catch(() => {
-        if (!cancelled) setKeyConfigured(null);
-      });
+    void refreshDiag().then(() => {
+      if (cancelled) return;
+    });
     void loadAll();
     return () => {
       cancelled = true;
@@ -185,49 +188,113 @@ export function NewsFeedGrid() {
           <p className="text-sm text-atlas-text">
             No articles in this category right now.
           </p>
-          <p className="mt-2 text-xs text-atlas-muted">
-            {keyConfigured === false ? (
-              <>
-                <span className="font-semibold text-amber-400">
-                  NewsAPI key is not configured in this environment.
-                </span>{" "}
-                Add <code className="rounded bg-atlas-bg px-1 py-0.5 text-[11px]">NEWS_API_KEY</code>{" "}
-                in Vercel → Project → Settings → Environment Variables
-                (tick <strong>Production</strong>, Preview, and
-                Development).
-              </>
-            ) : (
-              <>
-                Try the All tab — it surfaces the broadest mix of
-                stocks, crypto, investments and real-estate coverage
-                from around the world.
-              </>
-            )}
+
+          {/* Diag-driven root cause panel — shows the actual failure mode
+              so David doesn't have to open /api/news/diag manually. */}
+          {diag?.diagnosis && (
+            <div className="mt-4 rounded border border-amber-900/60 bg-amber-950/20 p-3 text-left">
+              <div className="font-mono text-[10px] uppercase tracking-wider text-amber-400">
+                Diagnosis
+              </div>
+              <div className="mt-1 text-[11px] text-atlas-text">
+                {diag.diagnosis.mostLikelyIssue}
+              </div>
+              {diag?.newsApi && (
+                <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 font-mono text-[10px] text-atlas-muted">
+                  <dt>env var present</dt>
+                  <dd className="text-right">
+                    {diag.newsApi.keyConfigured ? "yes" : "NO"}
+                  </dd>
+                  <dt>key preview</dt>
+                  <dd className="text-right">
+                    {diag.newsApi.keyPreview ?? "—"}
+                  </dd>
+                  <dt>NewsAPI http</dt>
+                  <dd className="text-right">
+                    {diag.directProbe?.http ?? "—"}
+                  </dd>
+                  <dt>NewsAPI status</dt>
+                  <dd className="text-right">
+                    {diag.directProbe?.status ?? "—"}
+                  </dd>
+                  {diag.directProbe?.totalResults != null && (
+                    <>
+                      <dt>totalResults</dt>
+                      <dd className="text-right">
+                        {diag.directProbe.totalResults}
+                      </dd>
+                    </>
+                  )}
+                  {diag.directProbe?.errorSnippet && (
+                    <>
+                      <dt>err</dt>
+                      <dd className="max-w-[200px] truncate text-right">
+                        {diag.directProbe.errorSnippet}
+                      </dd>
+                    </>
+                  )}
+                </dl>
+              )}
+            </div>
+          )}
+
+          <p className="mt-4 text-xs text-atlas-muted">
+            Try the All tab — it surfaces the broadest mix of stocks,
+            crypto, investments and real-estate coverage from around
+            the world.
           </p>
-          <p className="mt-3 text-[10px] text-atlas-muted">
+          <p className="mt-2 text-[10px] text-atlas-muted">
             NewsAPI.org free tier: 100 req/day. Cache age: 1 hour.
           </p>
-          <button
-            type="button"
-            disabled={retrying}
-            onClick={async () => {
-              setRetrying(true);
-              try {
-                await fetch("/api/news/retry", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ category: "all" }),
-                  cache: "no-store",
-                });
-                await loadAll();
-              } finally {
-                setRetrying(false);
-              }
-            }}
-            className="mt-4 rounded border border-atlas-accent bg-atlas-accent/10 px-4 py-2 text-xs font-medium uppercase tracking-wider text-atlas-accent transition hover:bg-atlas-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {retrying ? "Retrying…" : "Retry now (busts 1-hour cache)"}
-          </button>
+
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+            <button
+              type="button"
+              disabled={retrying}
+              onClick={async () => {
+                setRetrying(true);
+                try {
+                  await fetch("/api/news/retry", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ category: "all" }),
+                    cache: "no-store",
+                  });
+                  await Promise.all([loadAll(), refreshDiag()]);
+                } finally {
+                  setRetrying(false);
+                }
+              }}
+              className="rounded border border-atlas-accent bg-atlas-accent/10 px-4 py-2 text-xs font-medium uppercase tracking-wider text-atlas-accent transition hover:bg-atlas-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {retrying ? "Retrying…" : "Retry now (busts 1-hour cache)"}
+            </button>
+
+            <button
+              type="button"
+              disabled={retrying}
+              onClick={async () => {
+                setRetrying(true);
+                try {
+                  await refreshDiag();
+                } finally {
+                  setRetrying(false);
+                }
+              }}
+              className="rounded border border-atlas-border bg-atlas-surface px-4 py-2 text-xs font-medium uppercase tracking-wider text-atlas-muted transition hover:text-atlas-text disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Refresh diagnosis
+            </button>
+
+            <a
+              href="/api/news/diag"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded border border-atlas-border bg-atlas-surface px-4 py-2 text-xs font-medium uppercase tracking-wider text-atlas-muted transition hover:text-atlas-text"
+            >
+              Open diag JSON ↗
+            </a>
+          </div>
         </div>
       )}
 
