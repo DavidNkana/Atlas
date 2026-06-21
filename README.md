@@ -1,27 +1,31 @@
-# Atlas — An AI-powered Intelligence Engine
+# Atlas — An AI Operating System for builders and investors
 
-> A horizontal AI engine that answers complex real-world questions by combining structured APIs, browser automation, and AI reasoning.
+> A horizontal AI engine that answers complex real-world questions for African builders and investors — land, business, and investments. Combining structured APIs, browser automation, and AI reasoning.
 
 **Repo:** [DavidNkana/Atlas](https://github.com/DavidNkana/Atlas)
-**Status:** Week 1, Day 5 (Overpass connector + scoring engine + planner live)
+**Status:** Live in production (atlas-q2eh.vercel.app)
 **Owner:** David Nkana + Alex
 
 ---
 
 ## What this is
 
-Atlas is not a chatbot. It is an **intelligence engine**.
+Atlas is an **AI Operating System for builders and investors** — African founders who build, operate, or invest in things, and need decision-grade intelligence to do it.
 
 The user asks a complex real-world question. The AI planner decides which data sources to consult. The connector registry fires them. The normalizer aligns what comes back. The scoring engine ranks the evidence. The reasoning engine writes the final answer with confidence scores.
 
 The same engine answers very different questions:
 
 - "Where should I open a gas station in Sandton?"
+- "Which Sandton suburb is best for residential development?"
+- "Where in Lusaka has the fastest-growing middle class?"
 - "Which crypto project is undervalued this week?"
-- "Find my competitors and rank them."
-- "Research African startups in fintech."
+- "What's the safest property market in Joburg right now?"
 
-The only thing that changes is which connectors the planner selects and how the scoring engine weights their signals.
+The only thing that changes is which connectors the planner selects and how the scoring engine weights their signals. Land today, business today, crypto and investments next — same engine, same architecture, new connectors + scoring recipes.
+
+**Today:** land + business site selection + live market intelligence (News tab).
+**Tomorrow:** crypto + investment-grade opportunities.
 
 ---
 

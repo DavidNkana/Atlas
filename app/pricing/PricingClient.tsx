@@ -116,7 +116,7 @@ export default function PricingPage() {
           teams.
         </p>
         <p className="mt-3">
-          Atlas is built for African real estate. Prices in ZAR.
+          Atlas is built for African founders and investors. Prices in ZAR.
           International teams welcome — ~$14/mo Pro, ~$140/mo
           Team.
         </p>

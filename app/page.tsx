@@ -480,7 +480,7 @@ export default function HomePage() {
             Pricing
           </a>
           <a href="/demo" className="hover:text-atlas-accent">
-            For investors
+            For builders
           </a>
         </header>
 
@@ -506,13 +506,14 @@ export default function HomePage() {
                   Hi {firstName}, I&apos;m Atlas.
                 </h1>
                 <p className="text-lg text-atlas-muted">
-                  An AI Operating System for Decision Intelligence.
+                  An AI Operating System for builders and investors.
                 </p>
                 <p className="mt-2 text-xs text-atlas-muted">
-                  Where should you build, open, or invest? Atlas reasons across
-                  live signals — schools, transit, healthcare, road network,
-                  competition, environmental risk, demographics, and listings —
-                  to recommend the site that beats the alternatives.
+                  Where should you build, operate, or invest? Atlas reasons
+                  across live signals — schools, transit, healthcare, road
+                  network, competition, environmental risk, demographics, and
+                  listings — to recommend the site, the opportunity, or the
+                  move that beats the alternatives.
                 </p>
               </div>
 

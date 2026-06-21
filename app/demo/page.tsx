@@ -53,12 +53,13 @@ export default function DemoPage() {
           Find the right plot in 30 seconds.
         </h2>
         <p className="mb-2 text-lg text-atlas-muted">
-          Atlas helps land developers, property investors, and builders find
-          the right piece of land in 30 seconds instead of 6 weeks.
+          Atlas helps builders and investors find the right place to build,
+          operate, or invest — across land development, business operations,
+          and (soon) crypto and investment opportunities.
         </p>
         <p className="text-sm text-atlas-muted">
-          Built for African real estate. Powered by an intelligence engine
-          that blends AI reasoning with live data from multiple sources.
+          Built for African founders. Powered by an intelligence engine that
+          blends AI reasoning with live data from multiple sources.
         </p>
       </section>
 
@@ -68,16 +69,20 @@ export default function DemoPage() {
           What is Atlas?
         </h3>
         <p className="mb-4 text-sm leading-relaxed text-atlas-text">
-          Atlas is an AI-powered intelligence engine. You ask a question about
-          a place — <em>where should I build a gas station?</em>,{" "}
-          <em>where in Sandton is best for residential development?</em> — and
+          Atlas is an AI Operating System for builders and investors. You ask a
+          question about a place, an opportunity, or a market —{" "}
+          <em>where should I build a gas station?</em>,{" "}
+          <em>which Sandton suburb is best for residential development?</em>,{" "}
+          <em>where in Lusaka has the fastest-growing middle class?</em> — and
           Atlas returns a ranked answer with reasoning, evidence, and a map.
         </p>
         <p className="text-sm leading-relaxed text-atlas-text">
-          Today the same engine serves land-for-development questions, gas
-          station site selection, restaurant expansion, warehouse location, and
-          retail. The architecture is horizontal: any new question type is just
-          a new connector + a new scoring recipe.
+          Today the engine serves land-for-development, business site
+          selection (gas stations, restaurants, warehouses, retail), and live
+          market intelligence (stocks, crypto, real estate, investments).
+          The architecture is horizontal: any new question type is just a new
+          connector + a new scoring recipe. Crypto + investment-grade
+          opportunities are next.
         </p>
       </section>
 
@@ -118,18 +123,20 @@ export default function DemoPage() {
       {/* The wedge */}
       <section className="mb-16">
         <h3 className="mb-4 text-2xl font-semibold text-atlas-text">
-          The wedge: land for development
+          The wedge today, the OS tomorrow
         </h3>
         <p className="mb-4 text-sm text-atlas-text">
-          Atlas starts with one focused wedge: helping land developers,
-          property investors, and residential builders find vacant plots and
-          development land. This is the highest-margin, lowest-competition
-          segment of African real estate, and the one we know best.
+          Atlas starts with land for development — helping land developers,
+          property investors, and residential builders find vacant plots.
+          Land is the highest-margin, lowest-competition entry point and the
+          one we know best. But it's a wedge, not the destination.
         </p>
         <p className="text-sm text-atlas-text">
-          Once land is solid, the same engine extends to gas station site
-          selection, restaurant expansion, warehouse location, and retail —
-          each is a different connector + scoring recipe, no new architecture.
+          The same engine is already serving business site selection (gas
+          stations, restaurants, warehouses, retail) and live market
+          intelligence (stocks, crypto, real estate, investments via the
+          News tab). Crypto + investment-grade opportunities ship next —
+          same engine, new connector + scoring recipe, no new architecture.
         </p>
       </section>
 
@@ -141,33 +148,38 @@ export default function DemoPage() {
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <div className="rounded-md border border-atlas-border bg-atlas-surface p-4">
             <div className="mb-1 text-xs uppercase tracking-wide text-atlas-accent">
-              Month 1
+              Now
             </div>
-            <div className="font-semibold text-atlas-text">Land wedge</div>
+            <div className="font-semibold text-atlas-text">
+              Land + business + market intelligence
+            </div>
             <div className="mt-2 text-xs text-atlas-muted">
-              Real estate listings + AI + scoring. Live in production.
+              Site selection across 9 verticals + live News tab filtered
+              to stocks, crypto, investments, real estate.
             </div>
           </div>
           <div className="rounded-md border border-atlas-border bg-atlas-surface p-4">
             <div className="mb-1 text-xs uppercase tracking-wide text-atlas-muted">
-              Month 2-3
+              Next
             </div>
             <div className="font-semibold text-atlas-text">
-              Gas station site selection
+              Crypto + investment opportunities
             </div>
             <div className="mt-2 text-xs text-atlas-muted">
-              Google Places + traffic + demographics.
+              On-chain signals, exchange listings, REIT announcements,
+              African fintech operators.
             </div>
           </div>
           <div className="rounded-md border border-atlas-border bg-atlas-surface p-4">
             <div className="mb-1 text-xs uppercase tracking-wide text-atlas-muted">
-              Month 4-6
+              Later
             </div>
             <div className="font-semibold text-atlas-text">
-              Restaurant, warehouse, retail
+              The full intelligence OS
             </div>
             <div className="mt-2 text-xs text-atlas-muted">
-              Vertical-specific scoring. Customer-driven roadmap.
+              Every builder + investor decision in one OS. Builders find
+              sites; investors find opportunities; operators find signals.
             </div>
           </div>
         </div>

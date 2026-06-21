@@ -776,6 +776,43 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
     throw stepAErr;
   }
 
+  // Day 25 v26 — Defensive final guard.
+  // The cascade above (e3ebda1 + the callModel ok:false fix) already
+  // routes every failure to curatedStub. This is a last-resort safety
+  // net: if for any reason rankedSites is still empty after the entire
+  // cascade (e.g. curatedStub itself returned ok:true but with 0 sites,
+  // or a future model has a bug), force-call curatedStub one more time.
+  // curatedStub.call() is a pure function over REAL_SITE_CATALOG and
+  // CANNOT return 0 sites when the catalog has entries for the city.
+  // If it does, that's a real bug and we log it.
+  if (rankedSites.length === 0) {
+    console.warn(
+      "[/api/ask] cascade exited with rankedSites.length === 0 — force-firing curatedStub as final guard",
+    );
+    pushAttempted("curated-stub-final-guard");
+    const finalStubResult = await callModel(curatedStub);
+    if (finalStubResult.ok && finalStubResult.sites.length > 0) {
+      rankedSites = enrichSitesWithCatalog(finalStubResult.sites);
+      if (finalStubResult.__stub) {
+        stubMeta = finalStubResult.__stub;
+        responseStatus = "stub_demo";
+      }
+      activeInfo = curatedStub.info;
+      activeModel = curatedStub;
+      fallbackUsed = true;
+      modelError = `${modelError ?? "unknown"}\nfinal-guard-stub: curatedStub returned ${finalStubResult.sites.length} sites`;
+    } else {
+      // curatedStub itself failed — log and let the empty result
+      // propagate. The UI will show "no sites found" instead of
+      // empty cards, which is the honest answer.
+      console.error(
+        "[/api/ask] curatedStub final guard also failed (this should never happen)",
+        finalStubResult,
+      );
+      modelError = `${modelError ?? "unknown"}\nfinal-guard-stub: curatedStub returned 0 sites — this is a bug`;
+    }
+  }
+
   // 5. Step B — connectors + scoring (12s budget).
   // Build the plan, fan-out to connectors in parallel, collect signals per
   // site, then run the scoring engine. Track per-connector status so the

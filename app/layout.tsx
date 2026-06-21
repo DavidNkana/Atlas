@@ -5,9 +5,9 @@ import { ThemeBootstrapper } from "@/components/ThemeBootstrapper";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Atlas — Intelligence for African Real Estate",
+  title: "Atlas — AI Operating System for builders and investors",
   description:
-    "Atlas blends multiple data sources, models, and live signals to help land developers, property investors, and builders find the right plot in 30 seconds instead of 6 weeks.",
+    "Atlas blends multiple data sources, models, and live signals to help African builders, operators, and investors find the right place to build, operate, or invest.",
   icons: {
     icon: [
       { url: "/icon.svg", type: "image/svg+xml" },

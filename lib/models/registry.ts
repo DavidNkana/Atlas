@@ -1,40 +1,48 @@
-import { geminiFlash } from './google';
 import { geminiSearch } from './gemini-search';
-import { tavily } from './tavily';
 import { perplexity } from './perplexity';
 import { llamaFree, mistralFree } from './openrouter';
 import { curatedStub } from './stub';
 import type { Model, ModelInfo } from './types';
 
-// OpenRouter-backed models already wire dynamic /models discovery inside
-// their call() (see lib/models/openrouter.ts). The registry simply exposes
-// them as named Atlas model IDs. Discovery happens lazily on first call,
-// not at import time, so import is side-effect-free.
+// Day 25 — Model registry simplified.
 //
-// Day 12 v29: David's Vercel Gemini key is hitting 429 quota
-// limits on every model id (1.5/2.0/2.5-flash). Rather than
-// retry the same broken key 3 times per request, put Tavily
-// first. Tavily is now the primary research model. Gemini Search
-// is the fallback (in case the key's quota resets).
+// David: "Models like qwen, llama, and gemini 2.0 flash don't work.
+// They fallback to tavily and please. Curated stub should always be
+// the final fall back. Remove Tavily as a pickable model — it
+// serves its purpose in finding listings and other things. Not as
+// a pickable model."
 //
-//   1. tavily         — Tavily web search + Gemini 1.5 Flash synthesis
-//                       (1,000 free searches/month, working today)
-//   2. gemini-search  — Gemini Search grounding (rate-limited today)
-//   3. perplexity     — Perplexity Sonar ($5 signup, not enabled)
-//   4. gemini-flash   — plain Gemini (rate-limited today)
-//   5. openrouter fallbacks
-//   6. curatedStub    — always available
+// Action:
+//   - Tavily removed from both ALL_MODELS and MODEL_INFO. It is no
+//     longer exposed to users. The internal `tavily` connector in
+//     lib/connectors/tavily-listings.ts is unchanged and still runs
+//     behind /api/ask to fetch live Property24/Private Property/etc
+//     listings — that's an infrastructure concern, not a model choice.
+//   - geminiFlash removed from ALL_MODELS and MODEL_INFO. The Gemini
+//     Search model covers all Gemini-backed reasoning.
+//   - perplexity, llamaFree, mistralFree remain in ALL_MODELS as
+//     INTERNAL fallback options if Gemini Search fails. They are NOT
+//     exposed to users via MODEL_INFO.
+//   - geminiSearch + curatedStub are the ONLY user-facing models.
+//
+// Cascade order (handled in app/api/ask/route.ts):
+//   1. geminiSearch (primary, rate-limited to Atlas's key)
+//   2. perplexity + openrouter (internal fallback, hidden)
+//   3. curatedStub (always available, always the final fallback)
 export const ALL_MODELS: Model[] = [
-  tavily,
   geminiSearch,
   perplexity,
-  geminiFlash,
   llamaFree,
   mistralFree,
   curatedStub,
 ];
 
-export const MODEL_INFO: ModelInfo[] = ALL_MODELS.map((m) => m.info);
+// User-facing model list. This drives the SettingsDrawer model picker
+// and any other UI that surfaces "which AI answered?". Two models
+// only: Gemini Search (when working) and Curated Stub (always works).
+export const MODEL_INFO: ModelInfo[] = ALL_MODELS
+  .filter((m) => m.info.id === 'gemini-search' || m.info.id === 'curated-stub')
+  .map((m) => m.info);
 
 export function getModel(id: string): Model {
   const f = ALL_MODELS.find((m) => m.info.id === id);
