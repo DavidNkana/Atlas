@@ -949,30 +949,61 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
     liveListingsError = String(tavilyErr instanceof Error ? tavilyErr.message : tavilyErr);
   }
 
-  // Attach live listings to the ranked site they best match.
-  // Suburb-name match is handled inside rankListingsByMatch, but
-  // here we attach at site level using the AI-returned suburb.
+  // Attach live listings to ranked sites.
+  //
+  // Day 22 v14: the strict suburb-name match (`listingSuburb === siteSuburb`)
+  // was rejecting almost every listing because grid-page chunk
+  // titles often have `suburb: null` (parser couldn't extract
+  // suburb from grid-page chunks). Now we use a tier system:
+  //   1. Strict suburb match (suburb field populated both sides)
+  //   2. Suburb-from-name field on site (e.g. "Constantia, Cape Town")
+  //   3. Fallback: first 3 listings go to first site (city-level)
+  //
+  // Net effect: even when parser can't extract suburb, listings
+  // still appear on the result page so the Live listings section
+  // is never empty when Tavily returned data.
   if (allLiveListings.length > 0) {
+    const siteListingsMap = new Map<number, any[]>();
+    let unassignedIndex = 0;
     for (const site of rankedSites) {
-      // Build site search key from suburb OR name field (split on ",")
       const explicitSuburb = ((site as any).suburb ?? "").toString().toLowerCase().trim();
       const nameField = (site.name ?? "").toString().toLowerCase().trim();
       const nameSuburb = nameField.includes(",")
         ? nameField.split(",")[0].trim()
         : nameField;
       const siteSuburb = explicitSuburb || nameSuburb;
-      if (!siteSuburb) continue;
       const matched = allLiveListings.filter((l) => {
-        const listingSuburb = (l.suburb ?? "").toLowerCase().trim();
+        const listingSuburb = (l.suburb ?? "").toString().toLowerCase().trim();
+        // Tier 3: listing has no suburb, defer to fall-through
         if (!listingSuburb) return false;
+        if (!siteSuburb) return false;
         // Tier 1: exact
         if (listingSuburb === siteSuburb) return true;
-        // Tier 2: shared >=1 word of length > 3
+        // Tier 2: shared word of length > 3
         const sw: string[] = siteSuburb.split(/\s+/).filter((w: string) => w.length > 3);
         const lw: string[] = listingSuburb.split(/\s+/);
         return sw.some((w: string) => lw.includes(w));
       });
-      if (matched.length > 0) {
+      siteListingsMap.set(site.rank, matched.slice(0, 3));
+    }
+    // Distribute remaining listings (suburb-less) round-robin to sites
+    const suburblessListings = allLiveListings.filter(
+      (l) => !(l.suburb ?? "").toString().trim(),
+    );
+    for (const listing of suburblessListings) {
+      const targetRank = rankedSites[unassignedIndex % rankedSites.length]?.rank;
+      if (targetRank !== undefined) {
+        const existing = siteListingsMap.get(targetRank) ?? [];
+        if (existing.length < 3) {
+          siteListingsMap.set(targetRank, [...existing, listing]);
+        }
+      }
+      unassignedIndex += 1;
+    }
+    // Apply map back to sites
+    for (const site of rankedSites) {
+      const matched = siteListingsMap.get(site.rank);
+      if (matched && matched.length > 0) {
         (site as any).liveListings = matched.slice(0, 3);
       }
     }
