@@ -10,6 +10,7 @@ import { RankedSiteCard } from "@/components/RankedSiteCard";
 import { FeedbackWidget } from "@/components/FeedbackWidget";
 import { RankingChart } from "@/components/RankingChart";
 import { ListingsOverlay } from "@/components/ListingsOverlay";
+import { ResultChatPanel } from "@/components/ResultChatPanel";
 import { detectCity } from "@/lib/stub/detect";
 import { REAL_SITE_CATALOG } from "@/lib/stub/real-sites";
 import { SUBURB_PROFILES } from "@/lib/demographics/suburbs";
@@ -783,10 +784,17 @@ export default async function ResultPage({
         <FeedbackWidget questionId={id} />
 
         <footer className="mt-auto pt-12 text-center text-xs text-atlas-muted">
-          <p>
-            Atlas · {new Date().getFullYear()}
-          </p>
-        </footer>
+           <p>
+             Atlas · {new Date().getFullYear()}
+           </p>
+         </footer>
+
+      {/* Day 28 — floating chat panel for follow-ups + live result refinements */}
+      <ResultChatPanel
+        questionContext={question.questionText}
+        vertical={question.vertical}
+        rankedSites={rankedSites}
+      />
     </AppShell>
   );
 }
