@@ -1,13 +1,15 @@
 "use client";
 
 /**
- * Atlas — Listings Overlay (Path 4, Day 10+; Day 11 cross-user).
+ * Atlas — Listings Overlay (Path 4, Day 10+; Day 11 cross-user;
+ * Day 22 v15 — Tavily live portal listings).
  *
  * The "Listings in this area" section on the result page. Shows:
  *   - The user's own plots first (full data, can edit/share)
- *   - Then other Atlas users' published plots (data fields
- *     only by default, contact fields only if the owner
- *     explicitly opted in via revealContact)
+ *   - Other Atlas users' published plots
+ *   - Day 22 v15: live listings from SA property portals
+ *     (Property24, Private Property, Pam Golding, Seeff, Gumtree,
+ *     BidX1, Chas Everitt) via Tavily. Agent names redacted.
  *
  * Plots are private to their owner by default. The user can
  * toggle publishToMarket + revealContact on a per-listing basis
@@ -31,15 +33,57 @@ export interface PlotCard extends ModalPlotCard {
   ownership: "owner" | "market";
 }
 
+/**
+ * Day 22 v15: live portal listing. Lighter than the
+ * LiveListingsGrid card — same data fields but uses PlotCard-
+ * style listing-row rendering so it sits naturally next to
+ * owner + market plots in this section.
+ */
+export interface TavilyListing {
+  id: string;
+  suburb: string | null;
+  portal: string;
+  url: string;
+  price: string | null;
+  erfSize: string | null;
+  bedrooms: number | null;
+  bathrooms: number | null;
+  address: string | null;
+  title: string;
+  matchTier: 1 | 2 | 3;
+}
+
+const PORTAL_LABEL: Record<string, string> = {
+  property24: "Property24",
+  privateproperty: "Private Property",
+  gumtree: "Gumtree",
+  bidx1: "BidX1",
+  pamgolding: "Pam Golding",
+  seeff: "Seeff",
+  chaseveritt: "Chas Everitt",
+};
+
+const PORTAL_BADGE: Record<string, string> = {
+  property24: "bg-blue-500/15 text-blue-300",
+  privateproperty: "bg-purple-500/15 text-purple-300",
+  gumtree: "bg-emerald-500/15 text-emerald-300",
+  bidx1: "bg-amber-500/15 text-amber-300",
+  pamgolding: "bg-rose-500/15 text-rose-300",
+  seeff: "bg-cyan-500/15 text-cyan-300",
+  chaseveritt: "bg-indigo-500/15 text-indigo-300",
+};
+
 export function ListingsOverlay({
   questionId,
   initialOwner,
   initialMarket,
+  initialTavilyListings,
   cityFilter,
 }: {
   questionId: string;
   initialOwner: PlotCard[];
   initialMarket: PlotCard[];
+  initialTavilyListings?: TavilyListing[];
   cityFilter: string | null;
 }) {
   const [owner, setOwner] = useState<PlotCard[]>(initialOwner);
@@ -63,7 +107,27 @@ export function ListingsOverlay({
     });
   }
 
-  const total = owner.length + market.length;
+  // Day 22 v15: filter Tavily listings to drop banner/junk entries.
+  // An entry is "real" if it has any of: price, erf size, address,
+  // or a meaningful (non-banner) title.
+  const realTavilyListings: TavilyListing[] = (initialTavilyListings ?? []).filter((l) => {
+    const hasPrice = !!l.price;
+    const hasErf = !!l.erfSize;
+    const hasAddress = !!l.address;
+    const hasRealTitle =
+      !!l.title &&
+      l.title.length >= 15 &&
+      !l.title.toLowerCase().includes("property alerts") &&
+      !l.title.toLowerCase().includes("get instant") &&
+      !l.title.toLowerCase().includes("listing number") &&
+      !l.title.toLowerCase().includes("calculate bond") &&
+      !l.title.toLowerCase().includes("monthly bond") &&
+      !l.title.toLowerCase().includes("my properties") &&
+      !l.title.toLowerCase().includes("property alerts");
+    return hasPrice || hasErf || hasAddress || hasRealTitle;
+  });
+
+  const total = owner.length + market.length + realTavilyListings.length;
 
   return (
     <section className="mt-6">
@@ -74,6 +138,9 @@ export function ListingsOverlay({
           </h2>
           <span className="text-[10px] uppercase tracking-wider text-atlas-muted">
             {owner.length} yours &middot; {market.length} from other Atlas users
+            {realTavilyListings.length > 0
+              ? ` · ${realTavilyListings.length} from SA portals`
+              : ""}
             {cityFilter ? ` · ${cityFilter}` : ""}
           </span>
         </div>
@@ -123,6 +190,71 @@ export function ListingsOverlay({
             <PlotListItem key={p.id} plot={p} />
           ))}
         </ol>
+      )}
+
+      {/* Day 22 v15: live portal listings rendered as a third
+          subsection underneath owner + market plots. Click any
+          "View listing →" to open the actual portal page. */}
+      {realTavilyListings.length > 0 && (
+        <div className="mt-4 border-t border-atlas-border/40 pt-3">
+          <div className="mb-2 flex items-center justify-between">
+            <h3 className="font-mono text-[10px] uppercase tracking-wider text-atlas-muted">
+              From SA property portals
+            </h3>
+            <span className="font-mono text-[9px] text-atlas-muted">
+              Powered by Tavily
+            </span>
+          </div>
+          <ol className="space-y-2">
+            {realTavilyListings.map((l) => (
+              <li
+                key={l.id}
+                className="flex items-baseline justify-between gap-3 rounded border border-atlas-border/40 bg-atlas-surface/40 px-3 py-2 text-xs"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`inline-block rounded-sm px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${
+                        PORTAL_BADGE[l.portal] ?? "bg-zinc-500/15 text-zinc-300"
+                      }`}
+                    >
+                      {PORTAL_LABEL[l.portal] ?? l.portal}
+                    </span>
+                    {l.matchTier === 1 && (
+                      <span className="font-mono text-[9px] text-emerald-400">exact</span>
+                    )}
+                    {l.matchTier === 2 && (
+                      <span className="font-mono text-[9px] text-amber-400">fuzzy</span>
+                    )}
+                  </div>
+                  <p className="mt-1 truncate text-atlas-text">{l.title}</p>
+                  {l.address && (
+                    <p className="truncate font-mono text-[10px] text-atlas-muted">
+                      {l.address}
+                    </p>
+                  )}
+                  <p className="mt-0.5 text-atlas-muted">
+                    {l.suburb && <span>{l.suburb}</span>}
+                    {l.price && (
+                      <span className="text-atlas-text"> · {l.price}</span>
+                    )}
+                    {l.erfSize && <span> · {l.erfSize}</span>}
+                    {l.bedrooms && ` · ${l.bedrooms} bed`}
+                    {l.bathrooms && ` · ${l.bathrooms} bath`}
+                  </p>
+                </div>
+                <a
+                  href={l.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="shrink-0 rounded border border-atlas-accent bg-atlas-accent/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider text-atlas-text transition hover:bg-atlas-accent hover:text-white"
+                >
+                  View listing →
+                </a>
+              </li>
+            ))}
+          </ol>
+        </div>
       )}
 
       {modalOpen && (

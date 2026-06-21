@@ -146,6 +146,15 @@ export default async function ResultPage({
   const connectorsRun = Array.isArray(responseBody.connectorsRun)
     ? responseBody.connectorsRun
     : [];
+  // Day 22 v15: extract top-level Tavily live listings from the
+  // persisted response body. These power the "From SA property
+  // portals" subsection in ListingsOverlay. Falls back to any
+  // listings attached to ranked sites (legacy path).
+  const tavilyListingsForOverlay: Array<any> = Array.isArray(
+    (responseBody as any).liveListings,
+  )
+    ? (responseBody as any).liveListings
+    : rankedSites.flatMap((s: any) => (s as any).liveListings ?? []);
 
   // Day 10+ Path 4: fetch the user's own plots AND other users'
   // published plots in the same area. Day 11 cross-user: the API
@@ -710,6 +719,7 @@ export default async function ResultPage({
           questionId={id}
           initialOwner={ownerPlots}
           initialMarket={marketPlots}
+          initialTavilyListings={tavilyListingsForOverlay}
           cityFilter={cityFilter}
         />
         </div>
