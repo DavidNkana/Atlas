@@ -58,19 +58,6 @@ export interface ListingsFetchOptions {
   creditBudget?: number;
   /** Max listings per suburb. Default 3. */
   maxListings?: number;
-  /**
-   * Day 22 v16: prompt-refined search query from Gemini. When set,
-   * the connector prefixes this query instead of building one
-   * from the hardcoded VERTICAL_KEYWORDS map. Gives the user
-   * a real prompt-driven search instead of a vertical keyword.
-   * Example: "vacant land Constantia Cape Town erf 1500 m² for sale"
-   */
-  customQuery?: string | null;
-  /**
-   * Day 22 v16: filter out rental listings when true. Default true
-   * because Atlas is for "where to build" not "where to rent".
-   */
-  salesOnly?: boolean;
 }
 
 interface TavilySearchHit {
@@ -468,16 +455,6 @@ export function parseListingsFromGridPage(
     const chunk = raw.slice(Math.max(0, start - 200), end);
     const parsed = parseListingFromExtract(url, chunk, portal, cityName);
     if (parsed && parsed.priceAmount && parsed.priceAmount > 100_000) {
-      // Day 22 v16: drop rental listings at parse time too.
-      // Some rentals show "to let" / "monthly" in title instead
-      // of being in URL.
-      const t = (parsed.title ?? "").toLowerCase();
-      const s = (parsed.snippet ?? "").toLowerCase();
-      const isRental =
-        /\bto\s+let\b/i.test(t + " " + s) ||
-        /\bmonthly\s+rental\b/i.test(t + " " + s) ||
-        /\brental\s+per\s+month\b/i.test(t + " " + s);
-      if (isRental) continue;
       // Re-id with chunk index so multiple listings from the same
       // page don't collide on the same hash.
       parsed.id = `${portal}-${hashUrl(url)}-${i}`;
@@ -688,29 +665,7 @@ export async function fetchLiveListings(
   const budget = opts.creditBudget ?? 10;
   const maxListings = opts.maxListings ?? 3;
 
-  // Day 22 v16: when Gemini has returned a prompt-refined query,
-  // use it directly. Otherwise fall back to the hardcoded
-  // VERTICAL_KEYWORDS map. The Gemini path gives much better
-  // results because it actually reads the user's prompt.
-  const baseQuery =
-    opts.customQuery && opts.customQuery.trim().length > 0
-      ? opts.customQuery.trim()
-      : null;
-
-  const queries = baseQuery
-    ? {
-        queries: SA_PORTALS.map((p) => ({
-          portal: p.id,
-          query: `site:${p.domain} ${baseQuery}`.trim(),
-          label: p.label,
-        })),
-      }
-    : buildListingsQuery(opts);
-
-  // Day 22 v16: rental listings are out of scope for Atlas.
-  // We always pass "for sale" in the base query (above) but
-  // also filter URLs that contain /to-rent/ explicitly.
-  const salesOnly = opts.salesOnly !== false;
+  const queries = buildListingsQuery(opts);
 
   try {
     // Step 1: parallel search across ALL SA portals indexed by
@@ -766,11 +721,6 @@ export async function fetchLiveListings(
       if (/\/news\//i.test(h.url)) return false;
       if (/\/advice\//i.test(h.url)) return false;
       if (/\/editorial\//i.test(h.url)) return false;
-      // Day 22 v16: drop rental listings when salesOnly=true
-      if (salesOnly) {
-        if (/\/to-rent\//i.test(h.url)) return false;
-        if (/\/commercial-property-to-rent\//i.test(h.url)) return false;
-      }
       // Accept if it has a listing-path hint
       return LISTING_URL_HINTS.some((re) => re.test(h.url));
     });
