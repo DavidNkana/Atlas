@@ -76,38 +76,88 @@ id order as input. No commentary.`;
   const userMessage = JSON.stringify(compactListings);
 
   try {
-    // Use Gemini 2.0-flash via GoogleGenerativeAI SDK (same pattern
-    // as gemini-search.ts). Try models in sequence.
-    const modelIds = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.5-flash"];
+    // Day 22 v20: route through OpenRouter when available, fall
+    // back to Google SDK otherwise. Same fix as gemini-search.ts
+    // v19. This stops Atlas from blowing the user's Vertex AI
+    // quota every time the evaluator runs.
+    const openrouterKey = process.env.OPENROUTER_API_KEY;
+    const modelIds = [
+      "google/gemini-2.0-flash-exp:free",
+      "google/gemini-2.0-flash-001",
+      "google/gemini-flash-1.5",
+    ];
     let text: string | undefined;
-    for (const modelId of modelIds) {
-      try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`;
-        const res = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [
-              { role: "user", parts: [{ text: systemPrompt + "\n\nListings:\n" + userMessage }] },
-            ],
-            generationConfig: {
-              temperature: 0.1,
-              responseMimeType: "application/json",
+
+    if (openrouterKey) {
+      for (const modelId of modelIds) {
+        try {
+          const res = await fetch(
+            "https://openrouter.ai/api/v1/chat/completions",
+            {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${openrouterKey}`,
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://atlas-q2eh.vercel.app",
+                "X-Title": "Atlas Listing Evaluator",
+              },
+              body: JSON.stringify({
+                model: modelId,
+                messages: [
+                  { role: "user", content: systemPrompt + "\n\nListings:\n" + userMessage },
+                ],
+                temperature: 0.1,
+                response_format: { type: "json_object" },
+              }),
             },
-          }),
-        });
-        if (!res.ok) {
-          const err = await res.text();
-          console.warn(`[listing-evaluator] ${modelId} ${res.status}: ${err.slice(0, 200)}`);
-          continue;
+          );
+          if (!res.ok) {
+            const err = await res.text();
+            console.warn(`[listing-evaluator OpenRouter] ${modelId} ${res.status}: ${err.slice(0, 150)}`);
+            continue;
+          }
+          const data = await res.json();
+          text = data.choices?.[0]?.message?.content;
+          if (text) break;
+        } catch (err) {
+          console.warn(`[listing-evaluator OpenRouter] ${modelId} failed:`, err);
         }
-        const data = await res.json();
-        text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (text) break;
-      } catch (modelErr) {
-        console.warn(`[listing-evaluator] ${modelId} failed:`, modelErr);
       }
     }
+
+    if (!text && apiKey) {
+      // Fall back to Google SDK with the original key
+      const googleModelIds = ["gemini-2.0-flash", "gemini-1.5-flash"];
+      for (const modelId of googleModelIds) {
+        try {
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`;
+          const res = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [
+                { role: "user", parts: [{ text: systemPrompt + "\n\nListings:\n" + userMessage }] },
+              ],
+              generationConfig: {
+                temperature: 0.1,
+                responseMimeType: "application/json",
+              },
+            }),
+          });
+          if (!res.ok) {
+            const err = await res.text();
+            console.warn(`[listing-evaluator Google] ${modelId} ${res.status}: ${err.slice(0, 200)}`);
+            continue;
+          }
+          const data = await res.json();
+          text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (text) break;
+        } catch (modelErr) {
+          console.warn(`[listing-evaluator Google] ${modelId} failed:`, modelErr);
+        }
+      }
+    }
+
     if (!text) return new Map();
 
     // Parse the JSON array
