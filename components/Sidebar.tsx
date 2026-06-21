@@ -190,7 +190,7 @@ export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boole
                   Atlas
                 </div>
                 <div className="truncate text-[10px] text-atlas-muted">
-                  Intelligence for African Real Estate
+                  Intelligence for African investments
                 </div>
               </div>
             )}
