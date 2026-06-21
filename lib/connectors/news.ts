@@ -35,17 +35,21 @@ export interface NewsArticle {
   sentiment?: "positive" | "neutral" | "negative";
 }
 
-// Category-specific query strings
+// Category-specific query strings.
+//
+// NewsAPI.org free tier silently rejects `domains=`, `country=`, and
+// `category=` — passing any of them returns 0 articles instead of an
+// error. We do SA bias client-side via PREFERRED_SA_SOURCES sort below.
+//
+// Queries are intentionally short and broad. NewsAPI's relevance
+// ranking drops to 0 matches on heavy OR-of-quoted-keywords on free
+// tier; plain OR queries work reliably.
 const CATEGORY_QUERIES: Record<NewsCategory, string> = {
-  all: "real estate OR stock market OR cryptocurrency OR investment",
-  stocks:
-    '"stock market" OR "JSE" OR "earnings" OR "IPO" OR "dividend" OR "shares"',
-  crypto:
-    '"cryptocurrency" OR "bitcoin" OR "ethereum" OR "blockchain" OR "defi"',
-  investments:
-    '"investment" OR "portfolio" OR "venture capital" OR "private equity" OR "fund" OR "ETF"',
-  real_estate:
-    '"real estate" OR "property market" OR "housing" OR "REIT" OR "residential"',
+  all: "stock market OR cryptocurrency OR real estate OR investment",
+  stocks: "stock market OR earnings OR shares OR IPO",
+  crypto: "cryptocurrency OR bitcoin OR ethereum OR blockchain",
+  investments: "investment OR ETF OR venture capital OR fund",
+  real_estate: "real estate OR property market OR REIT OR housing",
 };
 
 // SA-biased preferred sources
@@ -113,13 +117,9 @@ export async function fetchNews(
       pageSize: String(Math.min(limit * 2, 100)),
     });
 
-    // SA bias for land-development-relevant categories
-    if (category === "stocks" || category === "real_estate") {
-      params.set(
-        "domains",
-        "businessday.co.za,fin24.com,moneyweb.co.za,engineeringnews.co.za,news24.com,dailymaverick.co.za",
-      );
-    }
+    // NOTE: do NOT pass `domains=` on the free tier — NewsAPI silently
+    // returns 0 results instead of erroring. SA bias is applied below
+    // via the PREFERRED_SA_SOURCES sort.
 
     const url = `${NEWS_API_BASE}/everything?${params.toString()}`;
     const res = await fetch(url, {

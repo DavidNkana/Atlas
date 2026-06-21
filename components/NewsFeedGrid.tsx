@@ -170,8 +170,10 @@ export function NewsFeedGrid() {
       {/* Empty state */}
       {!loading && !error && visibleArticles.length === 0 && (
         <div className="rounded border border-atlas-border/40 bg-atlas-surface/40 p-8 text-center text-sm text-atlas-muted">
-          No articles in this category right now. Try Stocks or
-          Real Estate for SA business coverage.
+          No articles in this category right now. Try the All tab —
+          it surfaces the broadest mix of stocks, crypto, investments
+          and real-estate coverage from around the world. NewsAPI.org
+          free tier caches for an hour.
         </div>
       )}
 

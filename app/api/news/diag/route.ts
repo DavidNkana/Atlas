@@ -45,7 +45,7 @@ export async function GET() {
 
   return NextResponse.json({
     ok: hasKey && sampleError === null,
-    version: "news-v1",
+    version: "news-v2",
     newsApi: {
       keyConfigured: hasKey,
       keyPreview,
@@ -63,5 +63,10 @@ export async function GET() {
     fixInstructions: hasKey
       ? null
       : "Add NEWS_API_KEY to Vercel environment variables (Production, Preview, Development). Get a free key at https://newsapi.org/register.",
+    tips: [
+      "NewsAPI.org free tier does NOT allow the domains=, country=, or category= parameters — passing any of them silently returns 0 articles instead of an error. SA bias is applied client-side via PREFERRED_SA_SOURCES sort.",
+      "If articleCount is 0 for every category, check (1) NEWS_API_KEY is set in all 3 Vercel envs, (2) the free tier quota hasn't been exhausted (100 req/day), and (3) the cache hasn't cached an empty result from a previous failed run.",
+      "To bust the in-memory cache for a category, redeploy. The cache is per-process and dies with each Vercel cold start.",
+    ],
   });
 }
