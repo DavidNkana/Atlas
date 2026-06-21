@@ -54,24 +54,36 @@ export function NewsFeedGrid() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  const [keyConfigured, setKeyConfigured] = useState<boolean | null>(null);
+
+  const loadAll = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await fetchAllCategories();
+      setArticlesByCat(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError(null);
-    fetchAllCategories()
-      .then((data) => {
-        if (!cancelled) {
-          setArticlesByCat(data);
-          setLoading(false);
-        }
+    // Probe diag to learn whether NEWS_API_KEY is actually configured
+    // in this environment. Surfaces the truth to the user without
+    // making them open /api/news/diag manually.
+    fetch("/api/news/diag", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => {
+        if (!cancelled) setKeyConfigured(d?.newsApi?.keyConfigured ?? null);
       })
-      .catch((err) => {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : String(err));
-          setLoading(false);
-        }
+      .catch(() => {
+        if (!cancelled) setKeyConfigured(null);
       });
+    void loadAll();
     return () => {
       cancelled = true;
     };
@@ -169,11 +181,53 @@ export function NewsFeedGrid() {
 
       {/* Empty state */}
       {!loading && !error && visibleArticles.length === 0 && (
-        <div className="rounded border border-atlas-border/40 bg-atlas-surface/40 p-8 text-center text-sm text-atlas-muted">
-          No articles in this category right now. Try the All tab —
-          it surfaces the broadest mix of stocks, crypto, investments
-          and real-estate coverage from around the world. NewsAPI.org
-          free tier caches for an hour.
+        <div className="rounded border border-atlas-border/40 bg-atlas-surface/40 p-8 text-center">
+          <p className="text-sm text-atlas-text">
+            No articles in this category right now.
+          </p>
+          <p className="mt-2 text-xs text-atlas-muted">
+            {keyConfigured === false ? (
+              <>
+                <span className="font-semibold text-amber-400">
+                  NewsAPI key is not configured in this environment.
+                </span>{" "}
+                Add <code className="rounded bg-atlas-bg px-1 py-0.5 text-[11px]">NEWS_API_KEY</code>{" "}
+                in Vercel → Project → Settings → Environment Variables
+                (tick <strong>Production</strong>, Preview, and
+                Development).
+              </>
+            ) : (
+              <>
+                Try the All tab — it surfaces the broadest mix of
+                stocks, crypto, investments and real-estate coverage
+                from around the world.
+              </>
+            )}
+          </p>
+          <p className="mt-3 text-[10px] text-atlas-muted">
+            NewsAPI.org free tier: 100 req/day. Cache age: 1 hour.
+          </p>
+          <button
+            type="button"
+            disabled={retrying}
+            onClick={async () => {
+              setRetrying(true);
+              try {
+                await fetch("/api/news/retry", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ category: "all" }),
+                  cache: "no-store",
+                });
+                await loadAll();
+              } finally {
+                setRetrying(false);
+              }
+            }}
+            className="mt-4 rounded border border-atlas-accent bg-atlas-accent/10 px-4 py-2 text-xs font-medium uppercase tracking-wider text-atlas-accent transition hover:bg-atlas-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {retrying ? "Retrying…" : "Retry now (busts 1-hour cache)"}
+          </button>
         </div>
       )}
 

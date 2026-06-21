@@ -64,8 +64,73 @@ const PREFERRED_SA_SOURCES = [
   "Engineering News",
 ];
 
-// In-memory cache
+// In-memory cache. Empty results are NEVER cached — that poisoned an
+// entire hour of requests when a deploy raced an env-var update.
+// Cache entries only live after a successful non-empty fetch.
 const cache = new Map<string, { articles: NewsArticle[]; expiresAt: number }>();
+
+// Per-category fetch status, surfaced via diag so David can see the
+// truth without opening DevTools. Reset every cold start.
+const fetchStatus = new Map<
+  NewsCategory,
+  {
+    lastStatus: "ok" | "no-key" | "http-error" | "bad-shape" | "no-cache-hit";
+    lastHttp?: number;
+    lastErrorSnippet?: string;
+    lastTotalResults?: number;
+    lastArticleCount?: number;
+    lastFetchedAt?: string;
+  }
+>();
+
+function recordStatus(
+  category: NewsCategory,
+  status: "ok" | "no-key" | "http-error" | "bad-shape" | "no-cache-hit",
+  extra: {
+    http?: number;
+    errorSnippet?: string;
+    totalResults?: number;
+    articleCount?: number;
+  } = {},
+) {
+  fetchStatus.set(category, {
+    lastStatus: status,
+    lastHttp: extra.http,
+    lastErrorSnippet: extra.errorSnippet,
+    lastTotalResults: extra.totalResults,
+    lastArticleCount: extra.articleCount,
+    lastFetchedAt: new Date().toISOString(),
+  });
+}
+
+export function getNewsFetchStatus(): Record<
+  NewsCategory,
+  ReturnType<typeof recordStatus> extends infer R
+    ? R extends undefined
+      ? never
+      : Awaited<R>
+    : never
+> {
+  const out: any = {};
+  for (const cat of ["stocks", "crypto", "investments", "real_estate"] as NewsCategory[]) {
+    out[cat] =
+      fetchStatus.get(cat) ?? { lastStatus: "no-cache-hit" };
+  }
+  return out;
+}
+
+/**
+ * Bust the in-memory cache for one category (or all).
+ * Used by /api/news/retry to force a fresh fetch when David clicks
+ * the "Retry" button on the empty state.
+ */
+export function bustNewsCache(category?: NewsCategory): void {
+  if (category) {
+    cache.delete(cacheKey(category));
+    return;
+  }
+  cache.clear();
+}
 
 function cacheKey(category: NewsCategory): string {
   return `news:${category}`;
@@ -82,6 +147,12 @@ function getCached(category: NewsCategory): NewsArticle[] | null {
 }
 
 function setCached(category: NewsCategory, articles: NewsArticle[]): void {
+  if (articles.length === 0) {
+    // Guardrail: never cache empty results. A single bad response
+    // (stale env, quota exhausted, transient 5xx) would poison every
+    // request for the next hour otherwise.
+    return;
+  }
   cache.set(cacheKey(category), {
     articles,
     expiresAt: Date.now() + CACHE_TTL_MS,
@@ -92,19 +163,30 @@ function setCached(category: NewsCategory, articles: NewsArticle[]): void {
  * Day 23 — Fetch news for a category. Uses NewsAPI.org /everything.
  * SA bias for stocks + real_estate (lots of relevant local coverage).
  * International sources for crypto (mostly international news).
+ *
+ * Empty results are NOT cached. Diag endpoint can read the per-category
+ * fetch status via getNewsFetchStatus().
  */
 export async function fetchNews(
   category: NewsCategory,
-  options: { limit?: number } = {},
+  options: { limit?: number; bypassCache?: boolean } = {},
 ): Promise<NewsArticle[]> {
   const limit = options.limit ?? 20;
 
-  // Cache hit
-  const cached = getCached(category);
-  if (cached) return cached.slice(0, limit);
+  // Cache hit (only if non-empty AND not bypassed)
+  if (!options.bypassCache) {
+    const cached = getCached(category);
+    if (cached && cached.length > 0) {
+      return cached.slice(0, limit);
+    }
+  } else {
+    bustNewsCache(category);
+  }
 
   if (!NEWS_API_KEY) {
-    console.warn("[news] NEWS_API_KEY not set, returning empty");
+    recordStatus(category, "no-key", {
+      errorSnippet: "NEWS_API_KEY env var is not set in runtime",
+    });
     return [];
   }
 
@@ -128,13 +210,18 @@ export async function fetchNews(
 
     if (!res.ok) {
       const errText = await res.text();
-      console.warn(`[news] NewsAPI ${res.status}: ${errText.slice(0, 200)}`);
+      recordStatus(category, "http-error", {
+        http: res.status,
+        errorSnippet: errText.slice(0, 200),
+      });
       return [];
     }
 
     const data = await res.json();
     if (data.status !== "ok" || !Array.isArray(data.articles)) {
-      console.warn(`[news] NewsAPI unexpected status: ${data.status}`);
+      recordStatus(category, "bad-shape", {
+        errorSnippet: `status=${data.status} code=${data.code ?? "?"} msg=${(data.message ?? "").slice(0, 200)}`,
+      });
       return [];
     }
 
@@ -168,9 +255,16 @@ export async function fetchNews(
       return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
     });
 
+    recordStatus(category, "ok", {
+      totalResults: typeof data.totalResults === "number" ? data.totalResults : undefined,
+      articleCount: articles.length,
+    });
     setCached(category, articles);
     return articles.slice(0, limit);
   } catch (err) {
+    recordStatus(category, "http-error", {
+      errorSnippet: err instanceof Error ? err.message.slice(0, 200) : String(err),
+    });
     console.warn("[news] fetch error:", err);
     return [];
   }
