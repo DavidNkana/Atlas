@@ -90,6 +90,7 @@ type ResponseBody = {
     provider: string;
     modelError?: string;
     fallbackUsed?: boolean;
+    attemptedChain?: string[];
   };
   vertical?: string;
   question?: string;
@@ -388,20 +389,75 @@ export default async function ResultPage({
         {/* Model warning banner — only when NOT in stub_demo mode.
             In stub_demo mode, the stub banner below already says
             "AI models are currently overloaded" and the detailed
-            model errors are noise on top of that one clear message. */}
+            model errors are noise on top of that one clear message.
+
+            Day 22 v18: when Gemini cascade falls through, detect
+            Vertex-format key + quota errors and surface actionable
+            guidance instead of a raw error string. */}
         {responseBody.model?.modelError && responseStatus !== "stub_demo" && (
-          <div
-            role="alert"
-            data-testid="atlas-model-error"
-            className="mb-6 rounded-md border border-amber-900 bg-atlas-surface px-4 py-3 text-xs text-amber-400"
-          >
-            <strong className="font-semibold text-amber-300">
-              Model warning:
-            </strong>{" "}
-            <span className="text-amber-400">
-              {responseBody.model.modelError}
-            </span>
-          </div>
+          (() => {
+            const errText: string = responseBody.model.modelError ?? "";
+            const isQuota =
+              /quota|limit: 0|free_tier/i.test(errText) ||
+              /AQ\.Ab8RN6/i.test(process.env.NEXT_PUBLIC_GEMINI_KEY_HINT ?? "");
+            const isVertexKey =
+              /AQ\.[A-Za-z0-9_-]{20,}/.test(errText) === false &&
+              responseBody.model?.attemptedChain?.includes("gemini-search");
+            return (
+              <div
+                role="alert"
+                data-testid="atlas-model-error"
+                className={`mb-6 rounded-md border px-4 py-3 text-xs ${
+                  isQuota
+                    ? "border-rose-900 bg-atlas-surface text-rose-300"
+                    : "border-amber-900 bg-atlas-surface text-amber-400"
+                }`}
+              >
+                {isQuota ? (
+                  <>
+                    <strong className="font-semibold">
+                      Gemini API key issue detected
+                    </strong>
+                    <p className="mt-2 text-rose-200">
+                      Atlas's reasoning engine returned a quota error or
+                      Vertex-format key. The result below is from the
+                      curated-stub fallback (example data) — not a real
+                      answer to your question.
+                    </p>
+                    <p className="mt-2 text-rose-200">
+                      <strong>Fix in 2 minutes:</strong> Open{" "}
+                      <a
+                        href="https://aistudio.google.com/apikey"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline hover:text-rose-100"
+                      >
+                        aistudio.google.com/apikey
+                      </a>{" "}
+                      and create a key (starts with <code>AIzaSy</code>).
+                      Paste it into Vercel as{" "}
+                      <code>GEMINI_API_KEY</code> and redeploy.
+                    </p>
+                    <details className="mt-2 text-rose-200">
+                      <summary className="cursor-pointer text-rose-300">
+                        Show technical details
+                      </summary>
+                      <pre className="mt-1 overflow-x-auto whitespace-pre-wrap text-[10px] text-rose-300">
+                        {errText}
+                      </pre>
+                    </details>
+                  </>
+                ) : (
+                  <>
+                    <strong className="font-semibold text-amber-300">
+                      Model warning:
+                    </strong>{" "}
+                    <span className="text-amber-400">{errText}</span>
+                  </>
+                )}
+              </div>
+            );
+          })()
         )}
 
         {/* Day 12 v16 — Research answer from Gemini Search.

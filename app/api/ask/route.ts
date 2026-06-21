@@ -196,7 +196,7 @@ type ModelBlock = {
 type AskResponse = {
   id: string;
   status: string;
-  model: ModelBlock;
+  model: ModelBlock & { attemptedChain?: string[]; modelError?: string };
   vertical: string;
   question: string;
   echo: string;
@@ -284,8 +284,8 @@ const CUSTOM_VERTICAL_RE = /^custom:[a-z][a-z0-9_]{1,39}$/;
   * gracefully degrade to the cross-vertical query and the stub returns
   * generic templates. The user gets an answer, just not a vertical-tuned one.
  */
-function modelInfoToBlock(info: ModelInfo, fallbackUsed: boolean, modelError?: string, attemptedChain?: string[]): ModelBlock {
-  const block: ModelBlock = {
+function modelInfoToBlock(info: ModelInfo, fallbackUsed: boolean, modelError?: string, attemptedChain?: string[]): ModelBlock & { attemptedChain?: string[]; modelError?: string } {
+  const block: ModelBlock & { attemptedChain?: string[]; modelError?: string } = {
     id: info.id,
     displayName: info.displayName,
     provider: info.provider,
