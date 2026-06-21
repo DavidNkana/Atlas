@@ -12,6 +12,10 @@ export const metadata: Metadata = {
     icon: [
       { url: "/icon.svg", type: "image/svg+xml" },
     ],
+    // Day 28 v2 — stop /favicon.ico 404s by adding a 32x32 ico
+    // fallback. Some browsers (and Lighthouse) still hit
+    // /favicon.ico unconditionally regardless of <link rel=icon>.
+    shortcut: "/icon.svg",
   },
 };
 
