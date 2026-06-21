@@ -87,6 +87,7 @@ export async function POST(req: NextRequest) {
 
   let tavilyAnswer = "";
   let tavilySources: Array<{ title: string; url: string }> = [];
+  let tavilyOk = false;
 
   try {
     const tavilyPromise = fetchTavilyWebAnswer(tavilyQuery, {
@@ -100,11 +101,13 @@ export async function POST(req: NextRequest) {
       ),
     ]);
     if (tavilyResult) {
-      tavilyAnswer = tavilyResult.answer;
+      tavilyAnswer = tavilyResult.answer ?? "";
       tavilySources = tavilyResult.sources.map((s) => ({
         title: s.title,
         url: s.url,
       }));
+      // OK = we got data back (either answer OR sources).
+      tavilyOk = tavilyAnswer.length > 0 || tavilySources.length > 0;
     }
   } catch (err) {
     console.warn("[/api/chat] tavily error:", err);
@@ -115,6 +118,7 @@ export async function POST(req: NextRequest) {
   // rest of Atlas uses. If Gemini fails (quota), fall back to
   // returning Tavily's raw answer verbatim.
   let geminiAnswer = "";
+  let geminiOk = false;
   const geminiKey = process.env.GEMINI_API_KEY;
   if (geminiKey) {
     try {
@@ -127,23 +131,50 @@ export async function POST(req: NextRequest) {
           setTimeout(() => reject(new Error("gemini_timeout")), GEMINI_TIMEOUT_MS),
         ),
       ]);
-      geminiAnswer = result.response.text().trim();
+      geminiAnswer = (result.response.text() ?? "").trim();
+      geminiOk = geminiAnswer.length >= 20;
     } catch (err) {
       console.warn("[/api/chat] gemini error:", err);
       // Fall through — we'll use Tavily's answer below.
     }
   }
 
-  // Compose the final answer.
-  // - If Gemini produced something useful, use it.
-  // - Otherwise fall back to Tavily's pre-synthesized answer.
-  // - Otherwise return a "no data" message but still mark ok:true so
-  //   the UI can show the sources.
-  const finalAnswer =
-    geminiAnswer && geminiAnswer.length > 20
-      ? geminiAnswer
-      : tavilyAnswer ||
-        "I couldn't find live web data on that topic right now. Try refining the question or check back in a few minutes.";
+  // Day 28 v2 — Compose the final answer with PROPER fallback chain.
+  //
+  // Priority:
+  //   1. Gemini's synthesized answer (best — chat-style + cites sources)
+  //   2. Tavily's pre-synthesized answer (good — direct from web search)
+  //   3. Synthesize a response from Tavily's sources if Tavily returned
+  //      sources but no synthesized answer (common with Tavily /search)
+  //   4. Genuine fallback message — only when BOTH Tavily and Gemini
+  //      returned nothing
+  let finalAnswer: string;
+  if (geminiOk) {
+    finalAnswer = geminiAnswer;
+  } else if (tavilyAnswer.length > 0) {
+    // Tavily gave us a synthesized answer; use it.
+    finalAnswer = tavilyAnswer;
+  } else if (tavilySources.length > 0) {
+    // Tavily returned sources but no synthesized answer (very common
+    // pattern — Tavily's /search often returns just the results array).
+    // Surface them as a structured "live data" response.
+    const sourceList = tavilySources
+      .slice(0, 3)
+      .map((s, i) => `[${i + 1}] ${s.title}`)
+      .join("\n");
+    finalAnswer = `I found live web data on this topic but couldn't synthesize a full answer right now. Here are the most relevant sources:\n\n${sourceList}\n\nClick any citation below for the full article.`;
+  } else {
+    // Both failed. This is the genuine "no data" case.
+    finalAnswer =
+      "I couldn't reach a live web data source right now. " +
+      (geminiKey ? "AI synthesis and Tavily search both returned empty. " : "") +
+      "Try a more specific question or check back in a few minutes.";
+  }
+
+  // Day 28 v2 — diagnostics so David can see what actually happened.
+  console.log(
+    `[/api/chat] tavilyOk=${tavilyOk} sources=${tavilySources.length} geminiOk=${geminiOk} finalLen=${finalAnswer.length}`,
+  );
 
   // Detect if the user is asking for a refined site query.
   // Heuristic: words like "Gauteng", "2000 sqm", "Sandton" in
@@ -169,7 +200,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json(response, {
     headers: {
       "x-atlas-elapsed-ms": String(elapsed),
-      "x-atlas-status": "ok",
+      "x-atlas-status": geminiOk || tavilyOk ? "ok" : "no-data",
     },
   });
 }
