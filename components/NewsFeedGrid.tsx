@@ -16,8 +16,7 @@
  * lib/connectors/news directly from a "use client" component because
  * that module reads process.env.NEWS_API_KEY at load time — and on
  * the client bundle, process.env.NEWS_API_KEY is always undefined.
- * That was the v1-v4 render bug: server had articles, client always
- * got []. The route runs the connector server-side and returns JSON.
+ * The route runs the connector server-side and returns JSON.
  */
 
 import { useState, useEffect } from "react";
@@ -98,13 +97,6 @@ export function NewsFeedGrid() {
   const [retrying, setRetrying] = useState(false);
   const [diag, setDiag] = useState<any>(null);
 
-  /**
-   * Fetch articles via the server-side /api/news/feed route.
-   * This is the v5 fix: we previously called fetchAllCategories()
-   * from the client bundle, which always returned [] because the
-   * connector reads process.env.NEWS_API_KEY at module load and
-   * the client bundle has no env vars.
-   */
   const loadAll = async () => {
     setLoading(true);
     setError(null);
@@ -115,17 +107,16 @@ export function NewsFeedGrid() {
         setError(data.error ?? `Feed endpoint returned ${r.status}`);
         return;
       }
+      const stocks = data.articles.stocks ?? [];
+      const crypto = data.articles.crypto ?? [];
+      const investments = data.articles.investments ?? [];
+      const real_estate = data.articles.real_estate ?? [];
       setArticlesByCat({
-        stocks: data.articles.stocks ?? [],
-        crypto: data.articles.crypto ?? [],
-        investments: data.articles.investments ?? [],
-        real_estate: data.articles.real_estate ?? [],
-        all: [
-          ...(data.articles.stocks ?? []),
-          ...(data.articles.crypto ?? []),
-          ...(data.articles.investments ?? []),
-          ...(data.articles.real_estate ?? []),
-        ].sort(
+        stocks,
+        crypto,
+        investments,
+        real_estate,
+        all: [...stocks, ...crypto, ...investments, ...real_estate].sort(
           (a, b) =>
             new Date(b.publishedAt).getTime() -
             new Date(a.publishedAt).getTime(),
@@ -160,12 +151,10 @@ export function NewsFeedGrid() {
     };
   }, []);
 
-  const visibleArticles = (() => {
-    if (activeTab === "all") {
-      return articlesByCat.all;
-    }
-    return articlesByCat[activeTab] ?? [];
-  })();
+  const visibleArticles =
+    activeTab === "all"
+      ? articlesByCat.all
+      : articlesByCat[activeTab] ?? [];
 
   const displayed = showAll
     ? visibleArticles
@@ -173,7 +162,6 @@ export function NewsFeedGrid() {
 
   return (
     <section className="mx-auto max-w-5xl">
-      {/* Header */}
       <div className="mb-6 flex items-end justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-atlas-text">
@@ -189,7 +177,6 @@ export function NewsFeedGrid() {
         </span>
       </div>
 
-      {/* Category tabs (Bing-style) */}
       <div className="mb-4 flex gap-1 overflow-x-auto border-b border-atlas-border/40">
         {CATEGORIES.map((cat) => (
           <button
@@ -215,12 +202,10 @@ export function NewsFeedGrid() {
         ))}
       </div>
 
-      {/* Active tab description */}
       <p className="mb-4 text-[11px] text-atlas-muted">
         {CATEGORIES.find((c) => c.id === activeTab)?.description}
       </p>
 
-      {/* Error */}
       {error && (
         <div
           role="alert"
@@ -231,7 +216,6 @@ export function NewsFeedGrid() {
         </div>
       )}
 
-      {/* Loading skeleton */}
       {loading && (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {Array.from({ length: 6 }).map((_, i) => (
@@ -243,7 +227,6 @@ export function NewsFeedGrid() {
         </div>
       )}
 
-      {/* Card grid (Bing layout) */}
       {!loading && !error && displayed.length > 0 && (
         <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {displayed.map((article) => (
@@ -257,7 +240,6 @@ export function NewsFeedGrid() {
                 rel="noopener noreferrer"
                 className="flex h-full gap-3 p-3"
               >
-                {/* Thumbnail */}
                 {article.urlToImage ? (
                   <img
                     src={article.urlToImage}
@@ -283,7 +265,6 @@ export function NewsFeedGrid() {
                   </div>
                 )}
 
-                {/* Content */}
                 <div className="flex min-w-0 flex-1 flex-col">
                   <div className="mb-1 flex items-center gap-2 text-[10px] uppercase tracking-wider text-atlas-muted">
                     <span className="truncate font-medium">
@@ -330,7 +311,6 @@ export function NewsFeedGrid() {
         </ul>
       )}
 
-      {/* View more button */}
       {!loading && !showAll && visibleArticles.length > 8 && (
         <div className="mt-6 text-center">
           <button
@@ -343,7 +323,6 @@ export function NewsFeedGrid() {
         </div>
       )}
 
-      {/* Empty state */}
       {!loading && !error && visibleArticles.length === 0 && (
         <div className="rounded border border-atlas-border/40 bg-atlas-surface/40 p-8 text-center">
           <p className="text-sm text-atlas-text">
@@ -446,110 +425,6 @@ export function NewsFeedGrid() {
               Open diag JSON ↗
             </a>
           </div>
-        </div>
-      )}
-    </section>
-  );
-}
-
-      {/* Card grid (Bing layout) */}
-      {!loading && displayed.length > 0 && (
-        <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          {displayed.map((article) => (
-            <li
-              key={article.id}
-              className="group overflow-hidden rounded border border-atlas-border/40 bg-atlas-surface/40 transition hover:border-atlas-accent/50 hover:bg-atlas-surface"
-            >
-              <a
-                href={article.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex h-full gap-3 p-3"
-              >
-                {/* Thumbnail */}
-                {article.urlToImage ? (
-                  <img
-                    src={article.urlToImage}
-                    alt=""
-                    className="h-24 w-24 shrink-0 rounded object-cover"
-                    onError={(e) => {
-                      // Fallback if image fails to load
-                      (e.currentTarget as HTMLImageElement).style.display =
-                        "none";
-                    }}
-                  />
-                ) : (
-                  <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded bg-atlas-bg text-atlas-muted">
-                    <svg
-                      width="24"
-                      height="24"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                    >
-                      <path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7M3 7l4-4h10l4 4M3 7h18" />
-                    </svg>
-                  </div>
-                )}
-
-                {/* Content */}
-                <div className="flex min-w-0 flex-1 flex-col">
-                  <div className="mb-1 flex items-center gap-2 text-[10px] uppercase tracking-wider text-atlas-muted">
-                    <span className="truncate font-medium">
-                      {article.source}
-                    </span>
-                    <span>·</span>
-                    <span className="shrink-0">
-                      {relativeTime(article.publishedAt)}
-                    </span>
-                  </div>
-
-                  <h3 className="mb-1 line-clamp-2 text-sm font-semibold leading-snug text-atlas-text group-hover:text-atlas-accent">
-                    {article.title}
-                  </h3>
-
-                  {article.description && (
-                    <p className="line-clamp-2 text-[11px] leading-relaxed text-atlas-muted">
-                      {article.description}
-                    </p>
-                  )}
-
-                  {article.sentiment && (
-                    <span
-                      className={`mt-auto inline-flex w-fit items-center gap-1 self-start rounded border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${
-                        SENTIMENT_BADGE[article.sentiment]
-                      }`}
-                    >
-                      <span
-                        className={`inline-block h-1.5 w-1.5 rounded-full ${
-                          article.sentiment === "positive"
-                            ? "bg-emerald-400"
-                            : article.sentiment === "negative"
-                              ? "bg-rose-400"
-                              : "bg-zinc-400"
-                        }`}
-                      />
-                      {SENTIMENT_LABEL[article.sentiment]}
-                    </span>
-                  )}
-                </div>
-              </a>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {/* View more button */}
-      {!loading && !showAll && visibleArticles.length > 8 && (
-        <div className="mt-6 text-center">
-          <button
-            type="button"
-            onClick={() => setShowAll(true)}
-            className="rounded border border-atlas-border bg-atlas-surface px-6 py-2 text-xs font-medium uppercase tracking-wider text-atlas-text transition hover:border-atlas-accent hover:text-atlas-accent"
-          >
-            View more ({visibleArticles.length - 8} more)
-          </button>
         </div>
       )}
     </section>
