@@ -57,7 +57,7 @@ export default function PricingPage() {
           price="R250"
           cadence="per month"
           blurb="For land developers, property investors, and builders"
-          cta={{ kind: "checkout", plan: "pro", label: "Subscribe to Pro" }}
+          cta={{ kind: "checkout", plan: "pro", label: "Join waitlist" }}
           features={[
             "Unlimited questions",
             "All 4 data connectors (real-time)",
@@ -75,7 +75,7 @@ export default function PricingPage() {
           price="R2,500"
           cadence="per month"
           blurb="For property funds, agencies, and multi-user teams"
-          cta={{ kind: "checkout", plan: "team", label: "Subscribe to Team" }}
+          cta={{ kind: "checkout", plan: "team", label: "Join waitlist" }}
           features={[
             "Everything in Pro",
             "5 seats included",
