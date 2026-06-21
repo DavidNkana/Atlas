@@ -105,7 +105,7 @@ export async function GET(req: NextRequest) {
         erfSize: l.erfSize,
         url: l.url?.slice(0, 100),
       })),
-      gridPageParserVersion: "v10",
+      gridPageParserVersion: "v13",
     });
     diag.finalCount = listings.length;
   } catch (err) {
@@ -121,7 +121,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(diag, {
     headers: {
       "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
-      "X-Atlas-Diag-Version": "v10-full-portals",
+        "X-Atlas-Diag-Version": "v13-listing-urls",
     },
   });
 }

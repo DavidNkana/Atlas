@@ -484,22 +484,32 @@ export function parseListingsFromGridPage(
  */
 function extractListingUrlFromChunk(chunk: string, gridUrl: string): string | null {
   const allLinks = Array.from(chunk.matchAll(/\[([^\]]+)\]\((https?:\/\/[^\s\)]+)\)/g));
-  // Patterns that indicate a listing detail page
+  // Patterns that indicate a listing detail page. Order matters:
+  // most specific first (numeric IDs) so we match the deep listing
+  // page, not the grid page itself.
   const LISTING_DETAIL_PATTERNS = [
-    /\/property-details\//i, // Pam Golding, Seeff
-    /\/listing\//i, // Property24 detail
-    /\/for-sale\/[^/]+\/[^/]+\/\d+\/?/i, // Property24 grid detail
-    /\/to-rent\/[^/]+\/[^/]+\/\d+\/?/i,
-    /\/commercial-property-for-sale\/[^/]+\/\d+/i,
-    /\/commercial-property-to-rent\/[^/]+\/\d+/i,
-    /\/properties\//i,
+    /\/property-details\/[^\/]+\/[A-Za-z0-9]+/i, // Pam Golding /property-details/<slug>/<code>
+    /\/listing\/\d/i, // Property24 /listing/<id>
+    /\/for-sale\/[^\/]+\/[^\/]+\/[^\/]+\/\d{6,}/i, // Property24 numeric ID at end
+    /\/to-rent\/[^\/]+\/[^\/]+\/[^\/]+\/\d{6,}/i,
+    /\/commercial-property-for-sale\/[^\/]+\/[^\/]+\/\d/i,
+    /\/commercial-property-to-rent\/[^\/]+\/[^\/]+\/\d/i,
+    /\/(?:house|apartment|townhouse|vacant-land|commercial|smallholding|farm|erf)\/\d{5,}/i, // Seeff /house/3073430
+    /\/results\/[^\/]+\/[^\/]+\/[^\/]+\/[^\/]+\/\d{5,}/i, // Chas Everitt /results/.../<id>
     /\/[Tt]\d{6,}/i, // PrivateProperty T1234567
     /\/[Ee][Nn]\d{6,}/i, // Pam Golding EN1234567
     /\/[Kk][Tt][Pp]\d{6,}/i, // Pam Golding KTP1234567
   ];
+  // Build a set of "grid page" patterns to EXCLUDE (these are the
+  // search results pages themselves, not individual listings).
+  const GRID_PAGE_PATTERNS = [
+    /\/property-search\/(?:properties-for-sale|land|vacant-land|commercial)/i, // Pam Golding search
+    /\/results\/(?:residential|commercial)\/(?:for-sale|to-rent)\/?$/i, // Seeff/Chas Everitt search root
+  ];
   for (const m of allLinks) {
     const candidate = m[2];
     if (candidate === gridUrl) continue;
+    if (GRID_PAGE_PATTERNS.some((re) => re.test(candidate))) continue;
     if (LISTING_DETAIL_PATTERNS.some((re) => re.test(candidate))) {
       return candidate;
     }
