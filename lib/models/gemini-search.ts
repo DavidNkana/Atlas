@@ -188,18 +188,18 @@ export const geminiSearch: Model = {
           // Fall through to null
         }
       }
-      // If we still don't have JSON, build a minimal response
-      // from the raw text so the user still sees something
-      // useful (the prose summary + grounding citations).
+      // If we still don't have JSON, surface the failure so the
+      // route's fallback chain can try OpenRouter / curatedStub.
+      // Day 22 v24 fix: returning ranked_sites:[] with no `ok: false`
+      // was being interpreted as success by callModel(), which
+      // short-circuited the entire fallback chain. Users saw empty
+      // cards instead of OpenRouter / stub fallback results.
+      // We still pass the prose answer + sources through so the
+      // UI can render the "Research answer" panel even if no sites.
       if (!parsed || typeof parsed !== 'object') {
-        // Detect "no real suburbs" failure: when the model
-        // returns an empty array or a string saying "I don't
-        // know", don't pretend we have 5 sites. Just surface
-        // the prose answer + citations with NO ranked_sites.
-        // The result page will render the "Research answer"
-        // section at the top, then show an empty list below
-        // (curated stub never fires because we returned ok:true).
         return {
+          ok: false,
+          error: 'gemini-search: model returned no parseable JSON and no usable prose structure',
           ranked_sites: [],
           raw: text,
           answer: cleaned,
@@ -208,8 +208,8 @@ export const geminiSearch: Model = {
       }
 
       // Normalise ranked_sites: Gemini may omit the array if it
-      // can't find anything. We treat that the same as a missing
-      // JSON parse — still ok:true, but no sites to plot.
+      // can't find anything. If we have no sites at all, propagate
+      // as failure so the fallback chain fires.
       const rawSites = Array.isArray(parsed.ranked_sites)
         ? parsed.ranked_sites
         : [];
@@ -231,6 +231,24 @@ export const geminiSearch: Model = {
           lng,
         };
       });
+
+      // Day 22 v24 fix: if the model returned parseable JSON but
+      // zero sites, treat that as a failure too. The fallback
+      // chain (OpenRouter free tier, curatedStub) must get a
+      // chance to deliver actual sites. Returning ranked_sites:[]
+      // with no `ok: false` was the #1 cause of "empty result page
+      // when Gemini has quota" — the cascade thought it had
+      // succeeded and stopped.
+      if (sites.length === 0) {
+        return {
+          ok: false,
+          error: `gemini-search: returned 0 sites for "${req.question?.slice(0, 60)}"`,
+          ranked_sites: [],
+          raw: text,
+          answer: typeof parsed.answer === 'string' ? parsed.answer : cleaned,
+          sources: groundingSources,
+        } as any;
+      }
 
       // Merge model-provided sources (from the JSON "sources"
       // field) with the grounding metadata URLs. Grounding is

@@ -617,14 +617,22 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
 
         // Build fallback chain: every model in the registry except the one
         // that just failed and except the curated-stub. Only live (isAvailable)
-        // ones. We cap attempts at MAX_FALLBACK_ATTEMPTS - 1 (primary is 1) so
-        // the final curated-stub call is always the last attempt.
+        // ones.
+        //
+        // Day 22 v24 fix: removed the `.slice(0, MAX_FALLBACK_ATTEMPTS - 2)`
+        // cap. With MAX_FALLBACK_ATTEMPTS=3 that was leaving only 1 fallback
+        // slot, which meant OpenRouter's llama-free and mistral-free rarely
+        // got a chance to fire. The cap was tuned for the era when ALL
+        // models timed out individually; with the current per-model
+        // timeouts, longer chains are fine as long as each one returns
+        // quickly (8s default per model). We still call curatedStub as
+        // the last-resort path below.
         const fallbackChain = ALL_MODELS.filter(
           (m) =>
             m.info.id !== activeInfo.id &&
             m.info.id !== "curated-stub" &&
             m.isAvailable()
-        ).slice(0, MAX_FALLBACK_ATTEMPTS - 2); // -2 = primary + curated-stub
+        );
 
         let cascaded = false;
         for (const fallback of fallbackChain) {
