@@ -14,6 +14,7 @@ import type { Plan } from "@/lib/plan/types";
 import { classifyIntent } from "@/lib/intent/classify";
 import { enrichSitesWithCatalog } from "@/lib/stub/enrich-sites";
 import { fetchLiveListings, type LiveListing } from "@/lib/connectors/tavily-listings";
+import { evaluateListingsAgainstCriteria, applyEvaluation } from "@/lib/connectors/listing-evaluator";
 import { withTimeout } from "@/lib/util/timeout";
 import { sanitizeForJson } from "@/lib/util/json-sanitize";
 
@@ -972,6 +973,31 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
       seen.add(l.url);
       return true;
     });
+
+    // Day 22 v17: AI evaluation pass. Ask Gemini to score each
+    // listing against the user's prompt criteria. Drops rentals,
+    // apartments when user wants whole property, off-topic types.
+    // This is what Perplexity does — reads each listing and
+    // evaluates match quality, not just keyword match.
+    if (allLiveListings.length > 0) {
+      try {
+        const evaluations = await evaluateListingsAgainstCriteria(
+          trimmedQuestion,
+          allLiveListings,
+          process.env.GEMINI_API_KEY,
+        );
+        if (evaluations.size > 0) {
+          allLiveListings = applyEvaluation(allLiveListings, evaluations, {
+            minScore: 0.4,
+          });
+        }
+      } catch (evalErr) {
+        console.warn(
+          "[/api/ask] listing evaluation failed (non-fatal):",
+          evalErr,
+        );
+      }
+    }
   } catch (tavilyErr) {
     console.warn("[/api/ask] tavily-listings failed (non-fatal):", tavilyErr);
     liveListingsError = String(tavilyErr instanceof Error ? tavilyErr.message : tavilyErr);

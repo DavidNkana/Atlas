@@ -226,7 +226,31 @@ export function ListingsOverlay({
                     {l.matchTier === 2 && (
                       <span className="font-mono text-[9px] text-amber-400">fuzzy</span>
                     )}
+                    {/* Day 22 v17: AI-evaluated match score */}
+                    {typeof (l as any).matchScore === "number" && (
+                      <span
+                        className={`font-mono text-[9px] ${
+                          (l as any).matchScore >= 0.8
+                            ? "text-emerald-400"
+                            : (l as any).matchScore >= 0.6
+                              ? "text-amber-400"
+                              : "text-atlas-muted"
+                        }`}
+                        title={
+                          Array.isArray((l as any).matchReasons)
+                            ? (l as any).matchReasons.join(" · ")
+                            : ""
+                        }
+                      >
+                        match {Math.round(((l as any).matchScore as number) * 100)}%
+                      </span>
+                    )}
                   </div>
+                  {(l as any).disqualifyReason && (
+                    <p className="mt-0.5 font-mono text-[9px] text-rose-400">
+                      ⚠ {(l as any).disqualifyReason}
+                    </p>
+                  )}
                   <p className="mt-1 truncate text-atlas-text">{l.title}</p>
                   {l.address && (
                     <p className="truncate font-mono text-[10px] text-atlas-muted">
