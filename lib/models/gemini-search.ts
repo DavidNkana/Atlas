@@ -93,12 +93,12 @@ CRITICAL: also output a "tavily_query" string that Atlas will send to SA propert
 export const geminiSearch: Model = {
   info: {
     id: 'gemini-search',
-    displayName: 'Gemini Search (Perplexity-style, free)',
+    displayName: 'Gemini Search (via OpenRouter, free)',
     shortName: 'Gemini Search',
     provider: 'google',
     free: true,
     description:
-      'Google Gemini 2.5 Flash with Google Search grounding. Returns real web citations, real school names, real property prices. Free tier: 15 RPM / 1500 RPD. Best for research-grade answers.',
+      'Google Gemini 2.0 Flash routed through OpenRouter (free tier). Returns real suburb names, lat/lng, and prose reasoning. Day 22 v19: uses OPENROUTER_API_KEY instead of Gemini SDK to bypass Vertex/AI Studio key issues.',
     brandColor: '#34A853',
     // G logo with a magnifying glass hint
     logoPath:
@@ -112,39 +112,108 @@ export const geminiSearch: Model = {
         return { ok: false, error: 'GEMINI_API_KEY not set' } as any;
       }
       const genAI = new GoogleGenerativeAI(key);
-      // Day 12 v26: Vercel is serving stale builds (stuck on
-      // v22's gemini-1.5-flash even though main has v25's
-      // gemini-2.0-flash). The 1.5-flash on this Vertex-format
-      // key returns 404. So we now try multiple model ids in
-      // sequence — whichever one this key actually has access
-      // to. Order: 2.0-flash first (preferred), then 1.5-flash,
-      // then 2.5-flash. Each try has its own per-model timeout
-      // (8s default) so we don't blow the route budget.
+      // Day 22 v19: Switch to OpenRouter for Gemini calls. Atlas's
+      // user has a Vertex AI AQ.* key (which doesn't work with
+      // @google/generative-ai SDK) and can't get an AI Studio key
+      // from Google UI without paying for billing. OpenRouter gives
+      // free Gemini access via their API: same Gemini model, just
+      // a different auth path.
+      //
+      // OpenRouter endpoint: https://openrouter.ai/api/v1/chat/completions
+      // Auth: Authorization: Bearer ${OPENROUTER_API_KEY}
+      // Free model: google/gemini-2.0-flash-exp:free
+      //
+      // Note: OpenRouter's free Gemini DOES NOT have Google Search
+      // grounding. We pass the prompt as a regular chat completion
+      // and rely on Gemini's own knowledge. We try multiple free
+      // models in sequence — first one that works wins.
+      const openrouterKey = process.env.OPENROUTER_API_KEY;
       const modelIdsToTry = [
-        { model: 'gemini-2.0-flash', tool: 'googleSearch' },
-        { model: 'gemini-1.5-flash', tool: 'googleSearchRetrieval' },
-        { model: 'gemini-2.5-flash', tool: 'googleSearch' },
+        "google/gemini-2.0-flash-exp:free",
+        "google/gemini-2.0-flash-001",
+        "google/gemini-flash-1.5",
       ];
       let text: string | undefined;
       let result: any;
       const errorLog: string[] = [];
-      for (const { model: modelId, tool: toolName } of modelIdsToTry) {
-        try {
-          const m = genAI.getGenerativeModel({
-            model: modelId,
-            tools: toolName === 'googleSearch'
-              ? [{ googleSearch: {} } as any]
-              : [{ googleSearchRetrieval: {} } as any],
-          });
-          const r = await m.generateContent(buildPrompt(req));
-          text = r.response.text();
-          result = r;
-          // If we got here, this model worked. Break out of the loop.
-          break;
-        } catch (modelErr) {
-          const msg = modelErr instanceof Error ? modelErr.message : String(modelErr);
-          errorLog.push(`${modelId}: ${msg.slice(0, 150)}`);
-          // Try the next model.
+
+      if (!openrouterKey) {
+        // Fall back to Google SDK if no OpenRouter key
+        const modelIdsGoogle = [
+          { model: "gemini-2.0-flash", tool: "googleSearch" },
+          { model: "gemini-1.5-flash", tool: "googleSearchRetrieval" },
+        ];
+        for (const { model: modelId, tool: toolName } of modelIdsGoogle) {
+          try {
+            const m = genAI.getGenerativeModel({
+              model: modelId,
+              tools: toolName === "googleSearch"
+                ? [{ googleSearch: {} } as any]
+                : [{ googleSearchRetrieval: {} } as any],
+            });
+            const r = await m.generateContent(buildPrompt(req));
+            text = r.response.text();
+            result = r;
+            break;
+          } catch (modelErr) {
+            const msg = modelErr instanceof Error ? modelErr.message : String(modelErr);
+            errorLog.push(`${modelId}: ${msg.slice(0, 150)}`);
+          }
+        }
+      } else {
+        // Try OpenRouter models in sequence
+        for (const modelId of modelIdsToTry) {
+          try {
+            const r = await fetch(
+              "https://openrouter.ai/api/v1/chat/completions",
+              {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${openrouterKey}`,
+                  "Content-Type": "application/json",
+                  "HTTP-Referer": "https://atlas-q2eh.vercel.app",
+                  "X-Title": "Atlas",
+                },
+                body: JSON.stringify({
+                  model: modelId,
+                  messages: [
+                    { role: "user", content: buildPrompt(req) },
+                  ],
+                  temperature: 0.2,
+                  // OpenRouter returns OpenAI-compatible JSON. We
+                  // request JSON output via response_format (where
+                  // supported) or rely on the prompt instructing
+                  // strict JSON.
+                  ...(modelId.includes("gemini")
+                    ? { response_format: { type: "json_object" } }
+                    : {}),
+                }),
+              },
+            );
+            if (!r.ok) {
+              const errText = await r.text();
+              errorLog.push(`${modelId}: ${r.status} ${errText.slice(0, 150)}`);
+              continue;
+            }
+            const data = await r.json();
+            text = data.choices?.[0]?.message?.content;
+            // Build a result shape that mimics GoogleGenerativeAI
+            // response so the existing parse logic works.
+            result = {
+              response: {
+                text: () => text,
+                candidates: [
+                  {
+                    groundingMetadata: undefined,
+                  },
+                ],
+              },
+            };
+            if (text) break;
+          } catch (modelErr) {
+            const msg = modelErr instanceof Error ? modelErr.message : String(modelErr);
+            errorLog.push(`${modelId}: ${msg.slice(0, 150)}`);
+          }
         }
       }
       if (!text || !result) {
@@ -188,15 +257,28 @@ export const geminiSearch: Model = {
       }
 
       // Parse JSON from the model's text. Gemini may wrap the
-      // object in ```json ... ``` fences; strip them.
+      // object in ```json ... ``` fences; strip them. When called
+      // via OpenRouter with response_format: json_object, the
+      // response is already a JSON string we can parse directly.
       let parsed: any = null;
-      const cleaned = (text ?? '').trim();
+      const cleaned = (text ?? "").trim();
       const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         try {
           parsed = JSON.parse(jsonMatch[0]);
         } catch {
           // Fall through to null
+        }
+      }
+      // If OpenRouter returned a JSON object stringified, parsed
+      // already has it. If not, fall back to regex match above.
+      if (!parsed) {
+        try {
+          // Some OpenRouter models return JSON without code fences
+          // but with markdown formatting. Try aggressive parse.
+          parsed = JSON.parse(cleaned);
+        } catch {
+          // ignore
         }
       }
       // If we still don't have JSON, build a minimal response
