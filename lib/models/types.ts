@@ -93,6 +93,27 @@ export type ModelResponse =
       answer?: string;
       /** v16: list of citation URLs returned by Gemini Search. */
       sources?: ModelCitation[];
+      /** Day 22 v16: Gemini-refined search query for SA property
+       * portals. Replaces the hardcoded VERTICAL_KEYWORDS approach.
+       * E.g. "vacant land Constantia Cape Town erf 1500 m² for sale". */
+      tavilyQuery?: string;
+      /** Day 22 v16: Gemini-inferred listing intent. Used to filter
+       * out rentals + non-matching property types before parse. */
+      listingIntent?: {
+        category:
+          | "vacant_land"
+          | "commercial"
+          | "house"
+          | "smallholding"
+          | "warehouse"
+          | "civic"
+          | "mixed_use";
+        transaction: "for_sale";
+        minErfM2?: number;
+        maxErfM2?: number;
+        minPriceZar?: number;
+        maxPriceZar?: number;
+      };
     }
   | { ok: false; error: string };
 

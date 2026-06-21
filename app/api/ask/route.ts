@@ -508,6 +508,18 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   // these; the result page just hides the section if absent.
   let modelAnswer: string | undefined;
   let modelSources: Array<{ title?: string; url: string }> | undefined;
+  // Day 22 v16: Gemini-refined search query + intent for Tavily
+  let modelTavilyQuery: string | undefined;
+  let modelListingIntent:
+    | {
+        category: string;
+        transaction: "for_sale";
+        minErfM2?: number;
+        maxErfM2?: number;
+        minPriceZar?: number;
+        maxPriceZar?: number;
+      }
+    | undefined;
 
   // Helper — keep the model-call try-block small and readable.
   // Day 5 hotfix v2: every model.call() is wrapped in a 25s per-model
@@ -595,6 +607,13 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
           // Gemini Search. Most models omit these.
           if (result.answer) modelAnswer = result.answer;
           if (result.sources && result.sources.length > 0) modelSources = result.sources;
+          // Day 22 v16: capture Gemini's prompt-refined Tavily query
+          // + listing intent (sale only, target erf size, etc).
+          // /api/ask uses these to drive the Tavily listings
+          // pipeline instead of the hardcoded VERTICAL_KEYWORDS map.
+          const r = result as typeof result & { tavilyQuery?: string; listingIntent?: typeof modelListingIntent };
+          if (r.tavilyQuery) modelTavilyQuery = r.tavilyQuery;
+          if (r.listingIntent) modelListingIntent = r.listingIntent;
           // Day 6 — the stub tags its result with __stub. We capture it
           // so the response can surface status:"stub_demo" + city +
           // country + stubReason. Real models never set __stub.
@@ -910,6 +929,13 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
     // not STEP_B_TIMEOUT_MS (5s) — the listings pipeline takes 6-10s
     // minimum for 7 portal searches + extracts. creditBudget=14
     // covers all 7 portals.
+    // Day 22 v16: if Gemini returned a prompt-refined query, use
+    // it instead of the hardcoded vertical-keyword search. This
+    // gives Atlas a real prompt-driven listing search that reads
+    // the user's full input ("I want a gas station near a corner
+    // with high traffic") instead of just keyword matching.
+    // Falls back to default vertical-keyword search if Gemini
+    // didn't return a refined query.
     const perSuburbResults = await Promise.allSettled(
       hints.map((h) =>
         withTimeout(
@@ -921,6 +947,8 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
             plotSizeHectares: h.plotSizeHectares,
             creditBudget: 14,
             maxListings: 20,
+            customQuery: modelTavilyQuery,
+            salesOnly: true,
           }),
           TAVILY_LISTINGS_TIMEOUT_MS,
           "tavily-listings",
