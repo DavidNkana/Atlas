@@ -570,9 +570,18 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
         sources: r.sources,
       };
     }
-    // Legacy shape (no ok flag) — support existing callers that still
-    // return { ranked_sites } without ok:true.
-    if (Array.isArray(r.ranked_sites)) {
+    // Day 22 v25 fix: if a model returned ok:false explicitly AND
+    // also included a ranked_sites array (which my gemini-search.ts
+    // fix now does — ok:false with ranked_sites:[]), do NOT let the
+    // legacy Array.isArray check below silently convert it back to
+    // ok:true. That conversion was the #1 cause of "all models fail
+    // but cascade never falls back" — callModel was eating the
+    // ok:false flag and re-reporting success with zero sites.
+    //
+    // We detect this by checking whether r.ok is EXPLICITLY false.
+    // If it's not explicitly true OR false, fall through to the
+    // legacy shape check below.
+    if (r.ok === undefined && Array.isArray(r.ranked_sites)) {
       return { ok: true, sites: r.ranked_sites, raw: r.raw };
     }
     return { ok: false, error: `model:${m.info.id} returned malformed response` };
@@ -582,7 +591,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
     await withTimeout((async () => {
       try {
         const result = await callModel(activeModel);
-        if (result.ok) {
+        if (result.ok && result.sites.length > 0) {
           // Day 21 v2: enrich AI-returned sites with REAL_SITE_CATALOG
           // property data (corner stand, facing, price range, etc).
           // The catalog has 25 SA sites with hand-curated data; the
@@ -604,9 +613,22 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
           }
           return;
         }
-        // Primary model returned { ok: false, error } — no exception,
-        // but still no answer. Treat as failure and fall through.
-        const primaryErrMsg = result.error;
+        // Day 22 v25 fix: a model returning ok:true with 0 sites is
+        // not actually success — the user will see an empty result
+        // page. Treat 0-site responses as a fallback trigger too.
+        // This is a defence-in-depth check on top of the callModel
+        // ok:false fix; if any future model returns ranked_sites:[]
+        // with ok:true, the cascade still fires.
+        if (result.ok && result.sites.length === 0) {
+          console.warn(
+            `[/api/ask] model ${activeInfo.id} returned 0 sites with ok:true — falling through to fallback chain`,
+          );
+        }
+        // Primary model returned { ok: false, error } OR returned 0
+        // sites — no usable answer. Treat as failure and fall through.
+        const primaryErrMsg = result.ok
+          ? `${activeInfo.id} returned 0 sites`
+          : (result.error ?? `${activeInfo.id} returned no result`);
         console.error(
           `[/api/ask] model ${activeInfo.id} call returned error, trying fallback chain (max ${MAX_FALLBACK_ATTEMPTS} attempts): ${primaryErrMsg}`,
         );
@@ -638,7 +660,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
         for (const fallback of fallbackChain) {
           pushAttempted(fallback.info.id);
           const fbResult = await callModel(fallback);
-          if (fbResult.ok) {
+          if (fbResult.ok && fbResult.sites.length > 0) {
             // Day 21 v2: enrich with REAL_SITE_CATALOG property data.
             rankedSites = enrichSitesWithCatalog(fbResult.sites);
             raw = fbResult.raw;
@@ -659,9 +681,20 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
             );
             return;
           }
-          errorChain.push(`${fallback.info.id} call failed: ${fbResult.error}`);
+          // Day 22 v25: same site-count guard for fallbacks. If
+          // OpenRouter returns ok:true with 0 sites, keep cascading.
+          if (fbResult.ok && fbResult.sites.length === 0) {
+            console.warn(
+              `[/api/ask] fallback ${fallback.info.id} returned 0 sites with ok:true — continuing to next fallback`,
+            );
+          }
+          errorChain.push(
+            fbResult.ok
+              ? `${fallback.info.id} returned 0 sites`
+              : `${fallback.info.id} call failed: ${fbResult.error ?? "unknown error"}`,
+          );
           console.error(
-            `[/api/ask] fallback model ${fallback.info.id} also failed: ${fbResult.error}`,
+            `[/api/ask] fallback model ${fallback.info.id} also failed: ${fbResult.ok ? "0 sites" : (fbResult.error ?? "unknown error")}`,
           );
           // continue to next fallback — never throw
         }
