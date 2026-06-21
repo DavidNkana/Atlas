@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Day 23 — Bing News-style card grid.
+ * Day 23 v5 — Bing News-style card grid.
  *
  * Layout matches Microsoft Bing News feed:
  *   - Category tabs at top (All / Stocks / Crypto / Investments / Real Estate)
@@ -11,15 +11,36 @@
  *     sentiment badge (positive/neutral/negative colored dot)
  *   - "View more" button at bottom of each section
  *   - Cards link out to source article (target=_blank)
+ *
+ * Data source: /api/news/feed (server route). We CANNOT import
+ * lib/connectors/news directly from a "use client" component because
+ * that module reads process.env.NEWS_API_KEY at load time — and on
+ * the client bundle, process.env.NEWS_API_KEY is always undefined.
+ * That was the v1-v4 render bug: server had articles, client always
+ * got []. The route runs the connector server-side and returns JSON.
  */
 
 import { useState, useEffect } from "react";
-import {
-  fetchAllCategories,
-  relativeTime,
-  type NewsArticle,
-  type NewsCategory,
-} from "@/lib/connectors/news";
+
+type NewsCategory =
+  | "all"
+  | "stocks"
+  | "crypto"
+  | "investments"
+  | "real_estate";
+
+interface NewsArticle {
+  id: string;
+  title: string;
+  url: string;
+  source: string;
+  author: string | null;
+  description: string | null;
+  urlToImage: string | null;
+  publishedAt: string;
+  category: NewsCategory;
+  sentiment?: "positive" | "neutral" | "negative";
+}
 
 const CATEGORIES: { id: NewsCategory; label: string; description: string }[] = [
   { id: "stocks", label: "Stocks", description: "JSE, NYSE, NASDAQ, IPOs, earnings" },
@@ -40,6 +61,26 @@ const SENTIMENT_LABEL: Record<NonNullable<NewsArticle["sentiment"]>, string> = {
   negative: "Negative",
 };
 
+function relativeTime(isoDate: string): string {
+  const date = new Date(isoDate);
+  const diffMs = Date.now() - date.getTime();
+  const sec = Math.floor(diffMs / 1000);
+  if (sec < 60) return `${sec}s ago`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min} min ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr} hr ago`;
+  const day = Math.floor(hr / 24);
+  if (day < 7) return `${day} day${day === 1 ? "" : "s"} ago`;
+  const wk = Math.floor(day / 7);
+  if (wk < 5) return `${wk} wk${wk === 1 ? "" : "s"} ago`;
+  return date.toLocaleDateString("en-ZA", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
 export function NewsFeedGrid() {
   const [activeTab, setActiveTab] = useState<NewsCategory>("stocks");
   const [articlesByCat, setArticlesByCat] = useState<
@@ -57,12 +98,39 @@ export function NewsFeedGrid() {
   const [retrying, setRetrying] = useState(false);
   const [diag, setDiag] = useState<any>(null);
 
+  /**
+   * Fetch articles via the server-side /api/news/feed route.
+   * This is the v5 fix: we previously called fetchAllCategories()
+   * from the client bundle, which always returned [] because the
+   * connector reads process.env.NEWS_API_KEY at module load and
+   * the client bundle has no env vars.
+   */
   const loadAll = async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchAllCategories();
-      setArticlesByCat(data);
+      const r = await fetch("/api/news/feed", { cache: "no-store" });
+      const data = await r.json();
+      if (!r.ok || !data.ok) {
+        setError(data.error ?? `Feed endpoint returned ${r.status}`);
+        return;
+      }
+      setArticlesByCat({
+        stocks: data.articles.stocks ?? [],
+        crypto: data.articles.crypto ?? [],
+        investments: data.articles.investments ?? [],
+        real_estate: data.articles.real_estate ?? [],
+        all: [
+          ...(data.articles.stocks ?? []),
+          ...(data.articles.crypto ?? []),
+          ...(data.articles.investments ?? []),
+          ...(data.articles.real_estate ?? []),
+        ].sort(
+          (a, b) =>
+            new Date(b.publishedAt).getTime() -
+            new Date(a.publishedAt).getTime(),
+        ),
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -94,14 +162,7 @@ export function NewsFeedGrid() {
 
   const visibleArticles = (() => {
     if (activeTab === "all") {
-      // Flatten + sort by publishedAt desc
-      return Object.values(articlesByCat)
-        .flat()
-        .sort(
-          (a, b) =>
-            new Date(b.publishedAt).getTime() -
-            new Date(a.publishedAt).getTime(),
-        );
+      return articlesByCat.all;
     }
     return articlesByCat[activeTab] ?? [];
   })();
@@ -182,6 +243,106 @@ export function NewsFeedGrid() {
         </div>
       )}
 
+      {/* Card grid (Bing layout) */}
+      {!loading && !error && displayed.length > 0 && (
+        <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          {displayed.map((article) => (
+            <li
+              key={article.id}
+              className="group overflow-hidden rounded border border-atlas-border/40 bg-atlas-surface/40 transition hover:border-atlas-accent/50 hover:bg-atlas-surface"
+            >
+              <a
+                href={article.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex h-full gap-3 p-3"
+              >
+                {/* Thumbnail */}
+                {article.urlToImage ? (
+                  <img
+                    src={article.urlToImage}
+                    alt=""
+                    className="h-24 w-24 shrink-0 rounded object-cover"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).style.display =
+                        "none";
+                    }}
+                  />
+                ) : (
+                  <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded bg-atlas-bg text-atlas-muted">
+                    <svg
+                      width="24"
+                      height="24"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                    >
+                      <path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7M3 7l4-4h10l4 4M3 7h18" />
+                    </svg>
+                  </div>
+                )}
+
+                {/* Content */}
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <div className="mb-1 flex items-center gap-2 text-[10px] uppercase tracking-wider text-atlas-muted">
+                    <span className="truncate font-medium">
+                      {article.source}
+                    </span>
+                    <span>·</span>
+                    <span className="shrink-0">
+                      {relativeTime(article.publishedAt)}
+                    </span>
+                  </div>
+
+                  <h3 className="mb-1 line-clamp-2 text-sm font-semibold leading-snug text-atlas-text group-hover:text-atlas-accent">
+                    {article.title}
+                  </h3>
+
+                  {article.description && (
+                    <p className="line-clamp-2 text-[11px] leading-relaxed text-atlas-muted">
+                      {article.description}
+                    </p>
+                  )}
+
+                  {article.sentiment && (
+                    <span
+                      className={`mt-auto inline-flex w-fit items-center gap-1 self-start rounded border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${
+                        SENTIMENT_BADGE[article.sentiment]
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-1.5 w-1.5 rounded-full ${
+                          article.sentiment === "positive"
+                            ? "bg-emerald-400"
+                            : article.sentiment === "negative"
+                              ? "bg-rose-400"
+                              : "bg-zinc-400"
+                        }`}
+                      />
+                      {SENTIMENT_LABEL[article.sentiment]}
+                    </span>
+                  )}
+                </div>
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* View more button */}
+      {!loading && !showAll && visibleArticles.length > 8 && (
+        <div className="mt-6 text-center">
+          <button
+            type="button"
+            onClick={() => setShowAll(true)}
+            className="rounded border border-atlas-border bg-atlas-surface px-6 py-2 text-xs font-medium uppercase tracking-wider text-atlas-text transition hover:border-atlas-accent hover:text-atlas-accent"
+          >
+            View more ({visibleArticles.length - 8} more)
+          </button>
+        </div>
+      )}
+
       {/* Empty state */}
       {!loading && !error && visibleArticles.length === 0 && (
         <div className="rounded border border-atlas-border/40 bg-atlas-surface/40 p-8 text-center">
@@ -189,8 +350,6 @@ export function NewsFeedGrid() {
             No articles in this category right now.
           </p>
 
-          {/* Diag-driven root cause panel — shows the actual failure mode
-              so David doesn't have to open /api/news/diag manually. */}
           {diag?.diagnosis && (
             <div className="mt-4 rounded border border-amber-900/60 bg-amber-950/20 p-3 text-left">
               <div className="font-mono text-[10px] uppercase tracking-wider text-amber-400">
@@ -222,14 +381,6 @@ export function NewsFeedGrid() {
                       <dt>totalResults</dt>
                       <dd className="text-right">
                         {diag.directProbe.totalResults}
-                      </dd>
-                    </>
-                  )}
-                  {diag.directProbe?.errorSnippet && (
-                    <>
-                      <dt>err</dt>
-                      <dd className="max-w-[200px] truncate text-right">
-                        {diag.directProbe.errorSnippet}
                       </dd>
                     </>
                   )}
@@ -297,6 +448,9 @@ export function NewsFeedGrid() {
           </div>
         </div>
       )}
+    </section>
+  );
+}
 
       {/* Card grid (Bing layout) */}
       {!loading && displayed.length > 0 && (
