@@ -469,22 +469,48 @@ export default function HomePage() {
       )}
 
       {/* Top bar: top-right links */}
-      <header className="flex items-center justify-end gap-3 px-6 py-3 text-xs text-atlas-muted">
-          <a href="/land" className="hover:text-atlas-accent">
-            Land
-          </a>
-          <a href="/news" className="hover:text-atlas-accent">
-            News
-          </a>
-          <a href="/crypto" className="hover:text-atlas-accent">
-            Crypto
-          </a>
-          <a href="/pricing" className="hover:text-atlas-accent">
-            Pricing
-          </a>
-          <a href="/demo" className="hover:text-atlas-accent">
-            For builders
-          </a>
+      <header className="flex items-center justify-between gap-3 px-6 py-3 text-xs text-atlas-muted">
+          <div className="flex items-center gap-3">
+            <a
+              href="/crypto"
+              className="inline-flex items-center gap-2 rounded-md border border-atlas-accent/60 bg-atlas-accent/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-atlas-accent transition hover:border-atlas-accent hover:bg-atlas-accent/20"
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 6v12" />
+                <path d="M9 9h4.5a2 2 0 0 1 0 4H9" />
+                <path d="M9 13h5a2 2 0 0 1 0 4H9" />
+              </svg>
+              Explore Crypto
+            </a>
+          </div>
+          <div className="flex items-center gap-3">
+            <a href="/land" className="hover:text-atlas-accent">
+              Land
+            </a>
+            <a href="/news" className="hover:text-atlas-accent">
+              News
+            </a>
+            <a href="/crypto" className="hover:text-atlas-accent">
+              Crypto
+            </a>
+            <a href="/pricing" className="hover:text-atlas-accent">
+              Pricing
+            </a>
+            <a href="/demo" className="hover:text-atlas-accent">
+              For builders
+            </a>
+          </div>
         </header>
 
       {/* Center stage */}
@@ -508,51 +534,8 @@ export default function HomePage() {
                 <h1 className="mb-2 text-4xl font-semibold tracking-tight text-atlas-text sm:text-5xl">
                   Hi {firstName}, I&apos;m Atlas.
                 </h1>
-                <p className="mt-4 flex justify-center">
-                  <a
-                    href="/crypto"
-                    className="group inline-flex items-center gap-3 rounded-lg border border-atlas-accent/60 bg-atlas-accent/10 px-8 py-4 text-lg font-semibold text-atlas-accent shadow-sm transition hover:border-atlas-accent hover:bg-atlas-accent/20 hover:shadow-md"
-                  >
-                    <svg
-                      width="22"
-                      height="22"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      className="transition group-hover:rotate-12"
-                      aria-hidden="true"
-                    >
-                      <circle cx="12" cy="12" r="10" />
-                      <path d="M12 6v12" />
-                      <path d="M9 9h4.5a2 2 0 0 1 0 4H9" />
-                      <path d="M9 13h5a2 2 0 0 1 0 4H9" />
-                    </svg>
-                    <span>Explore Crypto Markets</span>
-                    <svg
-                      width="16"
-                      height="16"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      className="transition group-hover:translate-x-1"
-                      aria-hidden="true"
-                    >
-                      <path d="M5 12h14M12 5l7 7-7 7" />
-                    </svg>
-                  </a>
-                </p>
-                <p className="mt-2 text-xs text-atlas-muted">
-                  Where should you build, operate, or invest? Atlas reasons
-                  across live signals — schools, transit, healthcare, road
-                  network, competition, environmental risk, demographics, and
-                  listings — to recommend the site, the opportunity, or the
-                  move that beats the alternatives.
+                <p className="text-lg text-atlas-muted">
+                  An AI Operating System for builders and investors.
                 </p>
               </div>
 
