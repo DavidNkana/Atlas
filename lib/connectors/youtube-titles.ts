@@ -64,12 +64,30 @@ const cache = new Map<
 
 let lastFetchStatus: YouTubeFetchStatus = { status: "no-key" };
 
+/**
+ * Module-level "last upstream call" timestamp. Independent of per-coin
+ * cache TTL. Protects the daily 10k-unit quota when cold starts fan
+ * out across multiple Vercel function instances — without this, a
+ * page with 30s auto-refresh + 20 coins × search.list (100u each)
+ * burns quota at ~4,000 units/minute.
+ *
+ * On cold start: lastYouTubeUpstreamAt = 0, so the first call goes
+ * through normally. Subsequent calls within MIN_UPSTREAM_INTERVAL_MS
+ * return cached or empty (without hitting the API).
+ *
+ * Manual refresh via ?bust=1 (route-level) clears this so the user
+ * can force a fresh fetch when they really need it.
+ */
+let lastYouTubeUpstreamAt = 0;
+const MIN_UPSTREAM_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
+
 export function getYouTubeFetchStatus(): YouTubeFetchStatus {
   return lastFetchStatus;
 }
 
 export function bustYouTubeCache(): void {
   cache.clear();
+  lastYouTubeUpstreamAt = 0; // allow a fresh upstream call after manual bust
 }
 
 function cacheKey(query: string): string {
@@ -160,6 +178,34 @@ export async function fetchYouTubeTitlesForCoin(
   const maxResults = Math.min(options.maxResults ?? 10, 50);
   const query = `${coin.name} OR ${coin.symbol} crypto`;
 
+  // Quota guard: if we hit the YouTube API within the last
+  // MIN_UPSTREAM_INTERVAL_MS, refuse the call and return whatever the
+  // per-coin cache has (or empty). This protects the daily 10k unit
+  // quota when the caller refreshes faster than the cache TTL.
+  if (
+    !options.bypassCache &&
+    lastYouTubeUpstreamAt > 0 &&
+    Date.now() - lastYouTubeUpstreamAt < MIN_UPSTREAM_INTERVAL_MS
+  ) {
+    const cached = getCached(query);
+    if (cached) {
+      lastFetchStatus = {
+        status: "skipped-cache-hit",
+        videoCount: cached.videos.length,
+        cacheAgeMs: Date.now() - cached.lastFetchedAt,
+        lastFetchedAt: new Date(cached.lastFetchedAt).toISOString(),
+      };
+      return cached.videos;
+    }
+    lastFetchStatus = {
+      status: "rate-limited",
+      http: 429,
+      lastFetchedAt: new Date(lastYouTubeUpstreamAt).toISOString(),
+      errorSnippet: "quota guard: YouTube upstream throttled to once per 30 minutes",
+    };
+    return [];
+  }
+
   if (!options.bypassCache) {
     const cached = getCached(query);
     if (cached) {
@@ -195,6 +241,7 @@ export async function fetchYouTubeTitlesForCoin(
     });
 
     if (res.status === 429 || res.status === 403) {
+      lastYouTubeUpstreamAt = Date.now(); // quota guard: extend the throttle window when we hit a hard 429/403
       lastFetchStatus = {
         status: "rate-limited",
         http: res.status,
@@ -255,6 +302,7 @@ export async function fetchYouTubeTitlesForCoin(
     const videosWithDuration = videos.filter((v) => typeof v.duration === "string").length;
 
     setCached(query, videos);
+    lastYouTubeUpstreamAt = Date.now(); // quota guard: any successful upstream call resets the 30-min throttle window
     lastFetchStatus = {
       status: videosWithDuration > 0 ? "ok" : "ok-no-duration",
       videoCount: videos.length,
