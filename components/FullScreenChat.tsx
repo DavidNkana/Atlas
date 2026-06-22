@@ -63,8 +63,69 @@ export function FullScreenChat({
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [applying, setApplying] = useState<string | null>(null);
+  const [hydrated, setHydrated] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  // LCP-35 — per-question history key. The questionContext
+  // (or "default" when no context) is the session ID. Reopening
+  // the chat with the same questionContext restores the
+  // conversation. Different questions get different keys so
+  // each result page has its own chat thread.
+  const historyKey = questionContext
+    ? `atlas:chat:${questionContext.slice(0, 80)}`
+    : "atlas:chat:default";
+
+  // LCP-35 — hydrate messages from localStorage on mount.
+  // Skip when a new question is opened (no questionContext yet)
+  // because we don't want a stale "default" chat bleeding into
+  // a new session.
+  useEffect(() => {
+    if (!open || typeof window === "undefined") return;
+    try {
+      const raw = window.localStorage.getItem(historyKey);
+      if (raw) {
+        const parsed = JSON.parse(raw) as ChatMessage[];
+        if (Array.isArray(parsed)) {
+          setMessages(parsed);
+        }
+      }
+    } catch {
+      // Silent — corrupted history is treated as empty
+    }
+    setHydrated(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, historyKey]);
+
+  // LCP-35 — persist messages to localStorage as they change.
+  // Only after hydration so we don't overwrite stored history
+  // with the initial empty state.
+  useEffect(() => {
+    if (!hydrated || typeof window === "undefined") return;
+    try {
+      // Trim streaming + applying state for storage
+      const persistable = messages.map((m) => ({
+        id: m.id,
+        role: m.role,
+        text: m.text,
+        sources: m.sources,
+        refinedQuery: m.refinedQuery,
+        ts: m.ts,
+      }));
+      window.localStorage.setItem(historyKey, JSON.stringify(persistable));
+    } catch {
+      // Silent — localStorage may be full or disabled
+    }
+  }, [messages, hydrated, historyKey]);
+
+  // LCP-35 — clear history when questionContext changes
+  // (different question opened in same session). The hydrate
+  // effect re-loads from the new key.
+  useEffect(() => {
+    if (!hydrated) return;
+    setMessages([]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [historyKey]);
 
   // Auto-scroll on new content
   useEffect(() => {
@@ -73,13 +134,10 @@ export function FullScreenChat({
     }
   }, [messages]);
 
-  // Send initial question on open (if provided)
-  useEffect(() => {
-    if (open && initialQuestion && messages.length === 0) {
-      void send(initialQuestion);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, initialQuestion]);
+  // LCP-35 — REMOVED the auto-send on open. The chat now opens
+  // empty with example prompts visible. The user types their
+  // own first message instead of seeing Atlas ask itself a
+  // pre-filled question.
 
   // Close on Escape
   useEffect(() => {
@@ -120,6 +178,14 @@ export function FullScreenChat({
       { id: atlasId, role: "atlas", text: "", streaming: true, ts: Date.now() },
     ]);
 
+    // LCP-35 — snapshot history BEFORE adding the new user
+    // message. The server already gets the current message in
+    // body.message, so we send the prior turns only.
+    const historySnapshot = messages
+      .filter((m) => !m.streaming)
+      .slice(-20) // up to 10 turns
+      .map((m) => ({ role: m.role, text: m.text }));
+
     const controller = new AbortController();
     abortRef.current = controller;
 
@@ -129,7 +195,13 @@ export function FullScreenChat({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: text,
-          questionContext: buildContext(questionContext, rankedSites),
+          // LCP-35 — send the RAW questionContext prop, not
+          // a re-formatted string. The server builds a clean
+          // system prompt from it. This way the LLM has the
+          // exact city / vertical signal for follow-up
+          // questions like 'why Durbanville?'.
+          questionContext: questionContext ?? "",
+          history: historySnapshot,
         }),
         signal: controller.signal,
         cache: "no-store",
@@ -303,15 +375,27 @@ export function FullScreenChat({
           {messages.length === 0 && (
             <div className="space-y-3 text-sm text-atlas-muted">
               <p className="text-atlas-text">
-                Ask Atlas anything about land development, real estate, business
-                intelligence, or investment opportunities across Africa.
+                {questionContext
+                  ? "Ask Atlas a follow-up about this result."
+                  : "Ask Atlas anything about land development, real estate, business intelligence, or investment opportunities across Africa."}
               </p>
               <p className="text-xs">Try asking:</p>
               <ul className="ml-4 list-disc space-y-1 text-xs">
-                <li>&ldquo;What about a 2,000 sqm plot in Sandton?&rdquo;</li>
-                <li>&ldquo;Compare Lusaka vs Nairobi for a retail business&rdquo;</li>
-                <li>&ldquo;What land-use rules apply to commercial in Cape Town?&rdquo;</li>
-                <li>&ldquo;What are the current logistics costs from Durban port to Zambia?&rdquo;</li>
+                {questionContext ? (
+                  <>
+                    <li>&ldquo;Why did you pick the top result?&rdquo;</li>
+                    <li>&ldquo;What about a different size or budget?&rdquo;</li>
+                    <li>&ldquo;What are the risks here?&rdquo;</li>
+                    <li>&ldquo;How does this compare to nearby suburbs?&rdquo;</li>
+                  </>
+                ) : (
+                  <>
+                    <li>&ldquo;What about a 2,000 sqm plot in Sandton?&rdquo;</li>
+                    <li>&ldquo;Compare Lusaka vs Nairobi for a retail business&rdquo;</li>
+                    <li>&ldquo;What land-use rules apply to commercial in Cape Town?&rdquo;</li>
+                    <li>&ldquo;What are the current logistics costs from Durban port to Zambia?&rdquo;</li>
+                  </>
+                )}
               </ul>
             </div>
           )}

@@ -29,10 +29,14 @@ export function ResultChatButton({
       type="button"
       onClick={() => {
         if (typeof window !== "undefined") {
+          // LCP-35 — no initialQuestion. The chat opens empty
+          // with example prompts visible. The questionContext
+          // and rankedSites are still passed so the LLM has
+          // the city / vertical signal for any follow-up the
+          // user types.
           window.dispatchEvent(
             new CustomEvent("atlas:openChat", {
               detail: {
-                initialQuestion: `Tell me more about: ${question}`,
                 questionContext: question,
                 vertical: vertical ?? undefined,
                 rankedSites,

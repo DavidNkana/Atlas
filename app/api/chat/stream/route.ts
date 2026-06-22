@@ -39,6 +39,10 @@ const OPENROUTER_TIMEOUT_MS = 7_000;
 interface ChatRequestBody {
   message: string;
   questionContext?: string;
+  // LCP-35 — full conversation history (excluding the current
+  // user message, which the client already includes as `message`).
+  // Max 10 turns = 20 messages (user+atlas pairs).
+  history?: Array<{ role: "user" | "atlas"; text: string }>;
 }
 
 interface SourceItem {
@@ -102,9 +106,22 @@ export async function POST(req: NextRequest) {
           try {
             const genAI = new GoogleGenerativeAI(geminiKey);
             const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-            const prompt = buildGeminiPrompt(message, context);
+            // LCP-35 — wire conversation history into Gemini so
+            // follow-up questions ('why Durbanville?') are
+            // grounded in the prior context. The client sends
+            // up to 10 prior turns; Gemini gets the system
+            // context as the first 'user' turn (so it carries
+            // context) plus the history and the current message.
+            const historyContents = (body.history ?? []).map((h) => ({
+              role: h.role === "user" ? "user" : "model",
+              parts: [{ text: h.text }],
+            }));
+            const allContents = [
+              ...historyContents,
+              { role: "user" as const, parts: [{ text: buildGeminiPrompt(message, context) }] },
+            ];
             const geminiStreamResult = model.generateContentStream({
-              contents: [{ role: "user", parts: [{ text: prompt }] }],
+              contents: allContents,
             });
 
             const timeoutPromise = new Promise<never>((_, reject) =>
@@ -268,13 +285,32 @@ export async function POST(req: NextRequest) {
                     },
                     body: JSON.stringify({
                       model: "openai/gpt-oss-20b:free",
+                      // LCP-35 — include history so the
+                      // fallback LLM has the same conversation
+                      // memory as Gemini would. Plus the
+                      // question context as the second system
+                      // message so the LLM knows the city/
+                      // vertical even if Gemini failed.
                       messages: [
                         {
                           role: "system",
                           content:
                             "You are Atlas, an AI assistant for African builders and investors. Be brief, specific, and grounded. If you don't know, say so. Keep it under 200 words.",
                         },
-                        { role: "user", content: message },
+                        ...(context
+                          ? [
+                              {
+                                role: "system" as const,
+                                content: `Question context (the user's original question on Atlas):\n${context}`,
+                              },
+                            ]
+                          : []),
+                        // Conversation history (max 10 turns)
+                        ...((body.history ?? []).map((h) => ({
+                          role: h.role === "user" ? ("user" as const) : ("assistant" as const),
+                          content: h.text,
+                        }))),
+                        { role: "user" as const, content: message },
                       ],
                       max_tokens: 400,
                     }),
