@@ -64,7 +64,7 @@ interface ChatResponse {
   // LCP-30 — diagnostics so the client can show what actually happened
   // without needing a Vercel dashboard.
   diagnostics?: {
-    path: "gemini" | "tavily_answer" | "tavily_sources" | "openrouter" | "followup_no_data" | "no_data";
+    path: "gemini" | "tavily_answer" | "tavily_sources" | "openrouter" | "no_data";
     tavilyConfigured: boolean;
     tavilyOk: boolean;
     tavilySources: number;
@@ -113,10 +113,11 @@ export async function POST(req: NextRequest) {
     console.warn("[/api/chat] TAVILY_API_KEY not set in runtime env");
   }
 
-  // LCP-37 + LCP-38 — detect short follow-up questions
-  // BEFORE we run Tavily. The followup info is hoisted up
-  // here so the Tavily block below can short-circuit when
-  // this is a follow-up.
+  // LCP-37 + LCP-38 + LCP-39 — detect short follow-up
+  // questions BEFORE we run Tavily. The followup info is
+  // hoisted up here so the Tavily block below can expand
+  // its query with the prior subject when this is a
+  // follow-up.
   const followupInfo = buildFollowupTurn(
     message,
     body.history ?? [],
@@ -127,17 +128,23 @@ export async function POST(req: NextRequest) {
   // We give Tavily the user's question + a bit of context so the
   // search is biased toward the relevant topic.
   //
-  // LCP-38 — short follow-ups (e.g. "is it the capital?") SKIP
-  // the Tavily web search entirely. The user is asking a
-  // clarification about the prior answer; running a fresh
-  // web search returns generic definitions of "capital"
-  // instead of grounding in the prior Gauteng answer. The
-  // user turn was already rewritten with the full prior
-  // answer as inline context (see buildFollowupTurn), so the
-  // model has everything it needs.
-  const tavilyQuery = context
-    ? `${message} (context: ${context})`
-    : message;
+  // LCP-39 — for followups, we DO call Tavily but with a
+  // query that's been scoped to the prior subject. The
+  // Tavily query becomes "<prior subject> <user message>"
+  // (e.g. "Gauteng, meaning place of gold in Sotho, is
+  // South Africa's smallest province... is it the
+  // capital"). This makes Tavily return grounded results
+  // scoped to the prior topic, instead of generic web
+  // results about "capital". The model then synthesizes
+  // from history + Tavily's scoped results.
+  let tavilyQuery: string;
+  if (followupInfo.isFollowup && followupInfo.priorSubject) {
+    tavilyQuery = `${followupInfo.priorSubject} ${message}`;
+  } else if (context) {
+    tavilyQuery = `${message} (context: ${context})`;
+  } else {
+    tavilyQuery = message;
+  }
 
   let tavilyAnswer = "";
   let tavilySources: Array<{ title: string; url: string }> = [];
@@ -146,7 +153,7 @@ export async function POST(req: NextRequest) {
   let tavilyHttpStatus: number | null = null;
   let tavilyElapsedMs = 0;
 
-  if (!followupInfo.isFollowup) {
+  {
     const tavilyStart = Date.now();
     try {
       const tavilyPromise = fetchTavilyWebAnswer(tavilyQuery, {
@@ -177,8 +184,6 @@ export async function POST(req: NextRequest) {
       tavilyError = err instanceof Error ? err.message : String(err);
       console.warn("[/api/chat] tavily error:", err);
     }
-  } else {
-    tavilyError = "tavily_skipped_followup_LCP38";
   }
 
   // LCP-33 — INLINE Tavily call as second-attempt. If the
@@ -187,8 +192,7 @@ export async function POST(req: NextRequest) {
   // recovers. Also serves as a definitive diagnostic — if the
   // inline call also returns null, the Tavily key itself is
   // missing or revoked on Vercel (not a code bug).
-  // LCP-38 — also skipped for follow-ups.
-  if (!tavilyOk && !followupInfo.isFollowup) {
+  if (!tavilyOk) {
     const inlineKey = process.env.TAVILY_API_KEY ?? "";
     if (inlineKey) {
       const inlineStart = Date.now();
@@ -323,22 +327,10 @@ export async function POST(req: NextRequest) {
     | "tavily_answer"
     | "tavily_sources"
     | "openrouter"
-    | "followup_no_data"
     | "no_data" = "no_data";
   if (geminiOk) {
     finalAnswer = geminiAnswer;
     path = "gemini";
-  } else if (followupInfo.isFollowup) {
-    // LCP-38 — short follow-up that Gemini couldn't answer
-    // based on the prior context. We skipped Tavily on
-    // purpose (the user is asking about the prior answer,
-    // not the open web). Emit a graceful fallback that
-    // invites the user to rephrase.
-    finalAnswer =
-      "I couldn't answer that based on our earlier " +
-      "conversation. Could you rephrase or give me a " +
-      "bit more detail?";
-    path = "followup_no_data";
   } else if (tavilyAnswer.length > 0) {
     // Tavily gave us a synthesized answer; use it.
     finalAnswer = tavilyAnswer;
@@ -731,7 +723,7 @@ function mergeQueryWithContext(message: string, context: string): string {
 interface FollowupResult {
   text: string;
   isFollowup: boolean;
-  priorAnswer: string | null;
+  priorSubject: string | null;
 }
 
 function buildFollowupTurn(
@@ -740,10 +732,10 @@ function buildFollowupTurn(
   questionContext: string,
 ): FollowupResult {
   if (questionContext) {
-    return { text: message, isFollowup: false, priorAnswer: null };
+    return { text: message, isFollowup: false, priorSubject: null };
   }
   if (history.length === 0) {
-    return { text: message, isFollowup: false, priorAnswer: null };
+    return { text: message, isFollowup: false, priorSubject: null };
   }
 
   const newLen = message.length;
@@ -754,26 +746,31 @@ function buildFollowupTurn(
     isShort || followupPatterns.test(message) || startsWithAnd;
 
   if (!looksLikeFollowup) {
-    return { text: message, isFollowup: false, priorAnswer: null };
+    return { text: message, isFollowup: false, priorSubject: null };
   }
 
   const lastAssistant = [...history].reverse().find((h) => h.role === "atlas");
   if (!lastAssistant || !lastAssistant.text.trim()) {
-    return { text: message, isFollowup: false, priorAnswer: null };
+    return { text: message, isFollowup: false, priorSubject: null };
   }
 
-  const priorAnswer = lastAssistant.text.trim();
+  // LCP-39 — extract a short subject (first sentence, capped
+  // at 200 chars). Used to expand the Tavily query so the
+  // search is scoped to the prior topic, not the open web.
+  // We keep the user turn natural so the model has the
+  // history (already in contents) and Tavily's scoped
+  // results to work with — no elaborate "do not search the
+  // web" instructions that the model was getting confused
+  // by.
+  const priorSubject = lastAssistant.text
+    .replace(/\s+/g, " ")
+    .split(/[.!?]/)[0]
+    .trim()
+    .slice(0, 200);
 
-  // LCP-38 — pass the FULL prior answer as inline context
-  // with explicit grounding instructions.
-  const rewritten = `Given this prior answer:
-"""
-${priorAnswer}
-"""
-
-The user is asking this follow-up: ${message}
-
-Answer the follow-up based ONLY on the prior answer above. Do not search the web, do not pull in outside definitions, and do not answer the follow-up as if it were a standalone question. If the prior answer contains the information, quote or paraphrase it directly.`;
-
-  return { text: rewritten, isFollowup: true, priorAnswer };
+  return {
+    text: message,
+    isFollowup: true,
+    priorSubject: priorSubject || null,
+  };
 }

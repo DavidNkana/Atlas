@@ -221,40 +221,35 @@ export async function POST(req: NextRequest) {
         // FIRST in the OpenRouter branch (LCP-36) so even the
         // fallback path surfaces live web sources.
         //
-        // LCP-38 — short follow-ups (e.g. "is it the capital?")
-        // must NOT trigger a Tavily web search. The user is
-        // asking a clarification about the prior answer;
-        // running a fresh web search returns generic
-        // definitions of "capital" instead of grounding in
-        // the prior Gauteng answer. The user turn was
-        // already rewritten with the full prior answer as
-        // inline context (see buildFollowupTurn), so the
-        // model has everything it needs.
-        if (!geminiStreamed && followupInfo.isFollowup) {
-          // Follow-up Gemini path already failed (geminiStreamed
-          // is false). Emit a graceful fallback message that
-          // signals the model couldn't answer based on the
-          // prior context. We do NOT call Tavily here — the
-          // follow-up is about the prior answer, not a fresh
-          // web question.
-          const noDataText =
-            "I couldn't answer that based on our earlier " +
-            "conversation. Could you rephrase or give me a " +
-            "bit more detail?";
-          path = "followup_no_data";
-          for (const chunk of chunkString(noDataText, 6)) {
-            controller.enqueue(
-              encoder.encode(sseEvent("token", { text: chunk })),
-            );
-            await sleep(15);
-          }
-        } else if (!geminiStreamed) {
+        // LCP-39 — for followups (e.g. "is it the capital?"),
+        // we DO call Tavily but with a query that's been
+        // scoped to the prior subject. The Tavily query
+        // becomes "<prior subject> <user message>" (e.g.
+        // "Gauteng, meaning place of gold in Sotho, is South
+        // Africa's smallest province... is it the capital").
+        // This makes Tavily return grounded results scoped
+        // to the prior topic, instead of generic web
+        // results about "capital". The model then
+        // synthesizes from history + Tavily's scoped
+        // results.
+        if (!geminiStreamed) {
           let tavilyAnswer = "";
           let tavilySources: SourceItem[] = [];
 
-          const tavilyQuery = context
-            ? `${message} (re: ${context})`
-            : message;
+          // LCP-39 — for followups, expand the Tavily query
+          // with the prior subject so the search is scoped
+          // to the prior topic. For non-followups, just
+          // use the user's message as-is (with questionContext
+          // if any).
+          let tavilyQuery: string;
+          if (followupInfo.isFollowup && followupInfo.priorSubject) {
+            tavilyQuery = `${followupInfo.priorSubject} ${message}`;
+          } else if (context) {
+            tavilyQuery = `${message} (re: ${context})`;
+          } else {
+            tavilyQuery = message;
+          }
+
           try {
             const tavilyPromise = fetchTavilyWebAnswer(tavilyQuery, {
               context,
@@ -638,12 +633,12 @@ Return ONLY a JSON array of 3 strings. No commentary, no markdown fences. Exampl
  *     OR contains pronouns (it/its/that/this/there/...)
  */
 interface FollowupResult {
-  /** The rewritten user turn to send to Gemini. */
+  /** The user turn to send to Gemini. Kept natural. */
   text: string;
-  /** True when the caller should skip Tavily entirely. */
+  /** True when the message is a short follow-up. */
   isFollowup: boolean;
-  /** The full prior assistant answer, if any. */
-  priorAnswer: string | null;
+  /** Short subject snippet from the prior answer, for Tavily query expansion. */
+  priorSubject: string | null;
 }
 
 function buildFollowupTurn(
@@ -654,10 +649,10 @@ function buildFollowupTurn(
   // If we have a questionContext (user is on a /result/[id]
   // page), the systemInstruction already covers the case.
   if (questionContext) {
-    return { text: message, isFollowup: false, priorAnswer: null };
+    return { text: message, isFollowup: false, priorSubject: null };
   }
   if (history.length === 0) {
-    return { text: message, isFollowup: false, priorAnswer: null };
+    return { text: message, isFollowup: false, priorSubject: null };
   }
 
   const newLen = message.length;
@@ -668,28 +663,32 @@ function buildFollowupTurn(
     isShort || followupPatterns.test(message) || startsWithAnd;
 
   if (!looksLikeFollowup) {
-    return { text: message, isFollowup: false, priorAnswer: null };
+    return { text: message, isFollowup: false, priorSubject: null };
   }
 
   // Find the last assistant turn.
   const lastAssistant = [...history].reverse().find((h) => h.role === "atlas");
   if (!lastAssistant || !lastAssistant.text.trim()) {
-    return { text: message, isFollowup: false, priorAnswer: null };
+    return { text: message, isFollowup: false, priorSubject: null };
   }
 
-  const priorAnswer = lastAssistant.text.trim();
+  // LCP-39 — extract a short subject (first sentence, capped
+  // at 200 chars). Used to expand the Tavily query so the
+  // search is scoped to the prior topic, not the open web.
+  // We keep the user turn natural so the model has the
+  // history (already in contents) and Tavily's scoped
+  // results to work with — no elaborate "do not search the
+  // web" instructions that the model was getting confused
+  // by.
+  const priorSubject = lastAssistant.text
+    .replace(/\s+/g, " ")
+    .split(/[.!?]/)[0]
+    .trim()
+    .slice(0, 200);
 
-  // LCP-38 — pass the FULL prior answer as inline context,
-  // with explicit grounding instructions. The model
-  // literally sees the prior answer before the new question.
-  const rewritten = `Given this prior answer:
-"""
-${priorAnswer}
-"""
-
-The user is asking this follow-up: ${message}
-
-Answer the follow-up based ONLY on the prior answer above. Do not search the web, do not pull in outside definitions, and do not answer the follow-up as if it were a standalone question. If the prior answer contains the information, quote or paraphrase it directly.`;
-
-  return { text: rewritten, isFollowup: true, priorAnswer };
+  return {
+    text: message,
+    isFollowup: true,
+    priorSubject: priorSubject || null,
+  };
 }
