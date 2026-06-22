@@ -138,6 +138,18 @@ export async function POST(req: NextRequest) {
         let geminiAnswer = "";
         let geminiStreamed = false;
 
+        // LCP-37 + LCP-38 — detect short follow-up questions
+        // BEFORE we decide whether to fall back to Tavily.
+        // We hoist this out of the geminiKey block so the
+        // Tavily fallback below can short-circuit when this
+        // is a follow-up (no web search needed; the model
+        // has the prior answer in inline context).
+        const followupInfo = buildFollowupTurn(
+          message,
+          body.history ?? [],
+          context,
+        );
+
         if (geminiKey) {
           try {
             const genAI = new GoogleGenerativeAI(geminiKey);
@@ -154,21 +166,15 @@ export async function POST(req: NextRequest) {
               parts: [{ text: h.text }],
             }));
 
-            // LCP-37 — When the new user turn is a short
-            // pronoun-heavy follow-up (e.g. "whats it's
-            // population?" or "and the cost?"), the model
-            // often loses the thread and answers a generic
-            // question globally instead of about the prior
-            // subject. The fix: when (a) the user is in an
-            // existing conversation (>= 1 prior turn) AND
-            // (b) the new message is short AND (c) it looks
-            // like a follow-up (pronouns, "and X?", "what
-            // about Y?", etc), we rewrite the user turn to
-            // include the previous assistant subject as an
-            // explicit anchor. The model then literally sees
-            // the prior answer's subject right before the new
-            // question and cannot lose the thread.
-            const finalUserText = rewriteFollowup(message, body.history ?? [], context);
+            // LCP-37 + LCP-38 — Short follow-up questions
+            // (e.g. "is it the capital?" or "whats it's
+            // population?") need special handling:
+            //   - Rewrite the user turn to include the FULL
+            //     prior assistant answer as inline context
+            //     with explicit grounding instructions.
+            //   - Skip the Tavily web search entirely (set
+            //     below in the !geminiStreamed branch).
+            const finalUserText = followupInfo.text;
             const allContents = [
               ...historyContents,
               { role: "user" as const, parts: [{ text: finalUserText }] },
@@ -214,7 +220,35 @@ export async function POST(req: NextRequest) {
         // Tavily → inline Tavily → OpenRouter. Tavily runs
         // FIRST in the OpenRouter branch (LCP-36) so even the
         // fallback path surfaces live web sources.
-        if (!geminiStreamed) {
+        //
+        // LCP-38 — short follow-ups (e.g. "is it the capital?")
+        // must NOT trigger a Tavily web search. The user is
+        // asking a clarification about the prior answer;
+        // running a fresh web search returns generic
+        // definitions of "capital" instead of grounding in
+        // the prior Gauteng answer. The user turn was
+        // already rewritten with the full prior answer as
+        // inline context (see buildFollowupTurn), so the
+        // model has everything it needs.
+        if (!geminiStreamed && followupInfo.isFollowup) {
+          // Follow-up Gemini path already failed (geminiStreamed
+          // is false). Emit a graceful fallback message that
+          // signals the model couldn't answer based on the
+          // prior context. We do NOT call Tavily here — the
+          // follow-up is about the prior answer, not a fresh
+          // web question.
+          const noDataText =
+            "I couldn't answer that based on our earlier " +
+            "conversation. Could you rephrase or give me a " +
+            "bit more detail?";
+          path = "followup_no_data";
+          for (const chunk of chunkString(noDataText, 6)) {
+            controller.enqueue(
+              encoder.encode(sseEvent("token", { text: chunk })),
+            );
+            await sleep(15);
+          }
+        } else if (!geminiStreamed) {
           let tavilyAnswer = "";
           let tavilySources: SourceItem[] = [];
 
@@ -554,71 +588,108 @@ Return ONLY a JSON array of 3 strings. No commentary, no markdown fences. Exampl
 }
 
 /**
- * LCP-37 — When the user sends a short, pronoun-heavy, or
- * otherwise ambiguous follow-up in an existing conversation,
- * the model often loses the thread and answers a generic
- * global question instead of a question about the prior
- * subject. Example: user asks "Tell me about Gauteng" →
- * assistant explains Gauteng. User then asks "whats it's
- * population?" — model returns GLOBAL population (8.3B)
- * instead of Gauteng's 16M, even though the prior answer
- * contained the exact figure.
+ * LCP-37 + LCP-38 — Hard-fix for short follow-up questions.
  *
- * Fix: detect this pattern and rewrite the user turn to
- * include a brief subject anchor extracted from the prior
- * assistant turn. The model then literally sees the prior
- * subject right before the new question and cannot lose
- * the thread.
+ * Background: David reported that after asking "Tell me about
+ * Gauteng" (which returned a great answer), his follow-up
+ * "is it the capital?" returned a Wikipedia definition of
+ * "capital" instead of an answer about Gauteng.
+ *
+ * Root cause analysis (LCP-38):
+ *   - LCP-36's systemInstruction + LCP-37's anchor rewrite
+ *     helped on fresh questions but not on short follow-ups.
+ *   - The real problem: Tavily is running a web search on the
+ *     short query "is it the capital?" and returning generic
+ *     results about "what is a capital city". The model
+ *     then summarizes those results instead of the prior
+ *     answer's content.
+ *
+ * Fix (LCP-38): when the new message is a short follow-up
+ * AND there is prior conversation history, do TWO things:
+ *
+ *   1. SKIP the Tavily web search entirely. The prior answer
+ *      already contains the relevant facts. No external
+ *      search is needed for a clarification question.
+ *
+ *   2. Pass the FULL prior assistant answer as inline
+ *      context in the user turn. The pattern is:
+ *
+ *        Given this prior answer:
+ *        "<full prior answer>"
+ *
+ *        The user is asking this follow-up: <message>
+ *
+ *        Answer the follow-up based ONLY on the prior answer
+ *        above. Do NOT do a web search. Do NOT answer the
+ *        follow-up as if it were a standalone question.
+ *
+ *      This is the textbook Perplexity / OpenAI / Anthropic
+ *      follow-up pattern: the model literally sees the prior
+ *      answer before the new question, with explicit
+ *      instructions to ground the response in it.
  *
  * Detection rules — the new turn is treated as a follow-up
  * if ALL of:
- *   - There is at least one prior turn
- *   - The new message is short (< 80 chars) OR contains
- *     obvious follow-up markers (pronouns, "and X?", "what
- *     about Y?", etc.)
- *
- * The rewrite prepends the prior subject in brackets. The
- * model prompt remains otherwise untouched so the LLM is
- * free to answer concisely as usual.
+ *   - No questionContext (free chat; result-page chats
+ *     are already covered by systemInstruction)
+ *   - At least one prior assistant turn exists
+ *   - The new message is short (< 80 chars) OR starts with
+ *     follow-up markers ("and X", "what about", "why", etc.)
+ *     OR contains pronouns (it/its/that/this/there/...)
  */
-function rewriteFollowup(
+interface FollowupResult {
+  /** The rewritten user turn to send to Gemini. */
+  text: string;
+  /** True when the caller should skip Tavily entirely. */
+  isFollowup: boolean;
+  /** The full prior assistant answer, if any. */
+  priorAnswer: string | null;
+}
+
+function buildFollowupTurn(
   message: string,
   history: Array<{ role: "user" | "atlas"; text: string }>,
   questionContext: string,
-): string {
+): FollowupResult {
   // If we have a questionContext (user is on a /result/[id]
   // page), the systemInstruction already covers the case.
-  // Only rewrite when context is absent AND history is non-empty.
-  if (questionContext) return message;
-  if (history.length === 0) return message;
+  if (questionContext) {
+    return { text: message, isFollowup: false, priorAnswer: null };
+  }
+  if (history.length === 0) {
+    return { text: message, isFollowup: false, priorAnswer: null };
+  }
 
   const newLen = message.length;
   const isShort = newLen < 80;
-  // Common follow-up signals
   const followupPatterns = /\b(its|it's|their|them|they|that|this|those|these|there|here|he|she|it|the same|also|and what|and the|how about|what about|why|when|where|who)\b/i;
   const startsWithAnd = /^\s*(and|also|what about|how about|and what|and the|why|when|where)\b/i.test(message);
   const looksLikeFollowup =
     isShort || followupPatterns.test(message) || startsWithAnd;
 
-  if (!looksLikeFollowup) return message;
+  if (!looksLikeFollowup) {
+    return { text: message, isFollowup: false, priorAnswer: null };
+  }
 
-  // Find the last assistant turn
+  // Find the last assistant turn.
   const lastAssistant = [...history].reverse().find((h) => h.role === "atlas");
-  if (!lastAssistant) return message;
+  if (!lastAssistant || !lastAssistant.text.trim()) {
+    return { text: message, isFollowup: false, priorAnswer: null };
+  }
 
-  // Extract the subject: first sentence of the prior answer
-  // is usually the topic statement. Trim to a reasonable
-  // length for context.
-  const subjectSnippet = lastAssistant.text
-    .replace(/\s+/g, " ")
-    .split(/[.!?]/)[0]
-    .trim()
-    .slice(0, 200);
+  const priorAnswer = lastAssistant.text.trim();
 
-  if (!subjectSnippet) return message;
+  // LCP-38 — pass the FULL prior answer as inline context,
+  // with explicit grounding instructions. The model
+  // literally sees the prior answer before the new question.
+  const rewritten = `Given this prior answer:
+"""
+${priorAnswer}
+"""
 
-  // Build the rewritten turn. The model reads this as
-  // "[context: prior answer subject] user follow-up question"
-  // and treats it as a continuation.
-  return `[Continuing the previous answer about: ${subjectSnippet}]\n\n${message}`;
+The user is asking this follow-up: ${message}
+
+Answer the follow-up based ONLY on the prior answer above. Do not search the web, do not pull in outside definitions, and do not answer the follow-up as if it were a standalone question. If the prior answer contains the information, quote or paraphrase it directly.`;
+
+  return { text: rewritten, isFollowup: true, priorAnswer };
 }

@@ -3,13 +3,23 @@
 /**
  * Day 29 v1 — Full-screen streaming chat modal.
  *
- * LCP-36 — major UI upgrade:
- *   - Apply to results on EVERY atlas message (not only refined)
- *   - Perplexity-style: inline source markers ([1], [2]) + follow-up
- *     question chips at the bottom of every answer
- *   - Removed "Try asking" recommendations — chat opens empty with
- *     just a context-aware one-liner
+ * LCP-38 — David said "remove the apply to results button
+ * entirely". The Apply button is gone. The chat is a research
+ * conversation; if the user wants to re-run a result they
+ * use the + New button on the result page header.
+ *
+ * LCP-36 — Perplexity-style:
+ *   - Inline source markers ([1], [2]) + follow-up question
+ *     chips at the bottom of every answer
+ *   - Removed "Try asking" recommendations — chat opens empty
+ *     with just a context-aware one-liner
  *   - History persists per questionContext (LCP-35)
+ *
+ * LCP-37 + LCP-38 — Short follow-up questions are grounded
+ * in the full prior assistant answer via the server-side
+ * buildFollowupTurn helper in /api/chat and /api/chat/stream.
+ * The model literally sees the prior answer before the new
+ * question and cannot lose the thread.
  *
  * Architecture: w-[min(960px,95vw)] h-[min(720px,90vh)] centered,
  * SSE-streamed response with typewriter animation, fallback chain
@@ -18,7 +28,6 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 
 interface ChatSource {
   title: string;
@@ -30,11 +39,6 @@ interface ChatMessage {
   role: "user" | "atlas";
   text: string;
   sources?: ChatSource[];
-  // LCP-36 — applyQuery is set by the server on EVERY response,
-  // not only on refined queries. Default behavior: applyQuery
-  // === the questionContext (re-run the original result with the
-  // same view) OR the user's latest message for free chat.
-  applyQuery?: string;
   followups?: string[];
   ts: number;
   streaming?: boolean;
@@ -45,8 +49,6 @@ interface FullScreenChatProps {
   onClose: () => void;
   initialQuestion?: string;
   questionContext?: string;
-  vertical?: string;
-  rankedSites?: Array<{ name: string; suburb?: string }>;
 }
 
 interface SSEEvent {
@@ -55,7 +57,6 @@ interface SSEEvent {
   sources?: ChatSource[];
   questions?: string[];
   path?: string;
-  applyQuery?: string;
   message?: string;
 }
 
@@ -64,14 +65,10 @@ export function FullScreenChat({
   onClose,
   initialQuestion,
   questionContext,
-  vertical,
-  rankedSites,
 }: FullScreenChatProps) {
-  const router = useRouter();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  const [applying, setApplying] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -112,7 +109,6 @@ export function FullScreenChat({
         role: m.role,
         text: m.text,
         sources: m.sources,
-        applyQuery: m.applyQuery,
         followups: m.followups,
         ts: m.ts,
       }));
@@ -230,7 +226,6 @@ export function FullScreenChat({
       let sources: ChatSource[] = [];
       let followups: string[] = [];
       let path: string | undefined;
-      let applyQuery: string | undefined;
 
       while (true) {
         const { value, done } = await reader.read();
@@ -264,7 +259,6 @@ export function FullScreenChat({
               followups = ev.questions;
             } else if (ev.type === "done") {
               path = ev.path;
-              applyQuery = ev.applyQuery;
             } else if (ev.type === "error") {
               accumulatedText += `\n\n[error: ${ev.message}]`;
               setMessages((prev) =>
@@ -281,10 +275,6 @@ export function FullScreenChat({
         }
       }
 
-      // LCP-36 — applyQuery is now set on EVERY response (not
-      // only on refined queries). For contextual chats the
-      // server returns the questionContext so the user can
-      // re-apply the original Atlas result with one click.
       setMessages((prev) =>
         prev.map((m) =>
           m.id === atlasId
@@ -292,7 +282,6 @@ export function FullScreenChat({
                 ...m,
                 streaming: false,
                 sources: sources.length > 0 ? sources : undefined,
-                applyQuery: applyQuery ?? (questionContext || text),
                 followups: followups.length > 0 ? followups : undefined,
               }
             : m,
@@ -315,34 +304,6 @@ export function FullScreenChat({
     } finally {
       setSending(false);
       abortRef.current = null;
-    }
-  };
-
-  const applyToResults = async (applyQuery: string) => {
-    setApplying(applyQuery);
-    try {
-      const res = await fetch("/api/ask", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          vertical: vertical ?? "residential_land",
-          question: applyQuery,
-          model: "gemini-search",
-        }),
-        cache: "no-store",
-      });
-      const data = await res.json();
-      if (data?.id) {
-        // Day 29 fix — navigate to /result/[id]?from=chat so the
-        // page knows to keep the chat panel open with the new
-        // result context.
-        router.push(`/result/${data.id}?from=chat`);
-        onClose();
-      }
-    } catch (err) {
-      console.error("Failed to apply:", err);
-    } finally {
-      setApplying(null);
     }
   };
 
@@ -398,12 +359,7 @@ export function FullScreenChat({
           )}
 
           {messages.map((msg) => (
-            <FullScreenChatBubble
-              key={msg.id}
-              msg={msg}
-              onApply={applyToResults}
-              applying={applying === msg.applyQuery}
-            />
+            <FullScreenChatBubble key={msg.id} msg={msg} />
           ))}
         </div>
 
@@ -442,15 +398,7 @@ export function FullScreenChat({
   );
 }
 
-function FullScreenChatBubble({
-  msg,
-  onApply,
-  applying,
-}: {
-  msg: ChatMessage;
-  onApply: (applyQuery: string) => void;
-  applying: boolean;
-}) {
+function FullScreenChatBubble({ msg }: { msg: ChatMessage }) {
   const isUser = msg.role === "user";
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
@@ -499,38 +447,11 @@ function FullScreenChatBubble({
           </div>
         )}
 
-        {/* LCP-36 — Apply to results on EVERY atlas message.
-            This makes the chat a quick way to re-run a result
-            with the same question, plus the server can mark
-            refinements with a richer applyQuery. */}
-        {!isUser && !msg.streaming && msg.applyQuery && (
-          <div className="mt-3 border-t border-atlas-border/40 pt-3">
-            <button
-              type="button"
-              onClick={() => onApply(msg.applyQuery!)}
-              disabled={applying}
-              className="inline-flex items-center gap-1.5 rounded border border-atlas-accent/60 bg-atlas-accent/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider text-atlas-accent transition hover:bg-atlas-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {applying ? (
-                "Applying…"
-              ) : (
-                <>
-                  <svg
-                    width="11"
-                    height="11"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <path d="M5 12h14M12 5l7 7-7 7" />
-                  </svg>
-                  Apply to results
-                </>
-              )}
-            </button>
-          </div>
-        )}
+        {/* LCP-38 — David: "remove the apply to results button
+            entirely". The Apply button is gone. The chat is
+            a research conversation; if the user wants to
+            re-run a result they use the + New or Chat button
+            on the result page header, not the chat. */}
 
         {/* LCP-36 — Perplexity-style follow-up question chips.
             Clicking a chip sends that question as the next

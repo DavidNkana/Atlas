@@ -64,7 +64,7 @@ interface ChatResponse {
   // LCP-30 — diagnostics so the client can show what actually happened
   // without needing a Vercel dashboard.
   diagnostics?: {
-    path: "gemini" | "tavily_answer" | "tavily_sources" | "openrouter" | "no_data";
+    path: "gemini" | "tavily_answer" | "tavily_sources" | "openrouter" | "followup_no_data" | "no_data";
     tavilyConfigured: boolean;
     tavilyOk: boolean;
     tavilySources: number;
@@ -113,9 +113,28 @@ export async function POST(req: NextRequest) {
     console.warn("[/api/chat] TAVILY_API_KEY not set in runtime env");
   }
 
+  // LCP-37 + LCP-38 — detect short follow-up questions
+  // BEFORE we run Tavily. The followup info is hoisted up
+  // here so the Tavily block below can short-circuit when
+  // this is a follow-up.
+  const followupInfo = buildFollowupTurn(
+    message,
+    body.history ?? [],
+    context,
+  );
+
   // Step 1 — Tavily fetches real web data.
   // We give Tavily the user's question + a bit of context so the
   // search is biased toward the relevant topic.
+  //
+  // LCP-38 — short follow-ups (e.g. "is it the capital?") SKIP
+  // the Tavily web search entirely. The user is asking a
+  // clarification about the prior answer; running a fresh
+  // web search returns generic definitions of "capital"
+  // instead of grounding in the prior Gauteng answer. The
+  // user turn was already rewritten with the full prior
+  // answer as inline context (see buildFollowupTurn), so the
+  // model has everything it needs.
   const tavilyQuery = context
     ? `${message} (context: ${context})`
     : message;
@@ -127,35 +146,39 @@ export async function POST(req: NextRequest) {
   let tavilyHttpStatus: number | null = null;
   let tavilyElapsedMs = 0;
 
-  const tavilyStart = Date.now();
-  try {
-    const tavilyPromise = fetchTavilyWebAnswer(tavilyQuery, {
-      context,
-      maxResults: 5,
-    });
-    const tavilyResult = (await Promise.race([
-      tavilyPromise,
-      new Promise<null>((resolve) =>
-        setTimeout(() => resolve(null), TAVILY_TIMEOUT_MS),
-      ),
-    ])) as Awaited<typeof tavilyPromise>;
-    tavilyElapsedMs = Date.now() - tavilyStart;
-    if (tavilyResult) {
-      tavilyAnswer = tavilyResult.answer ?? "";
-      tavilySources = tavilyResult.sources.map((s) => ({
-        title: s.title,
-        url: s.url,
-      }));
-      // OK = we got data back (either answer OR sources).
-      tavilyOk = tavilyAnswer.length > 0 || tavilySources.length > 0;
-      if (!tavilyOk) tavilyError = "tavily_returned_no_data";
-    } else {
-      tavilyError = `tavily_connector_timeout_or_null_after_${TAVILY_TIMEOUT_MS}ms`;
+  if (!followupInfo.isFollowup) {
+    const tavilyStart = Date.now();
+    try {
+      const tavilyPromise = fetchTavilyWebAnswer(tavilyQuery, {
+        context,
+        maxResults: 5,
+      });
+      const tavilyResult = (await Promise.race([
+        tavilyPromise,
+        new Promise<null>((resolve) =>
+          setTimeout(() => resolve(null), TAVILY_TIMEOUT_MS),
+        ),
+      ])) as Awaited<typeof tavilyPromise>;
+      tavilyElapsedMs = Date.now() - tavilyStart;
+      if (tavilyResult) {
+        tavilyAnswer = tavilyResult.answer ?? "";
+        tavilySources = tavilyResult.sources.map((s) => ({
+          title: s.title,
+          url: s.url,
+        }));
+        // OK = we got data back (either answer OR sources).
+        tavilyOk = tavilyAnswer.length > 0 || tavilySources.length > 0;
+        if (!tavilyOk) tavilyError = "tavily_returned_no_data";
+      } else {
+        tavilyError = `tavily_connector_timeout_or_null_after_${TAVILY_TIMEOUT_MS}ms`;
+      }
+    } catch (err) {
+      tavilyElapsedMs = Date.now() - tavilyStart;
+      tavilyError = err instanceof Error ? err.message : String(err);
+      console.warn("[/api/chat] tavily error:", err);
     }
-  } catch (err) {
-    tavilyElapsedMs = Date.now() - tavilyStart;
-    tavilyError = err instanceof Error ? err.message : String(err);
-    console.warn("[/api/chat] tavily error:", err);
+  } else {
+    tavilyError = "tavily_skipped_followup_LCP38";
   }
 
   // LCP-33 — INLINE Tavily call as second-attempt. If the
@@ -164,7 +187,8 @@ export async function POST(req: NextRequest) {
   // recovers. Also serves as a definitive diagnostic — if the
   // inline call also returns null, the Tavily key itself is
   // missing or revoked on Vercel (not a code bug).
-  if (!tavilyOk) {
+  // LCP-38 — also skipped for follow-ups.
+  if (!tavilyOk && !followupInfo.isFollowup) {
     const inlineKey = process.env.TAVILY_API_KEY ?? "";
     if (inlineKey) {
       const inlineStart = Date.now();
@@ -237,6 +261,11 @@ export async function POST(req: NextRequest) {
   let geminiOk = false;
   let geminiError: string | null = null;
   const geminiKey = process.env.GEMINI_API_KEY;
+  // LCP-37 + LCP-38 — followupInfo was hoisted up before
+  // the Tavily block so we could short-circuit Tavily when
+  // this is a follow-up. We re-use it here for the Gemini
+  // call rewrite.
+
   if (geminiKey) {
     try {
       const genAI = new GoogleGenerativeAI(geminiKey);
@@ -248,13 +277,12 @@ export async function POST(req: NextRequest) {
         role: h.role === "user" ? "user" : "model",
         parts: [{ text: h.text }],
       }));
-      // LCP-37 — same fix as the stream route. When the user
-      // sends a short/pronoun-heavy follow-up in an existing
-      // free conversation (no questionContext), rewrite the
-      // user turn to anchor on the prior answer's subject.
-      // Otherwise the model loses the thread on questions like
-      // "whats it's population?" and answers globally.
-      const finalUserText = rewriteFollowup(message, body.history ?? [], context);
+      // LCP-37 + LCP-38 — rewrite the user turn to include
+      // the FULL prior assistant answer as inline context
+      // with explicit grounding instructions. The model
+      // literally sees the prior answer before the new
+      // question and cannot lose the thread.
+      const finalUserText = followupInfo.text;
       const allContents = [
         ...historyContents,
         { role: "user" as const, parts: [{ text: finalUserText }] },
@@ -295,10 +323,22 @@ export async function POST(req: NextRequest) {
     | "tavily_answer"
     | "tavily_sources"
     | "openrouter"
+    | "followup_no_data"
     | "no_data" = "no_data";
   if (geminiOk) {
     finalAnswer = geminiAnswer;
     path = "gemini";
+  } else if (followupInfo.isFollowup) {
+    // LCP-38 — short follow-up that Gemini couldn't answer
+    // based on the prior context. We skipped Tavily on
+    // purpose (the user is asking about the prior answer,
+    // not the open web). Emit a graceful fallback that
+    // invites the user to rephrase.
+    finalAnswer =
+      "I couldn't answer that based on our earlier " +
+      "conversation. Could you rephrase or give me a " +
+      "bit more detail?";
+    path = "followup_no_data";
   } else if (tavilyAnswer.length > 0) {
     // Tavily gave us a synthesized answer; use it.
     finalAnswer = tavilyAnswer;
@@ -658,13 +698,53 @@ function mergeQueryWithContext(message: string, context: string): string {
  * subject right before the new question and cannot lose
  * the thread.
  */
-function rewriteFollowup(
+/**
+ * LCP-37 + LCP-38 — Hard-fix for short follow-up questions.
+ *
+ * Background: David reported that after asking "Tell me about
+ * Gauteng" (which returned a great answer), his follow-up
+ * "is it the capital?" returned a Wikipedia definition of
+ * "capital" instead of an answer about Gauteng.
+ *
+ * Root cause analysis (LCP-38):
+ *   - LCP-36's systemInstruction + LCP-37's anchor rewrite
+ *     helped on fresh questions but not on short follow-ups.
+ *   - The real problem: Tavily was running a web search on
+ *     the short query "is it the capital?" and returning
+ *     generic results about "what is a capital city". The
+ *     model then summarized those results instead of the
+ *     prior answer's content.
+ *
+ * Fix (LCP-38): when the new message is a short follow-up
+ * AND there is prior conversation history, do TWO things:
+ *
+ *   1. SKIP the Tavily web search entirely. The prior
+ *      answer already contains the relevant facts. No
+ *      external search is needed for a clarification.
+ *      The caller checks isFollowup to decide this.
+ *
+ *   2. Pass the FULL prior assistant answer as inline
+ *      context in the user turn with explicit grounding
+ *      instructions. The model literally sees the prior
+ *      answer before the new question.
+ */
+interface FollowupResult {
+  text: string;
+  isFollowup: boolean;
+  priorAnswer: string | null;
+}
+
+function buildFollowupTurn(
   message: string,
   history: Array<{ role: "user" | "atlas"; text: string }>,
   questionContext: string,
-): string {
-  if (questionContext) return message;
-  if (history.length === 0) return message;
+): FollowupResult {
+  if (questionContext) {
+    return { text: message, isFollowup: false, priorAnswer: null };
+  }
+  if (history.length === 0) {
+    return { text: message, isFollowup: false, priorAnswer: null };
+  }
 
   const newLen = message.length;
   const isShort = newLen < 80;
@@ -673,18 +753,27 @@ function rewriteFollowup(
   const looksLikeFollowup =
     isShort || followupPatterns.test(message) || startsWithAnd;
 
-  if (!looksLikeFollowup) return message;
+  if (!looksLikeFollowup) {
+    return { text: message, isFollowup: false, priorAnswer: null };
+  }
 
   const lastAssistant = [...history].reverse().find((h) => h.role === "atlas");
-  if (!lastAssistant) return message;
+  if (!lastAssistant || !lastAssistant.text.trim()) {
+    return { text: message, isFollowup: false, priorAnswer: null };
+  }
 
-  const subjectSnippet = lastAssistant.text
-    .replace(/\s+/g, " ")
-    .split(/[.!?]/)[0]
-    .trim()
-    .slice(0, 200);
+  const priorAnswer = lastAssistant.text.trim();
 
-  if (!subjectSnippet) return message;
+  // LCP-38 — pass the FULL prior answer as inline context
+  // with explicit grounding instructions.
+  const rewritten = `Given this prior answer:
+"""
+${priorAnswer}
+"""
 
-  return `[Continuing the previous answer about: ${subjectSnippet}]\n\n${message}`;
+The user is asking this follow-up: ${message}
+
+Answer the follow-up based ONLY on the prior answer above. Do not search the web, do not pull in outside definitions, and do not answer the follow-up as if it were a standalone question. If the prior answer contains the information, quote or paraphrase it directly.`;
+
+  return { text: rewritten, isFollowup: true, priorAnswer };
 }

@@ -808,7 +808,6 @@ export default async function ResultPage({
       {/* Day 28 — floating chat panel for follow-ups + live result refinements */}
       <ResultChatPanel
         questionContext={question.questionText}
-        vertical={question.vertical}
         rankedSites={rankedSites}
       />
     </AppShell>

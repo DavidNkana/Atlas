@@ -3,24 +3,26 @@
 /**
  * Day 28 — Result-page chat panel.
  *
- * LCP-36 — major UI upgrade:
- *   - Apply to results on EVERY atlas message (not only refined)
- *   - Perplexity-style: inline source markers ([1], [2]) + follow-up
- *     question chips at the bottom of every answer
- *   - Removed "Try asking" recommendations — chat opens empty with
- *     just a context-aware one-liner
- *   - History is in-memory only (the full-screen chat persists to
- *     localStorage, this panel doesn't because it's transient and
- *     dismissable from the result page)
- *   - Server now sends applyQuery on every response; we use it as
- *     the apply target instead of the old refinedQuery heuristic
+ * LCP-38 — David said "remove the apply to results button
+ * entirely". The Apply button is gone. The chat is a research
+ * conversation; if the user wants to re-run a result they
+ * use the + New button on the result page header.
+ *
+ * LCP-36 — Perplexity-style:
+ *   - Inline source markers ([1], [2]) + follow-up question
+ *     chips at the bottom of every answer
+ *   - Removed "Try asking" recommendations — chat opens empty
+ *     with just a context-aware one-liner
+ *
+ * LCP-37 + LCP-38 — Short follow-up questions are grounded
+ * in the full prior assistant answer via the server-side
+ * buildFollowupTurn helper in /api/chat.
  *
  * Mounting: rendered on every /result/[id] page via the page
  * component. Self-contained — no global state, no context.
  */
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 
 interface ChatSource {
   title: string;
@@ -32,9 +34,6 @@ interface ChatMessage {
   role: "user" | "atlas";
   text: string;
   sources?: ChatSource[];
-  // LCP-36 — applyQuery is set on every atlas response. The
-  // apply button uses this. Default = questionContext.
-  applyQuery?: string;
   followups?: string[];
   ts: number;
 }
@@ -42,23 +41,18 @@ interface ChatMessage {
 interface ResultChatPanelProps {
   /** The original question that produced the current /result page. */
   questionContext: string;
-  /** Current vertical (so refinements preserve it). */
-  vertical: string;
   /** Existing ranked sites — used to give Atlas context for follow-ups. */
   rankedSites?: Array<{ name: string; suburb?: string }>;
 }
 
 export function ResultChatPanel({
   questionContext,
-  vertical,
   rankedSites,
 }: ResultChatPanelProps) {
-  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [applying, setApplying] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to the bottom when new messages arrive.
@@ -118,15 +112,14 @@ export function ResultChatPanel({
         cache: "no-store",
       });
       const data = await res.json();
-      // LCP-36 — applyQuery and followups come from the server
-      // on every response. The apply button uses applyQuery;
-      // the related chips render followups.
+      // LCP-38 — applyQuery and the apply button are gone.
+      // The chat is a research conversation; the server still
+      // returns followups which the chips render.
       const atlasMsg: ChatMessage = {
         id: `atlas-${Date.now()}`,
         role: "atlas",
         text: data.answer ?? "I couldn't reach a research model right now.",
         sources: data.sources ?? [],
-        applyQuery: data.applyQuery ?? questionContext ?? text,
         followups: data.followups,
         ts: Date.now(),
       };
@@ -139,52 +132,11 @@ export function ResultChatPanel({
           err instanceof Error
             ? `Couldn't reach the chat service: ${err.message}`
             : "Couldn't reach the chat service.",
-        applyQuery: questionContext ?? text,
         ts: Date.now(),
       };
       setMessages((prev) => [...prev, errMsg]);
     } finally {
       setSending(false);
-    }
-  };
-
-  const applyToResults = async (applyQuery: string) => {
-    setApplying(applyQuery);
-    try {
-      // Day 29 v2 — David reported "we clicked apply to result
-      // and go defaulted to a no data Lusaka". Root cause was
-      // the cascade running detectCity() on ONLY the refined
-      // query (e.g. "what about in Joburg") which, combined
-      // with all upstream models failing, fell through to
-      // curatedStub with no Joburg match → Lusaka fallback.
-      //
-      // Fix: build a composite question that keeps the
-      // original context as the primary city signal. The
-      // refined query comes first so the AI sees it as the
-      // new question, but the original question is included
-      // for city detection.
-      const composedQuestion =
-        questionContext && applyQuery !== questionContext
-          ? `${applyQuery} (originally: ${questionContext})`
-          : applyQuery;
-      const res = await fetch("/api/ask", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          vertical,
-          question: composedQuestion,
-          model: "gemini-search",
-        }),
-        cache: "no-store",
-      });
-      const data = await res.json();
-      if (data?.id) {
-        router.push(`/result/${data.id}?from=chat`);
-      }
-    } catch (err) {
-      console.error("Failed to apply:", err);
-    } finally {
-      setApplying(null);
     }
   };
 
@@ -278,12 +230,7 @@ export function ResultChatPanel({
             )}
 
             {messages.map((msg) => (
-              <ChatBubble
-                key={msg.id}
-                msg={msg}
-                onApply={applyToResults}
-                applying={applying === msg.applyQuery}
-              />
+              <ChatBubble key={msg.id} msg={msg} />
             ))}
 
             {sending && (
@@ -348,15 +295,7 @@ export function ResultChatPanel({
   );
 }
 
-function ChatBubble({
-  msg,
-  onApply,
-  applying,
-}: {
-  msg: ChatMessage;
-  onApply: (applyQuery: string) => void;
-  applying: boolean;
-}) {
+function ChatBubble({ msg }: { msg: ChatMessage }) {
   const isUser = msg.role === "user";
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
@@ -398,35 +337,11 @@ function ChatBubble({
           </div>
         )}
 
-        {/* LCP-36 — Apply to results on EVERY atlas message. */}
-        {!isUser && msg.applyQuery && (
-          <div className="mt-2 border-t border-atlas-border/40 pt-2">
-            <button
-              type="button"
-              onClick={() => onApply(msg.applyQuery!)}
-              disabled={applying}
-              className="inline-flex items-center gap-1.5 rounded border border-atlas-accent/60 bg-atlas-accent/10 px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-atlas-accent transition hover:bg-atlas-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {applying ? (
-                "Applying…"
-              ) : (
-                <>
-                  <svg
-                    width="11"
-                    height="11"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <path d="M5 12h14M12 5l7 7-7 7" />
-                  </svg>
-                  Apply to results
-                </>
-              )}
-            </button>
-          </div>
-        )}
+        {/* LCP-38 — David: "remove the apply to results button
+            entirely". The Apply button is gone. The chat is
+            a research conversation; if the user wants to
+            re-run a result they use the + New button on the
+            result page header, not the chat. */}
 
         {/* LCP-36 — Perplexity-style follow-up question chips. */}
         {!isUser && msg.followups && msg.followups.length > 0 && (
