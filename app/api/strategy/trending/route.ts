@@ -39,12 +39,14 @@ import { buildTrending, type TrendingResult } from "@/lib/strategy/trending";
  * the route shape.
  *
  * Cache: 10 minutes. ?bust=1 forces a fresh fetch and bypasses
- * cache for all 4 sources.
+ * cache for all 4 sources. ?window= applies a time window (minutes).
+ * ?limit= caps the result (default 100, max 100).
  */
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const DEFAULT_LIMIT = 20;
+const DEFAULT_LIMIT = 100;
+const MAX_LIMIT = 100;
 const CACHE_TTL_MS = 10 * 60 * 1000;
 
 interface CacheEntry {
@@ -53,21 +55,22 @@ interface CacheEntry {
   lastFetchedAt: number;
 }
 
-let cache: CacheEntry | null = null;
+const cache = new Map<string, CacheEntry>();
 
-function getCached(): TrendingResult | null {
-  if (!cache) return null;
-  if (cache.expiresAt < Date.now()) {
-    cache = null;
+function getCached(key: string): TrendingResult | null {
+  const entry = cache.get(key);
+  if (!entry) return null;
+  if (entry.expiresAt < Date.now()) {
+    cache.delete(key);
     return null;
   }
-  const out = { ...cache.result };
-  out.cache.ageMs = Date.now() - cache.lastFetchedAt;
-  out.cache.lastFetchedAt = new Date(cache.lastFetchedAt).toISOString();
+  const out = { ...entry.result };
+  out.cache.ageMs = Date.now() - entry.lastFetchedAt;
+  out.cache.lastFetchedAt = new Date(entry.lastFetchedAt).toISOString();
   return out;
 }
 
-function setCached(result: TrendingResult): void {
+function setCached(key: string, result: TrendingResult): void {
   if (result.lists.reddit.length === 0 &&
       result.lists.youtube.length === 0 &&
       result.lists.cryptopanic.length === 0 &&
@@ -75,20 +78,22 @@ function setCached(result: TrendingResult): void {
     // Guardrail: never cache empty (lesson from the news connector).
     return;
   }
-  cache = {
+  cache.set(key, {
     result,
     expiresAt: Date.now() + CACHE_TTL_MS,
     lastFetchedAt: Date.now(),
-  };
+  });
 }
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
-  const limit = Math.min(Math.max(1, Number(url.searchParams.get("limit") ?? DEFAULT_LIMIT)), 50);
+  const limit = Math.min(Math.max(1, Number(url.searchParams.get("limit") ?? DEFAULT_LIMIT)), MAX_LIMIT);
+  const windowMinutes = parseWindow(url.searchParams.get("window"));
   const shouldBust = url.searchParams.get("bust") === "1";
+  const cacheKey = `${windowMinutes ?? "all"}:${limit}`;
 
   if (!shouldBust) {
-    const cached = getCached();
+    const cached = getCached(cacheKey);
     if (cached) return NextResponse.json(cached);
   }
 
@@ -141,7 +146,7 @@ export async function GET(req: NextRequest) {
 
   const result = buildTrending(
     { reddit, youtube: youtubeArrays, cryptopanic, github },
-    { limit },
+    { limit, windowMinutes: windowMinutes ?? undefined },
   );
 
   // Surface per-source fetch status (raw, with lastFetchedAt + errors).
@@ -182,6 +187,26 @@ export async function GET(req: NextRequest) {
     },
   };
 
-  setCached(result);
+  setCached(cacheKey, result);
   return NextResponse.json(result);
+}
+
+/**
+ * Parse the time-window query param. Accepts minutes (10, 30, 60, ...)
+ * or a friendly suffix ('10m', '1h', '24h', '7d'). Returns null
+ * (no filter) for unknown values.
+ */
+function parseWindow(raw: string | null): number | null {
+  if (!raw) return null;
+  const s = String(raw).trim().toLowerCase();
+  if (s === "all" || s === "0") return null;
+  const m = /^(\d+)\s*(m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days)$/.exec(s);
+  if (m) {
+    const n = Number(m[1]);
+    if (m[2].startsWith("d")) return n * 24 * 60;
+    if (m[2].startsWith("h")) return n * 60;
+    return n;
+  }
+  const n = Number(s);
+  return Number.isFinite(n) && n > 0 ? n : null;
 }

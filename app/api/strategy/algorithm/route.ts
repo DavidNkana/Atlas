@@ -47,7 +47,8 @@ import {
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const DEFAULT_LIMIT = 50;
+const DEFAULT_LIMIT = 100;
+const MAX_LIMIT = 100;
 const CACHE_TTL_MS = 10 * 60 * 1000;
 
 interface CacheEntry {
@@ -56,39 +57,42 @@ interface CacheEntry {
   lastFetchedAt: number;
 }
 
-let cache: CacheEntry | null = null;
+const cache = new Map<string, CacheEntry>();
 
-function getCached(): AlgorithmResult | null {
-  if (!cache) return null;
-  if (cache.expiresAt < Date.now()) {
-    cache = null;
+function getCached(key: string): AlgorithmResult | null {
+  const entry = cache.get(key);
+  if (!entry) return null;
+  if (entry.expiresAt < Date.now()) {
+    cache.delete(key);
     return null;
   }
-  const out = { ...cache.result };
-  out.cache.ageMs = Date.now() - cache.lastFetchedAt;
-  out.cache.lastFetchedAt = new Date(cache.lastFetchedAt).toISOString();
+  const out = { ...entry.result };
+  out.cache.ageMs = Date.now() - entry.lastFetchedAt;
+  out.cache.lastFetchedAt = new Date(entry.lastFetchedAt).toISOString();
   return out;
 }
 
-function setCached(result: AlgorithmResult): void {
+function setCached(key: string, result: AlgorithmResult): void {
   if (result.trending.length === 0) {
     // Guardrail: never cache empty (lesson from the news connector).
     return;
   }
-  cache = {
+  cache.set(key, {
     result,
     expiresAt: Date.now() + CACHE_TTL_MS,
     lastFetchedAt: Date.now(),
-  };
+  });
 }
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
-  const limit = Math.min(Math.max(1, Number(url.searchParams.get("limit") ?? DEFAULT_LIMIT)), 100);
+  const limit = Math.min(Math.max(1, Number(url.searchParams.get("limit") ?? DEFAULT_LIMIT)), MAX_LIMIT);
+  const windowMinutes = parseWindow(url.searchParams.get("window"));
   const shouldBust = url.searchParams.get("bust") === "1";
+  const cacheKey = `${windowMinutes ?? "all"}:${limit}`;
 
   if (!shouldBust) {
-    const cached = getCached();
+    const cached = getCached(cacheKey);
     if (cached) return NextResponse.json(cached);
   }
 
@@ -132,7 +136,7 @@ export async function GET(req: NextRequest) {
 
   const result = buildAlgorithm(
     { reddit, youtube, cryptopanic, github },
-    { limit },
+    { limit, windowMinutes: windowMinutes ?? undefined },
   );
 
   // Surface per-source fetch status for diagnosability
@@ -179,6 +183,26 @@ export async function GET(req: NextRequest) {
         : "0 github repos passed the odd-digit filter";
   }
 
-  setCached(result);
+  setCached(cacheKey, result);
   return NextResponse.json(result);
+}
+
+/**
+ * Parse the time-window query param. Accepts minutes (10, 30, 60, ...)
+ * or a friendly suffix ('10m', '1h', '24h', '7d'). Returns null
+ * (no filter) for unknown values.
+ */
+function parseWindow(raw: string | null): number | null {
+  if (!raw) return null;
+  const s = String(raw).trim().toLowerCase();
+  if (s === "all" || s === "0") return null;
+  const m = /^(\d+)\s*(m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days)$/.exec(s);
+  if (m) {
+    const n = Number(m[1]);
+    if (m[2].startsWith("d")) return n * 24 * 60;
+    if (m[2].startsWith("h")) return n * 60;
+    return n;
+  }
+  const n = Number(s);
+  return Number.isFinite(n) && n > 0 ? n : null;
 }

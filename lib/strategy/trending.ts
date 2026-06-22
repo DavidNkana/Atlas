@@ -265,6 +265,7 @@ export interface TrendingResult {
     recencyWeighting: "exponential_decay_24h_vs_7d";
     sentimentAlgorithm: "pending — Atlas Strategy spec not yet delivered";
     notFinancialAdvice: true;
+    windowMinutes: number | null;
   };
   cache: { ttlMs: number; ageMs: number; lastFetchedAt: string };
 }
@@ -278,14 +279,45 @@ export interface TrendingInputs {
 
 export function buildTrending(
   inputs: TrendingInputs,
-  options: { limit?: number } = {},
+  options: { limit?: number; windowMinutes?: number } = {},
 ): TrendingResult {
-  const limit = options.limit ?? 20;
+  const limit = options.limit ?? 100;
+  const windowMs = options.windowMinutes ? options.windowMinutes * 60_000 : null;
 
-  const reddit = rankReddit(inputs.reddit, limit);
-  const youtube = rankYouTube(inputs.youtube, limit);
-  const cryptopanic = rankCryptoPanic(inputs.cryptopanic, limit);
-  const github = rankGitHub(inputs.github, limit);
+  // Apply the time window to each source's input. Mentions older than
+  // the window are dropped before ranking. A null window = no filter.
+  function withinWindow(at: string | null | undefined): boolean {
+    if (!windowMs) return true;
+    if (!at) return false; // unknown timestamp — exclude when windowing
+    const t = new Date(at).getTime();
+    if (!Number.isFinite(t)) return false;
+    return Date.now() - t <= windowMs;
+  }
+  const filteredReddit = windowMs
+    ? inputs.reddit.filter((p) => withinWindow(p.createdUtc))
+    : inputs.reddit;
+  const filteredYouTube = windowMs
+    ? inputs.youtube.filter((v) => withinWindow(v.publishedAt))
+    : inputs.youtube;
+  const filteredCryptoPanic = windowMs
+    ? inputs.cryptopanic.filter((p) => withinWindow(p.publishedAt))
+    : inputs.cryptopanic;
+  // GitHub uses lastCommitAt; for a window, exclude repos with no
+  // recent activity in the window.
+  const filteredGitHub = windowMs
+    ? inputs.github.filter((a) => withinWindow(a.lastCommitAt))
+    : inputs.github;
+
+  // Per-source ranking uses a higher cap than the final combined
+  // list, so the merge step has enough data. The final overall list
+  // is sliced to `limit` below; per-source lists are sliced to
+  // `limit * 2` so the UI shows a reasonable number per source
+  // without overflowing.
+  const perSourceCap = Math.max(limit * 2, 100);
+  const reddit = rankReddit(filteredReddit, perSourceCap);
+  const youtube = rankYouTube(filteredYouTube, perSourceCap);
+  const cryptopanic = rankCryptoPanic(filteredCryptoPanic, perSourceCap);
+  const github = rankGitHub(filteredGitHub, perSourceCap);
 
   // Combined: sum mention counts per coin across all 4 sources, weighted
   // by source reliability. Reddit + CryptoPanic get weight 1.0, YouTube
@@ -354,6 +386,7 @@ export function buildTrending(
       recencyWeighting: "exponential_decay_24h_vs_7d",
       sentimentAlgorithm: "pending — Atlas Strategy spec not yet delivered",
       notFinancialAdvice: true,
+      windowMinutes: options.windowMinutes ?? null,
     },
     cache: {
       ttlMs: 10 * 60 * 1000,

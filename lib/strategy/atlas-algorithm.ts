@@ -330,6 +330,7 @@ export interface AlgorithmResult {
     ranking: "qualified_mention_count_desc";
     outputSize: number;
     notFinancialAdvice: true;
+    windowMinutes: number | null;
   };
   /** Per-source filter stats so the user can see how the rule behaved. */
   filterStats: {
@@ -338,21 +339,46 @@ export interface AlgorithmResult {
     cryptopanic: { total: number; qualified: number; reason: string };
     reddit: { total: number; qualified: number; reason: string };
   };
-  /** Top 50 trending coins, ranked by qualified mention count desc. */
+  /** Top 100 trending coins, ranked by qualified mention count desc. */
   trending: AlgorithmTrendingCoin[];
   cache: { ttlMs: number; ageMs: number; lastFetchedAt: string };
 }
 
 export function buildAlgorithm(
   inputs: AlgorithmInputs,
-  options: { limit?: number } = {},
+  options: { limit?: number; windowMinutes?: number } = {},
 ): AlgorithmResult {
-  const limit = options.limit ?? 50;
+  const limit = options.limit ?? 100;
+  const windowMs = options.windowMinutes ? options.windowMinutes * 60_000 : null;
 
-  const reddit = filterReddit(inputs.reddit);
-  const youtube = filterYouTube(inputs.youtube);
-  const cryptopanic = filterCryptoPanic(inputs.cryptopanic);
-  const github = filterGitHub(inputs.github);
+  // Apply the time window to each source's input. Mentions older than
+  // the window are dropped before applying the odd-digit filter. A
+  // null window = no filter (uses all available data, which is the
+  // algorithm's natural state).
+  function withinWindow(at: string | null | undefined): boolean {
+    if (!windowMs) return true;
+    if (!at) return false;
+    const t = new Date(at).getTime();
+    if (!Number.isFinite(t)) return false;
+    return Date.now() - t <= windowMs;
+  }
+  const filteredReddit = windowMs
+    ? inputs.reddit.filter((p) => withinWindow(p.createdUtc))
+    : inputs.reddit;
+  const filteredYouTube = windowMs
+    ? inputs.youtube.filter((v) => withinWindow(v.publishedAt))
+    : inputs.youtube;
+  const filteredCryptoPanic = windowMs
+    ? inputs.cryptopanic.filter((p) => withinWindow(p.publishedAt))
+    : inputs.cryptopanic;
+  const filteredGitHub = windowMs
+    ? inputs.github.filter((a) => withinWindow(a.lastCommitAt))
+    : inputs.github;
+
+  const reddit = filterReddit(filteredReddit);
+  const youtube = filterYouTube(filteredYouTube);
+  const cryptopanic = filterCryptoPanic(filteredCryptoPanic);
+  const github = filterGitHub(filteredGitHub);
 
   const allQualified = [
     ...reddit.qualified,
@@ -442,6 +468,7 @@ export function buildAlgorithm(
       ranking: "qualified_mention_count_desc",
       outputSize: limit,
       notFinancialAdvice: true,
+      windowMinutes: options.windowMinutes ?? null,
     },
     filterStats: {
       youtube: {
