@@ -399,6 +399,7 @@ export function NewsFeedGrid() {
 
       {!loading && !error && visibleArticles.length === 0 && (
         <EmptyState
+          category={activeTab}
           diag={diag}
           retrying={retrying}
           setRetrying={setRetrying}
@@ -590,22 +591,36 @@ function ArticleCard({ article }: { article: NewsArticle }) {
 }
 
 function EmptyState({
+  category,
   diag,
   retrying,
   setRetrying,
   loadAll,
   refreshDiag,
 }: {
+  category: NewsCategory;
   diag: any;
   retrying: boolean;
   setRetrying: (b: boolean) => void;
   loadAll: () => Promise<void>;
   refreshDiag: () => Promise<any>;
 }) {
+  // LCP-44 — The real_estate tab has a unique problem: NewsAPI's
+  // free-tier relevance ranker returns mostly false positives
+  // (Real Madrid, Bayern transfers, influencers, etc). The
+  // LCP-43 client-side filter drops them, leaving nothing to
+  // show. The generic "Try the All tab" suggestion is
+  // misleading on this category — switching to All won't give
+  // the user real estate news, just a wider pool of mixed
+  // coverage. So we render a category-specific message.
+  const isRealEstate = category === "real_estate";
+
   return (
     <div className="rounded border border-atlas-border/40 bg-atlas-surface/40 p-8 text-center">
       <p className="text-sm text-atlas-text">
-        No articles in this category right now.
+        {isRealEstate
+          ? "No real estate articles found right now."
+          : "No articles in this category right now."}
       </p>
 
       {diag?.diagnosis && (
@@ -614,7 +629,9 @@ function EmptyState({
             Diagnosis
           </div>
           <div className="mt-1 text-[11px] text-atlas-text">
-            {diag.diagnosis.mostLikelyIssue}
+            {isRealEstate
+              ? "NewsAPI's free tier returns mostly false positives for this query (football transfer news about Real Madrid, Bayern, influencers, cartoons). The client-side filter drops them, leaving nothing to show. We're working on a better source."
+              : diag.diagnosis.mostLikelyIssue}
           </div>
           {diag?.newsApi && (
             <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 font-mono text-[10px] text-atlas-muted">
@@ -639,11 +656,13 @@ function EmptyState({
         </div>
       )}
 
-      <p className="mt-4 text-xs text-atlas-muted">
-        Try the All tab — it surfaces the broadest mix of stocks,
-        crypto, investments and real-estate coverage from around the
-        world.
-      </p>
+      {!isRealEstate && (
+        <p className="mt-4 text-xs text-atlas-muted">
+          Try the All tab — it surfaces the broadest mix of stocks,
+          crypto, investments and real-estate coverage from around the
+          world.
+        </p>
+      )}
       <p className="mt-2 text-[10px] text-atlas-muted">
         NewsAPI.org free tier: 100 req/day. Cache age: 1 hour.
       </p>
