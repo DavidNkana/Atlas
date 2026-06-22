@@ -219,12 +219,24 @@ export function ResultChatPanel({
             ref={scrollRef}
             className="flex-1 space-y-3 overflow-y-auto p-4"
           >
-            {/* LCP-36 — Removed "Try asking" recommendations.
-                Empty state is now a single context-aware line. */}
+            {/* LCP-40 — Honest empty state. The result-page
+                chat is a quick web search, not a real
+                conversation. Each message runs an independent
+                web search; follow-ups don't reliably preserve
+                context. We tell the user upfront instead of
+                promising a capability we can't deliver
+                consistently. */}
             {messages.length === 0 && (
               <div className="space-y-2 text-xs text-atlas-muted">
+                <p className="font-mono text-[9px] uppercase tracking-wider text-atlas-muted">
+                  Quick search — not a conversation
+                </p>
                 <p className="text-atlas-text">
-                  Ask Atlas a follow-up about this result — sources appear inline with the answer.
+                  Each message is a standalone web search. Include
+                  the subject in the question (e.g. "Is Gauteng the
+                  capital of South Africa?" rather than "Is it the
+                  capital?"). Follow-ups don't reliably remember
+                  prior context.
                 </p>
               </div>
             )}
