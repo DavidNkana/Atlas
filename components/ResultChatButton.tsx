@@ -46,7 +46,7 @@ export function ResultChatButton({
         }
       }}
       className="flex items-center gap-1.5 rounded-md border border-atlas-accent/60 bg-atlas-accent/10 px-3 py-1.5 text-xs font-medium text-atlas-accent transition-colors hover:bg-atlas-accent/20"
-      title="Open full-screen chat with this question"
+      title="Research with Atlas"
       data-testid="atlas-open-full-chat-result"
     >
       <svg
@@ -61,7 +61,7 @@ export function ResultChatButton({
       >
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
       </svg>
-      <span>Chat</span>
+      <span>Research</span>
     </button>
   );
 }
