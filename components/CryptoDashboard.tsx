@@ -327,13 +327,14 @@ export function CryptoDashboard() {
             Real-time prices, momentum, and 7-day trends for the top 50
             cryptocurrencies, plus African on-ramp exchanges.
           </p>
-          {/* LCP-47/48 — own header row so the trust signal isn't
-              buried inside the description. Shows relative age and
-              absolute UTC stamp side-by-side. */}
+          {/* LCP-47/48/49 — own header row, bolder and bigger so
+              the trust signal is the second thing your eye lands
+              on after the title. text-sm (was 10px) semibold, atlas
+              text color (was muted), dot 2.5x2.5 (was 1.5). */}
           {(ageLabel || utcLabel) && (
-            <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[10px] uppercase tracking-wider text-atlas-muted">
+            <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-sm font-semibold tracking-wide text-atlas-text">
               <span
-                className={`inline-block h-1.5 w-1.5 rounded-full ${
+                className={`inline-block h-2.5 w-2.5 rounded-full ${
                   refreshing
                     ? "animate-pulse bg-amber-400"
                     : ageLabel === "just now"
@@ -344,9 +345,9 @@ export function CryptoDashboard() {
               />
               {ageLabel && <span>Updated {ageLabel}</span>}
               {utcLabel && (
-                <span className="text-atlas-muted/80">· {utcLabel}</span>
+                <span className="text-atlas-muted">· {utcLabel}</span>
               )}
-              {refreshing && <span>· refreshing…</span>}
+              {refreshing && <span className="text-amber-400">· refreshing…</span>}
             </div>
           )}
         </div>
