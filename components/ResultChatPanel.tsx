@@ -146,7 +146,7 @@ export function ResultChatPanel({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        aria-label={open ? "Close Ask Atlas" : "Open Ask Atlas"}
+        aria-label={open ? "Close Research with Atlas" : "Open Research with Atlas"}
         className="fixed bottom-6 right-6 z-30 flex h-14 w-14 items-center justify-center rounded-full border border-atlas-accent bg-atlas-accent text-white shadow-lg transition hover:bg-atlas-accent/90"
       >
         {open ? (
@@ -182,14 +182,14 @@ export function ResultChatPanel({
       {open && (
         <div
           role="dialog"
-          aria-label="Ask Atlas"
+          aria-label="Research with Atlas"
           className="fixed bottom-24 right-6 z-30 flex h-[32rem] w-[28rem] max-w-[calc(100vw-3rem)] flex-col overflow-hidden rounded-lg border border-atlas-border bg-atlas-bg shadow-2xl"
         >
           {/* Header */}
           <div className="flex shrink-0 items-center justify-between border-b border-atlas-border bg-atlas-surface px-4 py-3">
             <div>
               <div className="text-sm font-semibold text-atlas-text">
-                Ask Atlas
+                Research with Atlas
               </div>
               <div className="font-mono text-[10px] uppercase tracking-wider text-atlas-muted">
                 Live research · sources cited inline
@@ -284,7 +284,7 @@ export function ResultChatPanel({
                     void send();
                   }
                 }}
-                placeholder="Ask Atlas anything…"
+                placeholder="Research anything with Atlas…"
                 disabled={sending}
                 className="flex-1 rounded border border-atlas-border bg-atlas-bg px-3 py-2 text-sm text-atlas-text placeholder:text-atlas-muted focus:border-atlas-accent focus:outline-none disabled:opacity-50"
               />

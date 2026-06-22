@@ -312,7 +312,7 @@ export function FullScreenChat({
   return (
     <div
       role="dialog"
-      aria-label="Atlas Chat"
+      aria-label="Research with Atlas"
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
@@ -326,7 +326,7 @@ export function FullScreenChat({
         <div className="flex shrink-0 items-center justify-between border-b border-atlas-border bg-atlas-surface px-6 py-4">
           <div>
             <div className="text-base font-semibold text-atlas-text">
-              Atlas Chat
+              Research with Atlas
             </div>
             <div className="font-mono text-[10px] uppercase tracking-wider text-atlas-muted">
               Live research · sources cited inline
@@ -385,7 +385,7 @@ export function FullScreenChat({
                   void send();
                 }
               }}
-              placeholder="Ask Atlas anything…"
+              placeholder="Research anything with Atlas…"
               disabled={sending}
               className="flex-1 rounded border border-atlas-border bg-atlas-bg px-4 py-3 text-sm text-atlas-text placeholder:text-atlas-muted focus:border-atlas-accent focus:outline-none disabled:opacity-50"
             />
