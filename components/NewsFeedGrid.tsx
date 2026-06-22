@@ -88,38 +88,70 @@ const HERO_GRADIENT: Record<NewsCategory, string> = {
 // Pattern: require at least one of the real-estate-specific terms
 // in title+description. Reject obvious false positives by title
 // keyword (e.g. "real madrid" or "real sociedad").
+// LCP-45 — Stricter real-estate-specific terms. The previous
+// list had too many short common words ("rent", "apartment",
+// "land") that matched unrelated articles (car rental, group
+// of guys moving into the apartment upstairs, etc). Use
+// multi-word concrete phrases that only real-estate articles
+// have, and require word-boundary matching for single words.
 const REAL_ESTATE_TERMS = [
-  "real estate",
-  "property",
-  "housing",
-  "mortgage",
-  "reit",
+  // Multi-word phrases — substring match is fine
+  "housing market",
+  "mortgage rate",
+  "mortgage rates",
   "home price",
+  "home prices",
   "home sale",
-  "home sale",
-  "rent",
-  "rental",
-  "realty",
-  "land",
-  "estate agent",
-  "estate market",
-  "residential",
-  "commercial property",
-  "developer",
-  "zoning",
-  "construction",
-  "interest rate",
-  "fed rate",
+  "home sales",
+  "home builder",
   "homebuilder",
-  "appartment",  // typo-tolerant
-  "apartment",
-  "condo",
-  "luxury home",
-  "office space",
-  "warehouse",
-  "tenant",
-  "landlord",
+  "property price",
+  "property prices",
+  "property market",
+  "property development",
+  "property developer",
+  "commercial property",
+  "residential property",
   "real estate",
+  "realty",
+  "housing development",
+  "condo development",
+  "condo market",
+  "apartment building",
+  "apartment development",
+  "rental market",
+  "rental prices",
+  "rental rates",
+  "rental property",
+  "tenant rights",
+  "housing crisis",
+  "housing shortage",
+  "housing affordability",
+  "mortgage approval",
+  "mortgage lender",
+  "construction permits",
+  "building permits",
+  "real estate market",
+  "real estate developer",
+  "real estate investor",
+  "real estate investment",
+  "luxury home",
+  "luxury homes",
+  "luxury condo",
+  "luxury apartment",
+  "home equity",
+  "home loan",
+  "home loans",
+  "homebuilder stocks",
+  "housing starts",
+  "housing market index",
+  "fed rate",
+  "interest rate",
+  "fha",
+  "homeowners association",
+  "zoning",
+  "eviction",
+  "reit",
 ];
 const REAL_ESTATE_TITLE_BLOCKLIST = [
   "real madrid",
@@ -127,9 +159,31 @@ const REAL_ESTATE_TITLE_BLOCKLIST = [
   "real betis",
   "real oviedo",
   "real salt lake",
-  "for real life",  // common phrase
+  "for real life",
   "real truth",
   "real talk",
+  "car rental",
+  "apartment upstairs",
+  "apartment complex upside",
+  "kitten",
+  "pallas",
+  "twistedsifter",
+  "cheezburger",
+  "held hostage",
+  "stunning",
+  "holiday",
+  "vacation",
+  "summer",
+  "fashion",
+  "celebrity",
+  "infp",
+  "father-in-law",
+  "fatherhood",
+  "dads",
+  "really",
+  "real deal",
+  "feel like",
+  "feeling",
 ];
 
 function isRealEstateArticle(article: NewsArticle): boolean {
@@ -140,6 +194,12 @@ function isRealEstateArticle(article: NewsArticle): boolean {
   // Reject obvious false positives by title keyword first
   for (const blocked of REAL_ESTATE_TITLE_BLOCKLIST) {
     if (title.includes(blocked)) return false;
+  }
+  // Also reject if description contains obvious non-real-estate
+  // signal phrases (e.g. the article is about a rental car)
+  const descBlocklist = ["car rental", "equipment rental", "truck rental"];
+  for (const blocked of descBlocklist) {
+    if (desc.includes(blocked)) return false;
   }
 
   // Require at least one real-estate-specific term

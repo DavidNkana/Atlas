@@ -44,12 +44,20 @@ export interface NewsArticle {
 // Queries are intentionally short and broad. NewsAPI's relevance
 // ranking drops to 0 matches on heavy OR-of-quoted-keywords on free
 // tier; plain OR queries work reliably.
+// LCP-45 — the old real_estate query ('real estate OR property
+// market OR REIT OR housing') returned too many false positives
+// (Real Madrid, Bayern transfers, influencers, etc). The new
+// query is much more specific — concrete multi-word phrases that
+// only real estate articles would have, like "housing market",
+// "mortgage rates", "home prices". NewsAPI's free tier returns
+// ~2-4k results for this query vs the previous ~80k.
 const CATEGORY_QUERIES: Record<NewsCategory, string> = {
   all: "stock market OR cryptocurrency OR real estate OR investment",
   stocks: "stock market OR earnings OR shares OR IPO",
   crypto: "cryptocurrency OR bitcoin OR ethereum OR blockchain",
   investments: "investment OR ETF OR venture capital OR fund",
-  real_estate: "real estate OR property market OR REIT OR housing",
+  real_estate:
+    '"housing market" OR "mortgage rates" OR "home prices" OR "property prices" OR "real estate developer" OR REIT OR "homebuilder" OR "apartment building" OR "condo development" OR "rental market" OR "landlord" OR "tenant rights" OR "housing development"',
 };
 
 // SA-biased preferred sources
