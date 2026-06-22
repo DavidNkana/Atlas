@@ -153,9 +153,25 @@ export async function POST(req: NextRequest) {
               role: h.role === "user" ? "user" : "model",
               parts: [{ text: h.text }],
             }));
+
+            // LCP-37 — When the new user turn is a short
+            // pronoun-heavy follow-up (e.g. "whats it's
+            // population?" or "and the cost?"), the model
+            // often loses the thread and answers a generic
+            // question globally instead of about the prior
+            // subject. The fix: when (a) the user is in an
+            // existing conversation (>= 1 prior turn) AND
+            // (b) the new message is short AND (c) it looks
+            // like a follow-up (pronouns, "and X?", "what
+            // about Y?", etc), we rewrite the user turn to
+            // include the previous assistant subject as an
+            // explicit anchor. The model then literally sees
+            // the prior answer's subject right before the new
+            // question and cannot lose the thread.
+            const finalUserText = rewriteFollowup(message, body.history ?? [], context);
             const allContents = [
               ...historyContents,
-              { role: "user" as const, parts: [{ text: message }] },
+              { role: "user" as const, parts: [{ text: finalUserText }] },
             ];
             const geminiStreamResult = model.generateContentStream({
               contents: allContents,
@@ -535,4 +551,74 @@ Return ONLY a JSON array of 3 strings. No commentary, no markdown fences. Exampl
   } catch {
     return [];
   }
+}
+
+/**
+ * LCP-37 — When the user sends a short, pronoun-heavy, or
+ * otherwise ambiguous follow-up in an existing conversation,
+ * the model often loses the thread and answers a generic
+ * global question instead of a question about the prior
+ * subject. Example: user asks "Tell me about Gauteng" →
+ * assistant explains Gauteng. User then asks "whats it's
+ * population?" — model returns GLOBAL population (8.3B)
+ * instead of Gauteng's 16M, even though the prior answer
+ * contained the exact figure.
+ *
+ * Fix: detect this pattern and rewrite the user turn to
+ * include a brief subject anchor extracted from the prior
+ * assistant turn. The model then literally sees the prior
+ * subject right before the new question and cannot lose
+ * the thread.
+ *
+ * Detection rules — the new turn is treated as a follow-up
+ * if ALL of:
+ *   - There is at least one prior turn
+ *   - The new message is short (< 80 chars) OR contains
+ *     obvious follow-up markers (pronouns, "and X?", "what
+ *     about Y?", etc.)
+ *
+ * The rewrite prepends the prior subject in brackets. The
+ * model prompt remains otherwise untouched so the LLM is
+ * free to answer concisely as usual.
+ */
+function rewriteFollowup(
+  message: string,
+  history: Array<{ role: "user" | "atlas"; text: string }>,
+  questionContext: string,
+): string {
+  // If we have a questionContext (user is on a /result/[id]
+  // page), the systemInstruction already covers the case.
+  // Only rewrite when context is absent AND history is non-empty.
+  if (questionContext) return message;
+  if (history.length === 0) return message;
+
+  const newLen = message.length;
+  const isShort = newLen < 80;
+  // Common follow-up signals
+  const followupPatterns = /\b(its|it's|their|them|they|that|this|those|these|there|here|he|she|it|the same|also|and what|and the|how about|what about|why|when|where|who)\b/i;
+  const startsWithAnd = /^\s*(and|also|what about|how about|and what|and the|why|when|where)\b/i.test(message);
+  const looksLikeFollowup =
+    isShort || followupPatterns.test(message) || startsWithAnd;
+
+  if (!looksLikeFollowup) return message;
+
+  // Find the last assistant turn
+  const lastAssistant = [...history].reverse().find((h) => h.role === "atlas");
+  if (!lastAssistant) return message;
+
+  // Extract the subject: first sentence of the prior answer
+  // is usually the topic statement. Trim to a reasonable
+  // length for context.
+  const subjectSnippet = lastAssistant.text
+    .replace(/\s+/g, " ")
+    .split(/[.!?]/)[0]
+    .trim()
+    .slice(0, 200);
+
+  if (!subjectSnippet) return message;
+
+  // Build the rewritten turn. The model reads this as
+  // "[context: prior answer subject] user follow-up question"
+  // and treats it as a continuation.
+  return `[Continuing the previous answer about: ${subjectSnippet}]\n\n${message}`;
 }

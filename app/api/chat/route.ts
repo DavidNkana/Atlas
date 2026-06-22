@@ -248,9 +248,16 @@ export async function POST(req: NextRequest) {
         role: h.role === "user" ? "user" : "model",
         parts: [{ text: h.text }],
       }));
+      // LCP-37 — same fix as the stream route. When the user
+      // sends a short/pronoun-heavy follow-up in an existing
+      // free conversation (no questionContext), rewrite the
+      // user turn to anchor on the prior answer's subject.
+      // Otherwise the model loses the thread on questions like
+      // "whats it's population?" and answers globally.
+      const finalUserText = rewriteFollowup(message, body.history ?? [], context);
       const allContents = [
         ...historyContents,
-        { role: "user" as const, parts: [{ text: message }] },
+        { role: "user" as const, parts: [{ text: finalUserText }] },
       ];
       const result = await Promise.race([
         model.generateContent({ contents: allContents }),
@@ -632,4 +639,52 @@ function mergeQueryWithContext(message: string, context: string): string {
   const overlap = messageWords.filter((w) => contextWords.has(w)).length;
   if (overlap >= 3) return message;
   return `${message} (originally: ${context})`;
+}
+
+/**
+ * LCP-37 — When the user sends a short, pronoun-heavy, or
+ * otherwise ambiguous follow-up in an existing conversation,
+ * the model often loses the thread and answers a generic
+ * global question instead of a question about the prior
+ * subject. Example: user asks "Tell me about Gauteng" →
+ * assistant explains Gauteng. User then asks "whats it's
+ * population?" — model returns GLOBAL population (8.3B)
+ * instead of Gauteng's 16M, even though the prior answer
+ * contained the exact figure.
+ *
+ * Fix: detect this pattern and rewrite the user turn to
+ * include a brief subject anchor extracted from the prior
+ * assistant turn. The model then literally sees the prior
+ * subject right before the new question and cannot lose
+ * the thread.
+ */
+function rewriteFollowup(
+  message: string,
+  history: Array<{ role: "user" | "atlas"; text: string }>,
+  questionContext: string,
+): string {
+  if (questionContext) return message;
+  if (history.length === 0) return message;
+
+  const newLen = message.length;
+  const isShort = newLen < 80;
+  const followupPatterns = /\b(its|it's|their|them|they|that|this|those|these|there|here|he|she|it|the same|also|and what|and the|how about|what about|why|when|where|who)\b/i;
+  const startsWithAnd = /^\s*(and|also|what about|how about|and what|and the|why|when|where)\b/i.test(message);
+  const looksLikeFollowup =
+    isShort || followupPatterns.test(message) || startsWithAnd;
+
+  if (!looksLikeFollowup) return message;
+
+  const lastAssistant = [...history].reverse().find((h) => h.role === "atlas");
+  if (!lastAssistant) return message;
+
+  const subjectSnippet = lastAssistant.text
+    .replace(/\s+/g, " ")
+    .split(/[.!?]/)[0]
+    .trim()
+    .slice(0, 200);
+
+  if (!subjectSnippet) return message;
+
+  return `[Continuing the previous answer about: ${subjectSnippet}]\n\n${message}`;
 }
