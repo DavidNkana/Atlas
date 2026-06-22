@@ -54,7 +54,7 @@ interface ChatResponse {
   // LCP-30 — diagnostics so the client can show what actually happened
   // without needing a Vercel dashboard.
   diagnostics?: {
-    path: "gemini" | "tavily_answer" | "tavily_sources" | "no_data";
+    path: "gemini" | "tavily_answer" | "tavily_sources" | "openrouter" | "no_data";
     tavilyConfigured: boolean;
     tavilyOk: boolean;
     tavilySources: number;
@@ -185,10 +185,19 @@ export async function POST(req: NextRequest) {
   //   2. Tavily's pre-synthesized answer (good — direct from web search)
   //   3. Synthesize a response from Tavily's sources if Tavily returned
   //      sources but no synthesized answer (common with Tavily /search)
-  //   4. Genuine fallback message — only when BOTH Tavily and Gemini
-  //      returned nothing
+  //   4. OpenRouter free-tier fallback (LLM-32) — only when Tavily is
+  //      empty AND Gemini failed. Uses OPENROUTER_API_KEY with a free
+  //      model. Catches the "Tavily returned null but key works" case
+  //      that the v2 fresh-env-read fix couldn't cover (e.g. mid-
+  //      flight env change, network edge issues).
+  //   5. Genuine fallback message — only when ALL of the above failed
   let finalAnswer: string;
-  let path: "gemini" | "tavily_answer" | "tavily_sources" | "no_data" = "no_data";
+  let path:
+    | "gemini"
+    | "tavily_answer"
+    | "tavily_sources"
+    | "openrouter"
+    | "no_data" = "no_data";
   if (geminiOk) {
     finalAnswer = geminiAnswer;
     path = "gemini";
@@ -207,12 +216,77 @@ export async function POST(req: NextRequest) {
     finalAnswer = `I found live web data on this topic but couldn't synthesize a full answer right now. Here are the most relevant sources:\n\n${sourceList}\n\nClick any citation below for the full article.`;
     path = "tavily_sources";
   } else {
-    // Both failed. This is the genuine "no data" case.
-    finalAnswer =
-      "I couldn't reach a live web data source right now. " +
-      (geminiKey ? "AI synthesis and Tavily search both returned empty. " : "") +
-      "Try a more specific question or check back in a few minutes.";
-    path = "no_data";
+    // Both Tavily and Gemini returned nothing. LCP-32 — try
+    // OpenRouter free-tier as last AI fallback before giving up.
+    const openrouterKey = process.env.OPENROUTER_API_KEY;
+    if (openrouterKey) {
+      try {
+        const orController = new AbortController();
+        const orTimeout = setTimeout(() => orController.abort(), 7_000);
+        const orRes = await fetch(
+          "https://openrouter.ai/api/v1/chat/completions",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${openrouterKey}`,
+            },
+            body: JSON.stringify({
+              model: "meta-llama/llama-3.1-8b-instruct:free",
+              messages: [
+                {
+                  role: "system",
+                  content:
+                    "You are Atlas, an AI assistant for African builders and investors. Be brief, specific, and grounded. If you don't know, say so.",
+                },
+                { role: "user", content: message },
+              ],
+              max_tokens: 400,
+            }),
+            signal: orController.signal,
+            cache: "no-store",
+          },
+        );
+        clearTimeout(orTimeout);
+        if (orRes.ok) {
+          const orData = (await orRes.json()) as {
+            choices?: Array<{ message?: { content?: string } }>;
+          };
+          const orText =
+            orData.choices?.[0]?.message?.content?.trim() ?? "";
+          if (orText.length >= 20) {
+            finalAnswer = orText + "\n\n_Note: this answer came from a free-tier fallback model (Llama 3.1 8B), not Atlas's primary research engine. Tavily and Gemini were both unavailable._";
+            path = "openrouter";
+          } else {
+            finalAnswer =
+              "I couldn't reach a live web data source right now. " +
+              "AI synthesis, Tavily search, and the OpenRouter fallback all returned empty. " +
+              "Try a more specific question or check back in a few minutes.";
+            path = "no_data";
+          }
+        } else {
+          finalAnswer =
+            "I couldn't reach a live web data source right now. " +
+            `Tavily (${tavilyError ?? "no data"}), Gemini (${geminiError ?? "no data"}), OpenRouter (HTTP ${orRes.status}) all returned empty. ` +
+            "Try a more specific question or check back in a few minutes.";
+          path = "no_data";
+        }
+      } catch (err) {
+        console.warn("[/api/chat] openrouter error:", err);
+        finalAnswer =
+          "I couldn't reach a live web data source right now. " +
+          (geminiKey ? "AI synthesis and Tavily search both returned empty. " : "") +
+          "Try a more specific question or check back in a few minutes.";
+        path = "no_data";
+      }
+    } else {
+      // No OpenRouter key — original fallback message.
+      finalAnswer =
+        "I couldn't reach a live web data source right now. " +
+        (geminiKey ? "AI synthesis and Tavily search both returned empty. " : "") +
+        "Try a more specific question or check back in a few minutes.";
+      path = "no_data";
+    }
   }
 
   // Day 28 v2 — diagnostics so David can see what actually happened.
