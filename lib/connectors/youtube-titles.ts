@@ -1,21 +1,26 @@
 /**
- * LCP-51 S2 — YouTube titles connector.
+ * LCP-51 S2 + LCP-56 — YouTube titles + duration connector.
  *
- * Pulls recent video titles + descriptions from YouTube Data API v3
- * for crypto content. We use this for "what creators are saying
+ * Pulls recent video titles + descriptions + durations from YouTube
+ * Data API v3 for crypto content. Used for "what creators are saying
  * about [coin]" — the title + description text is enough for
- * sentiment scoring and topic clustering, without paying the cost
- * (API quota + legal gray area) of fetching full transcripts.
+ * sentiment scoring and topic clustering, and the duration powers
+ * the Atlas Algorithm (LCP-55) odd-digit filter.
  *
- * Free tier: 10,000 units/day. `search.list` costs 100 units per
- * call; `videos.list` costs 1 unit. We do ONE search per coin to
- * keep the daily budget comfortable (50 coins * 100 = 5,000 units,
- * 50% of the free tier — well under the limit, leaves room for
- * other connectors and ad-hoc manual fetches).
+ * Two-call flow:
+ *   1. search.list  (100 units) — find recent videos matching the coin
+ *   2. videos.list  (1 unit per video) — fetch contentDetails.duration
+ *      for the search results. 10,000 units/day free tier, so
+ *      ~5,000 videos/day is the cap. We stay well under it.
  *
- * MVP per LCP-50: titles only, no transcripts. Phase 2 (deferred):
- * trusted-channel filter (Coin Bureau, BitBoy, Altcoin Daily, etc.),
- * transcript fetch with legal review.
+ * Why two calls instead of one: search.list does not return
+ * contentDetails.duration. videos.list requires the video IDs from
+ * a prior search. Combining is standard YouTube API practice.
+ *
+ * Graceful degradation: if the second call (videos.list) fails, we
+ * return videos with no duration and status remains "ok" so the
+ * rest of the pipeline keeps working — the algorithm just won't
+ * qualify those videos.
  *
  * Cache: 30 minutes. YouTube content moves slower than social, faster
  * than news.
@@ -32,6 +37,8 @@ export interface YouTubeVideoTitle {
   channelTitle: string;
   publishedAt: string; // ISO
   url: string; // https://youtube.com/watch?v=...
+  /** ISO 8601 duration string, e.g. "PT6M47S" or "PT1H2M30S". May be missing if videos.list failed. */
+  duration?: string;
 }
 
 export interface YouTubeFetchStatus {
@@ -41,7 +48,8 @@ export interface YouTubeFetchStatus {
     | "http-error"
     | "bad-shape"
     | "rate-limited"
-    | "skipped-cache-hit";
+    | "skipped-cache-hit"
+    | "ok-no-duration";
   http?: number;
   errorSnippet?: string;
   lastFetchedAt?: string;
@@ -93,7 +101,49 @@ function setCached(query: string, videos: YouTubeVideoTitle[]): void {
 }
 
 /**
- * Fetch recent video titles for a coin.
+ * Fetch durations for a list of video IDs in batches of 50 (the
+ * YouTube videos.list API limit per call). Returns a Map of id →
+ * duration ISO string. Failures degrade to empty map.
+ */
+async function fetchDurations(
+  videoIds: string[],
+): Promise<Map<string, string>> {
+  if (!YOUTUBE_API_KEY || videoIds.length === 0) return new Map();
+  const out = new Map<string, string>();
+  // YouTube videos.list accepts up to 50 IDs per call. Chunk if more.
+  for (let i = 0; i < videoIds.length; i += 50) {
+    const batch = videoIds.slice(i, i + 50);
+    const params = new URLSearchParams({
+      part: "contentDetails",
+      id: batch.join(","),
+      key: YOUTUBE_API_KEY,
+    });
+    const url = `${YOUTUBE_BASE}/videos?${params.toString()}`;
+    try {
+      const res = await fetch(url, {
+        headers: {
+          Accept: "application/json",
+          "User-Agent": "Atlas-Strategy/1.0 (+https://atlas-q2eh.vercel.app)",
+        },
+        cache: "no-store",
+      });
+      if (!res.ok) continue; // Graceful degrade — return whatever we have
+      const data = await res.json();
+      if (!data || !Array.isArray(data.items)) continue;
+      for (const item of data.items) {
+        if (item?.id && item?.contentDetails?.duration) {
+          out.set(String(item.id), String(item.contentDetails.duration));
+        }
+      }
+    } catch {
+      continue; // Graceful degrade
+    }
+  }
+  return out;
+}
+
+/**
+ * Fetch recent video titles for a coin, with duration enrichment.
  * If YOUTUBE_API_KEY is not set, returns [] and sets status to "no-key"
  * (graceful degradation — the strategy page will show "YouTube
  * source unavailable" instead of crashing).
@@ -174,7 +224,7 @@ export async function fetchYouTubeTitlesForCoin(
       return [];
     }
 
-    const videos: YouTubeVideoTitle[] = data.items
+    const baseVideos: YouTubeVideoTitle[] = data.items
       .filter((it: any) => it && it.id?.videoId)
       .map((it: any) => {
         const id = String(it.id.videoId);
@@ -191,9 +241,22 @@ export async function fetchYouTubeTitlesForCoin(
         };
       });
 
+    // LCP-56 — enrich with duration via videos.list. Graceful
+    // degrade: if this fails, we still return the videos, just
+    // without duration. The algorithm filter will then skip
+    // them and surface a "no-duration" reason per item.
+    const ids = baseVideos.map((v) => v.id);
+    const durations = await fetchDurations(ids);
+    const videos: YouTubeVideoTitle[] = baseVideos.map((v) => {
+      const d = durations.get(v.id);
+      return d ? { ...v, duration: d } : v;
+    });
+
+    const videosWithDuration = videos.filter((v) => typeof v.duration === "string").length;
+
     setCached(query, videos);
     lastFetchStatus = {
-      status: "ok",
+      status: videosWithDuration > 0 ? "ok" : "ok-no-duration",
       videoCount: videos.length,
       lastFetchedAt: new Date().toISOString(),
     };

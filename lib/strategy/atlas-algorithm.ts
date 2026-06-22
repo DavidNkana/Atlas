@@ -208,32 +208,31 @@ function filterReddit(posts: RedditPost[]): SourceFilterResult {
   return { qualified, qualifiedCount: qualified.length, totalCount: posts.length };
 }
 
-function filterYouTube(
-  videos: YouTubeVideoTitle[],
-  /**
-   * If the connector returns the raw duration string, pass it through.
-   * If not, we fall back to deriving a duration from the description
-   * length (not ideal but keeps the algorithm running). The YouTube
-   * Data API returns contentDetails.duration under videos.list, but
-   * our MVP connector only fetches search snippets, so we don't have
-   * the duration here.
-   *
-   * The honest move: we mark every YouTube video as having no duration
-   * and surface this in the per-source count. The route will need to
-   * upgrade the YouTube connector to call videos.list (1 unit each)
-   * to get real durations. For now, YouTube filter passes nothing
-   * and the response says so.
-   */
-): SourceFilterResult {
-  // MVP: the existing YouTube connector doesn't return duration.
-  // Return empty qualified list with totalCount = 0 so the UI is
-  // honest. Future ticket: upgrade the connector to fetch
-  // contentDetails.duration via videos.list.
-  return {
-    qualified: [],
-    qualifiedCount: 0,
-    totalCount: videos.length,
-  };
+function filterYouTube(videos: YouTubeVideoTitle[]): SourceFilterResult {
+  // LCP-56 — YouTube connector now returns `duration` (ISO 8601 from
+  // contentDetails.duration). Apply the founder's boss's rule: sum
+  // the displayed digits of the duration (colon-stripped); if odd,
+  // qualify.
+  const qualified: QualifiedMention[] = [];
+  for (const video of videos) {
+    if (!video.duration) continue;
+    const check = youTubeDurationQualifies(video.duration);
+    if (!check.qualified) continue;
+    const text = `${video.title} ${video.description}`;
+    const coin = pickCoinInText(text);
+    if (!coin) continue;
+    qualified.push({
+      source: "youtube",
+      coin,
+      number: check.digitSum,
+      sum: check.digitSum,
+      valueLabel: `${video.duration} (digits ${check.digits}, sum ${check.digitSum})`,
+      sample: video.title,
+      at: video.publishedAt,
+      url: video.url,
+    });
+  }
+  return { qualified, qualifiedCount: qualified.length, totalCount: videos.length };
 }
 
 function filterCryptoPanic(posts: CryptoPanicPost[]): SourceFilterResult {
@@ -449,7 +448,7 @@ export function buildAlgorithm(
         qualified: youtube.qualifiedCount,
         reason:
           youtube.qualifiedCount === 0 && youtube.totalCount > 0
-            ? "MVP: YouTube connector does not return duration yet. Upgrade ticket pending."
+            ? "YouTube videos came back but videos.list enrichment did not surface a parseable duration. Most likely cause: live-streams (no duration) or upstream rate-limit."
             : "ok",
       },
       github: {

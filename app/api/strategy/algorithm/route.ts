@@ -151,10 +151,20 @@ export async function GET(req: NextRequest) {
         : "0 reddit posts passed the odd-digit filter";
   }
   if (result.filterStats.youtube.qualified === 0 && youtube.length > 0) {
-    result.filterStats.youtube.reason =
-      ytStatus.status !== "ok" && ytStatus.status !== "skipped-cache-hit"
-        ? `upstream: ${ytStatus.status}`
-        : "MVP: YouTube connector does not return duration yet. Algorithm upgrade ticket pending.";
+    if (ytStatus.status !== "ok" && ytStatus.status !== "skipped-cache-hit") {
+      result.filterStats.youtube.reason = `upstream: ${ytStatus.status}`;
+    } else {
+      // YouTube connector returned videos but none had a parseable
+      // duration. Either videos.list failed or the videos are
+      // live-streams (which have no duration).
+      const withDuration = youtube.filter((v) => typeof v.duration === "string").length;
+      if (withDuration === 0) {
+        result.filterStats.youtube.reason =
+          "YouTube returned videos but videos.list enrichment did not surface a parseable duration.";
+      } else {
+        result.filterStats.youtube.reason = "0 youtube videos passed the odd-digit filter";
+      }
+    }
   }
   if (result.filterStats.cryptopanic.qualified === 0 && cryptopanic.length > 0) {
     result.filterStats.cryptopanic.reason =
