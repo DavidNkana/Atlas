@@ -802,6 +802,7 @@ interface TrendingResult {
     recencyWeighting: string;
     sentimentAlgorithm: string;
     notFinancialAdvice: boolean;
+    windowMinutes: number | null;
   };
   cache: { ttlMs: number; ageMs: number; lastFetchedAt: string };
 }
@@ -816,6 +817,34 @@ const TRENDING_TABS: { id: TrendingSource; label: string }[] = [
   { id: "github", label: "GitHub" },
 ];
 
+/**
+ * Time window options for Trending + Atlas Algorithm panels.
+ * Values are minutes. UI label + dropdown value + URL param.
+ * "All" sends no window param to the API (server returns full data).
+ */
+const TIME_WINDOWS: { label: string; minutes: number | null }[] = [
+  { label: "10m", minutes: 10 },
+  { label: "30m", minutes: 30 },
+  { label: "1h", minutes: 60 },
+  { label: "6h", minutes: 360 },
+  { label: "24h", minutes: 1440 },
+  { label: "7d", minutes: 10080 },
+];
+
+const MAX_TRENDING_RESULTS = 100;
+
+/** Build a strategy URL with window + limit params. */
+function strategyUrl(
+  path: string,
+  opts: { windowMinutes: number | null; bust?: boolean },
+): string {
+  const params = new URLSearchParams();
+  if (opts.windowMinutes !== null) params.set("window", String(opts.windowMinutes));
+  params.set("limit", String(MAX_TRENDING_RESULTS));
+  if (opts.bust) params.set("bust", "1");
+  return `${path}?${params.toString()}`;
+}
+
 function TrendingPanel() {
   const [data, setData] = useState<TrendingResult | null>(null);
   const [loading, setLoading] = useState(true);
@@ -823,13 +852,14 @@ function TrendingPanel() {
   const [refreshing, setRefreshing] = useState(false);
   const [now, setNow] = useState<number>(() => Date.now());
   const [activeList, setActiveList] = useState<TrendingSource>("overall");
+  const [windowMinutes, setWindowMinutes] = useState<number | null>(1440); // default 24h
 
   const load = async (opts: { bust?: boolean } = {}) => {
     if (opts.bust) setRefreshing(true);
     else setLoading(true);
     setError(null);
     try {
-      const url = opts.bust ? "/api/strategy/trending?bust=1" : "/api/strategy/trending";
+      const url = strategyUrl("/api/strategy/trending", { windowMinutes, bust: opts.bust });
       const r = await fetch(url, { cache: "no-store" });
       const json = await r.json();
       if (!r.ok || !json.ok) {
@@ -848,7 +878,18 @@ function TrendingPanel() {
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [windowMinutes]);
+
+  // 30s auto-refresh, same cadence as the crypto feed.
+  // Skip when tab is hidden so we don't burn rate limits.
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      void load();
+    }, 30_000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [windowMinutes]);
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 5_000);
@@ -889,34 +930,56 @@ function TrendingPanel() {
               Social signal — not financial advice
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => void load({ bust: true })}
-            disabled={refreshing}
-            className="flex items-center gap-1.5 rounded border border-atlas-accent bg-atlas-accent/10 px-3 py-2 text-xs font-medium uppercase tracking-wider text-atlas-accent transition hover:bg-atlas-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <svg
-              width="13"
-              height="13"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className={refreshing ? "animate-spin" : ""}
+          <div className="flex items-center gap-2">
+            <label className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-atlas-muted">
+              <span>Window</span>
+              <select
+                value={windowMinutes === null ? "all" : String(windowMinutes)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setWindowMinutes(v === "all" ? null : Number(v));
+                }}
+                className="rounded border border-atlas-border bg-atlas-surface px-2 py-1.5 text-xs font-medium text-atlas-text focus:border-atlas-accent focus:outline-none"
+              >
+                {TIME_WINDOWS.map((w) => (
+                  <option key={w.label} value={w.minutes === null ? "all" : String(w.minutes)}>
+                    {w.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              onClick={() => void load({ bust: true })}
+              disabled={refreshing}
+              className="flex items-center gap-1.5 rounded border border-atlas-accent bg-atlas-accent/10 px-3 py-2 text-xs font-medium uppercase tracking-wider text-atlas-accent transition hover:bg-atlas-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
-              <path d="M21 3v5h-5" />
-              <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
-              <path d="M8 16H3v5" />
-            </svg>
-            {refreshing ? "Refreshing" : "Refresh"}
-          </button>
+              <svg
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className={refreshing ? "animate-spin" : ""}
+              >
+                <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+                <path d="M21 3v5h-5" />
+                <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+                <path d="M8 16H3v5" />
+              </svg>
+              {refreshing ? "Refreshing" : "Refresh"}
+            </button>
+          </div>
         </div>
         {data && (
           <p className="mt-2 font-mono text-[10px] uppercase tracking-wider text-atlas-muted/60">
             {data.methodology.ranking} · {data.methodology.recencyWeighting} · {data.methodology.sentimentAlgorithm}
+            {data.methodology.windowMinutes !== null && data.methodology.windowMinutes !== undefined
+              ? ` · window ${data.methodology.windowMinutes}m`
+              : ""}
           </p>
         )}
       </div>
@@ -1120,6 +1183,7 @@ interface AlgorithmResult {
     ranking: string;
     outputSize: number;
     notFinancialAdvice: boolean;
+    windowMinutes: number | null;
   };
   filterStats: {
     youtube: { total: number; qualified: number; reason: string };
@@ -1137,13 +1201,14 @@ function AlgorithmPanel() {
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [now, setNow] = useState<number>(() => Date.now());
+  const [windowMinutes, setWindowMinutes] = useState<number | null>(1440); // default 24h
 
   const load = async (opts: { bust?: boolean } = {}) => {
     if (opts.bust) setRefreshing(true);
     else setLoading(true);
     setError(null);
     try {
-      const url = opts.bust ? "/api/strategy/algorithm?bust=1" : "/api/strategy/algorithm";
+      const url = strategyUrl("/api/strategy/algorithm", { windowMinutes, bust: opts.bust });
       const r = await fetch(url, { cache: "no-store" });
       const json = await r.json();
       if (!r.ok || !json.ok) {
@@ -1162,7 +1227,18 @@ function AlgorithmPanel() {
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [windowMinutes]);
+
+  // 30s auto-refresh, same cadence as the crypto feed.
+  // Skip when tab is hidden so we don't burn rate limits.
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      void load();
+    }, 30_000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [windowMinutes]);
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 5_000);
@@ -1194,7 +1270,7 @@ function AlgorithmPanel() {
               Sum the digits. If the sum is odd, the item qualifies. If even, it doesn't.
             </p>
             <p className="mt-1 text-[11px] text-atlas-muted">
-              Then rank coins by mention count in the qualified set. Top 50.{" "}
+              Then rank coins by mention count in the qualified set. Top 100.{" "}
               {ageLabel && (
                 <span className="ml-1 font-mono text-[10px] uppercase tracking-wider text-atlas-muted/80">
                   Updated {ageLabel}
@@ -1206,30 +1282,49 @@ function AlgorithmPanel() {
               {data?.methodology.byline ?? "Invented by the founder's boss, applied at Atlas as a social-trend filter. Not a financial signal."}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => void load({ bust: true })}
-            disabled={refreshing}
-            className="flex items-center gap-1.5 rounded border border-atlas-accent bg-atlas-accent/10 px-3 py-2 text-xs font-medium uppercase tracking-wider text-atlas-accent transition hover:bg-atlas-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <svg
-              width="13"
-              height="13"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className={refreshing ? "animate-spin" : ""}
+          <div className="flex items-center gap-2">
+            <label className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-atlas-muted">
+              <span>Window</span>
+              <select
+                value={windowMinutes === null ? "all" : String(windowMinutes)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setWindowMinutes(v === "all" ? null : Number(v));
+                }}
+                className="rounded border border-atlas-border bg-atlas-surface px-2 py-1.5 text-xs font-medium text-atlas-text focus:border-atlas-accent focus:outline-none"
+              >
+                {TIME_WINDOWS.map((w) => (
+                  <option key={w.label} value={w.minutes === null ? "all" : String(w.minutes)}>
+                    {w.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              onClick={() => void load({ bust: true })}
+              disabled={refreshing}
+              className="flex items-center gap-1.5 rounded border border-atlas-accent bg-atlas-accent/10 px-3 py-2 text-xs font-medium uppercase tracking-wider text-atlas-accent transition hover:bg-atlas-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
-              <path d="M21 3v5h-5" />
-              <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
-              <path d="M8 16H3v5" />
-            </svg>
-            {refreshing ? "Refreshing" : "Refresh"}
-          </button>
+              <svg
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className={refreshing ? "animate-spin" : ""}
+              >
+                <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+                <path d="M21 3v5h-5" />
+                <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+                <path d="M8 16H3v5" />
+              </svg>
+              {refreshing ? "Refreshing" : "Refresh"}
+            </button>
+          </div>
         </div>
       </div>
 
