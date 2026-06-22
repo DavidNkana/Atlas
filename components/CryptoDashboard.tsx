@@ -852,7 +852,7 @@ function TrendingPanel() {
   const [refreshing, setRefreshing] = useState(false);
   const [now, setNow] = useState<number>(() => Date.now());
   const [activeList, setActiveList] = useState<TrendingSource>("overall");
-  const [windowMinutes, setWindowMinutes] = useState<number | null>(1440); // default 24h
+  const [windowMinutes, setWindowMinutes] = useState<number | null>(10080); // default 7d (matches the longest window)
 
   const load = async (opts: { bust?: boolean } = {}) => {
     if (opts.bust) setRefreshing(true);
@@ -1201,7 +1201,7 @@ function AlgorithmPanel() {
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [now, setNow] = useState<number>(() => Date.now());
-  const [windowMinutes, setWindowMinutes] = useState<number | null>(1440); // default 24h
+  const [windowMinutes, setWindowMinutes] = useState<number | null>(10080); // default 7d (matches the longest window)
 
   const load = async (opts: { bust?: boolean } = {}) => {
     if (opts.bust) setRefreshing(true);
