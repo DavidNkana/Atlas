@@ -18,9 +18,15 @@
  * answer, then surface the sources array for inline citation.
  */
 
-const TAVILY_API_KEY = process.env.TAVILY_API_KEY;
 const TAVILY_BASE = "https://api.tavily.com";
 const CACHE_TTL_MS = 30 * 60 * 1000; // 30 min for chat answers
+
+// LCP-31 — read TAVILY_API_KEY fresh on every call. The previous
+// module-level const captured process.env at first import, which
+// could be empty if the function instance warmed up before Vercel
+// injected the env (or if the build ran with no env and runtime
+// was expected to provide it). Reading fresh makes the failure
+// mode loud and recovers without a redeploy.
 
 export interface TavilyWebSource {
   title: string;
@@ -72,8 +78,14 @@ export async function fetchTavilyWebAnswer(
     bypassCache?: boolean;
   } = {},
 ): Promise<TavilyWebResult | null> {
+  // LCP-31 — Read TAVILY_API_KEY fresh on every call. The previous
+  // module-level const captured process.env at first import which
+  // could be empty if the function instance warmed up before Vercel
+  // injected the runtime env. Per-call read recovers without a
+  // redeploy and makes the failure mode loud.
+  const TAVILY_API_KEY = process.env.TAVILY_API_KEY ?? "";
   if (!TAVILY_API_KEY) {
-    console.warn("[tavily-web] TAVILY_API_KEY not set");
+    console.warn("[tavily-web] TAVILY_API_KEY not set in runtime env");
     return null;
   }
 
