@@ -51,6 +51,19 @@ interface ChatResponse {
   sources: Array<{ title: string; url: string }>;
   refinedQuery?: string;
   error?: string;
+  // LCP-30 — diagnostics so the client can show what actually happened
+  // without needing a Vercel dashboard.
+  diagnostics?: {
+    path: "gemini" | "tavily_answer" | "tavily_sources" | "no_data";
+    tavilyConfigured: boolean;
+    tavilyOk: boolean;
+    tavilySources: number;
+    tavilyElapsedMs: number;
+    tavilyError: string | null;
+    geminiConfigured: boolean;
+    geminiOk: boolean;
+    geminiError: string | null;
+  };
 }
 
 export async function POST(req: NextRequest) {
@@ -78,6 +91,18 @@ export async function POST(req: NextRequest) {
   }
   const context = (body.questionContext ?? "").trim();
 
+  // LCP-30 — Read TAVILY_API_KEY fresh on every request instead of
+  // relying on the module-level const in tavily-search.ts. The
+  // module-level const captures the env var at cold start; if the
+  // env was set after the function instance warmed up (e.g. a
+  // Vercel redeploy that picked up a new env but the route module
+  // was already cached), the const is stale. Reading fresh per-
+  // request makes the failure mode loud instead of silent.
+  const tavilyKey = process.env.TAVILY_API_KEY ?? "";
+  if (!tavilyKey) {
+    console.warn("[/api/chat] TAVILY_API_KEY not set in runtime env");
+  }
+
   // Step 1 — Tavily fetches real web data.
   // We give Tavily the user's question + a bit of context so the
   // search is biased toward the relevant topic.
@@ -88,18 +113,23 @@ export async function POST(req: NextRequest) {
   let tavilyAnswer = "";
   let tavilySources: Array<{ title: string; url: string }> = [];
   let tavilyOk = false;
+  let tavilyError: string | null = null;
+  let tavilyHttpStatus: number | null = null;
+  let tavilyElapsedMs = 0;
 
+  const tavilyStart = Date.now();
   try {
     const tavilyPromise = fetchTavilyWebAnswer(tavilyQuery, {
       context,
       maxResults: 5,
     });
-    const tavilyResult = await Promise.race([
+    const tavilyResult = (await Promise.race([
       tavilyPromise,
       new Promise<null>((resolve) =>
         setTimeout(() => resolve(null), TAVILY_TIMEOUT_MS),
       ),
-    ]);
+    ])) as Awaited<typeof tavilyPromise>;
+    tavilyElapsedMs = Date.now() - tavilyStart;
     if (tavilyResult) {
       tavilyAnswer = tavilyResult.answer ?? "";
       tavilySources = tavilyResult.sources.map((s) => ({
@@ -108,8 +138,13 @@ export async function POST(req: NextRequest) {
       }));
       // OK = we got data back (either answer OR sources).
       tavilyOk = tavilyAnswer.length > 0 || tavilySources.length > 0;
+      if (!tavilyOk) tavilyError = "tavily_returned_no_data";
+    } else {
+      tavilyError = `tavily_timeout_or_null_after_${TAVILY_TIMEOUT_MS}ms`;
     }
   } catch (err) {
+    tavilyElapsedMs = Date.now() - tavilyStart;
+    tavilyError = err instanceof Error ? err.message : String(err);
     console.warn("[/api/chat] tavily error:", err);
   }
 
@@ -119,6 +154,7 @@ export async function POST(req: NextRequest) {
   // returning Tavily's raw answer verbatim.
   let geminiAnswer = "";
   let geminiOk = false;
+  let geminiError: string | null = null;
   const geminiKey = process.env.GEMINI_API_KEY;
   if (geminiKey) {
     try {
@@ -134,9 +170,12 @@ export async function POST(req: NextRequest) {
       geminiAnswer = (result.response.text() ?? "").trim();
       geminiOk = geminiAnswer.length >= 20;
     } catch (err) {
+      geminiError = err instanceof Error ? err.message : String(err);
       console.warn("[/api/chat] gemini error:", err);
       // Fall through — we'll use Tavily's answer below.
     }
+  } else {
+    geminiError = "GEMINI_API_KEY not set";
   }
 
   // Day 28 v2 — Compose the final answer with PROPER fallback chain.
@@ -149,11 +188,14 @@ export async function POST(req: NextRequest) {
   //   4. Genuine fallback message — only when BOTH Tavily and Gemini
   //      returned nothing
   let finalAnswer: string;
+  let path: "gemini" | "tavily_answer" | "tavily_sources" | "no_data" = "no_data";
   if (geminiOk) {
     finalAnswer = geminiAnswer;
+    path = "gemini";
   } else if (tavilyAnswer.length > 0) {
     // Tavily gave us a synthesized answer; use it.
     finalAnswer = tavilyAnswer;
+    path = "tavily_answer";
   } else if (tavilySources.length > 0) {
     // Tavily returned sources but no synthesized answer (very common
     // pattern — Tavily's /search often returns just the results array).
@@ -163,17 +205,19 @@ export async function POST(req: NextRequest) {
       .map((s, i) => `[${i + 1}] ${s.title}`)
       .join("\n");
     finalAnswer = `I found live web data on this topic but couldn't synthesize a full answer right now. Here are the most relevant sources:\n\n${sourceList}\n\nClick any citation below for the full article.`;
+    path = "tavily_sources";
   } else {
     // Both failed. This is the genuine "no data" case.
     finalAnswer =
       "I couldn't reach a live web data source right now. " +
       (geminiKey ? "AI synthesis and Tavily search both returned empty. " : "") +
       "Try a more specific question or check back in a few minutes.";
+    path = "no_data";
   }
 
   // Day 28 v2 — diagnostics so David can see what actually happened.
   console.log(
-    `[/api/chat] tavilyOk=${tavilyOk} sources=${tavilySources.length} geminiOk=${geminiOk} finalLen=${finalAnswer.length}`,
+    `[/api/chat] path=${path} tavilyOk=${tavilyOk} sources=${tavilySources.length} tavilyErr=${tavilyError ?? "none"} tavilyMs=${tavilyElapsedMs} geminiOk=${geminiOk} finalLen=${finalAnswer.length}`,
   );
 
   // Detect if the user is asking for a refined site query.
@@ -196,31 +240,73 @@ export async function POST(req: NextRequest) {
     answer: finalAnswer,
     sources: tavilySources,
     refinedQuery,
+    diagnostics: {
+      path,
+      tavilyConfigured: !!tavilyKey,
+      tavilyOk,
+      tavilySources: tavilySources.length,
+      tavilyElapsedMs,
+      tavilyError,
+      geminiConfigured: !!geminiKey,
+      geminiOk,
+      geminiError,
+    },
   };
   return NextResponse.json(response, {
     headers: {
       "x-atlas-elapsed-ms": String(elapsed),
-      "x-atlas-status": geminiOk || tavilyOk ? "ok" : "no-data",
+      "x-atlas-status": path === "no_data" ? "no-data" : "ok",
     },
   });
 }
 
 /**
- * GET — health/diag endpoint (no auth required).
- * Lets David verify Tavily + Gemini wiring via the diag pattern.
+ * GET — health/diag endpoint with LIVE probe (no auth required).
+ * Lets David verify Tavily + Gemini wiring in production without
+ * opening the Vercel dashboard. Pass ?probe=1 to actually call
+ * Tavily from the server (bypassing cache) and report the truth.
  */
 export async function GET(req: NextRequest) {
   const tavilyKey = !!process.env.TAVILY_API_KEY;
   const geminiKey = !!process.env.GEMINI_API_KEY;
+  const url = new URL(req.url);
 
   // Optionally bust cache via ?bust=1
-  if (new URL(req.url).searchParams.get("bust") === "1") {
+  if (url.searchParams.get("bust") === "1") {
     bustTavilyWebCache();
+  }
+
+  // LCP-30 — live probe. Runs an actual Tavily /search call from
+  // the server and reports the real result shape. This is the
+  // single best way to know whether the key works in production.
+  let liveProbe: unknown = null;
+  if (url.searchParams.get("probe") === "1") {
+    const probeStart = Date.now();
+    try {
+      const probeResult = await fetchTavilyWebAnswer(
+        "What is the average land price per hectare in Lusaka Zambia 2025?",
+        { maxResults: 3, bypassCache: true },
+      );
+      liveProbe = {
+        elapsedMs: Date.now() - probeStart,
+        ok: !!probeResult,
+        answerLen: probeResult?.answer?.length ?? 0,
+        sourcesCount: probeResult?.sources?.length ?? 0,
+        firstSourceTitle: probeResult?.sources?.[0]?.title ?? null,
+        firstSourceUrl: probeResult?.sources?.[0]?.url ?? null,
+      };
+    } catch (err) {
+      liveProbe = {
+        elapsedMs: Date.now() - probeStart,
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
   }
 
   return NextResponse.json({
     ok: true,
-    version: "chat-v1",
+    version: "chat-v2",
     config: {
       tavilyConfigured: tavilyKey,
       geminiConfigured: geminiKey,
@@ -230,8 +316,9 @@ export async function GET(req: NextRequest) {
     },
     routes: {
       POST: "Send { message, questionContext?, model? } to chat with Atlas.",
-      GET: "Diag. Pass ?bust=1 to bust the 30min cache.",
+      GET: "Diag. Pass ?probe=1 to do a live Tavily probe. Pass ?bust=1 to bust the 30min cache.",
     },
+    liveProbe,
   });
 }
 
