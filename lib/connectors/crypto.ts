@@ -20,7 +20,14 @@
 
 const COINGECKO_API_KEY = process.env.COINGECKO_API_KEY;
 const COINGECKO_BASE = "https://api.coingecko.com/api/v3";
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+// LCP-46 — was 5min, dropped to 30s so the dashboard reflects
+// real-time-ish price moves. Free CoinGecko tier rate-limits
+// to ~10-30 req/min; with one user polling every 30s the
+// limit is comfortable. Multiple concurrent users busting
+// the cache simultaneously could hit the limit; if that
+// happens we'll see HTTP 429 in /api/crypto/diag and can
+// back off further.
+const CACHE_TTL_MS = 30 * 1000; // 30 seconds
 
 export interface CryptoCoin {
   id: string;

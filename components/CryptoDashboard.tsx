@@ -131,6 +131,110 @@ function relativeTime(iso: string): string {
   return `${hr} hr ago`;
 }
 
+/**
+ * LCP-46 — Render a sparkline of an array of prices as an
+ * inline SVG. No external library; we just normalize the
+ * values to a viewBox and draw a polyline with a soft fill.
+ */
+function Sparkline({
+  prices,
+  width = 96,
+  height = 32,
+  strokeWidth = 1.5,
+}: {
+  prices: number[];
+  width?: number;
+  height?: number;
+  strokeWidth?: number;
+}) {
+  if (!prices || prices.length < 2) {
+    return (
+      <svg
+        width={width}
+        height={height}
+        viewBox={"0 0 " + width + " " + height}
+        aria-hidden="true"
+      >
+        <line
+          x1={0}
+          y1={height / 2}
+          x2={width}
+          y2={height / 2}
+          stroke="currentColor"
+          strokeWidth={1}
+          className="text-atlas-border"
+        />
+      </svg>
+    );
+  }
+  const min = Math.min(...prices);
+  const max = Math.max(...prices);
+  const range = max - min || 1;
+  const stepX = width / (prices.length - 1);
+  const padY = 2;
+  const usableH = height - padY * 2;
+  const points = prices
+    .map((p, i) => {
+      const x = i * stepX;
+      const norm = (p - min) / range;
+      const y = padY + (1 - norm) * usableH;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ");
+
+  const isUp = prices[prices.length - 1] >= prices[0];
+  const isDown = !isUp && prices[prices.length - 1] < prices[0];
+  const stroke = isUp
+    ? "rgb(52 211 153)"
+    : isDown
+      ? "rgb(251 113 133)"
+      : "rgb(161 161 170)";
+  const fill = isUp
+    ? "rgb(52 211 153 / 0.12)"
+    : isDown
+      ? "rgb(251 113 133 / 0.12)"
+      : "rgb(161 161 170 / 0.12)";
+
+  const fillPoints = `${points} ${width},${height} 0,${height}`;
+
+  return (
+    <svg
+      width={width}
+      height={height}
+      viewBox={"0 0 " + width + " " + height}
+      preserveAspectRatio="none"
+      aria-hidden="true"
+      className="overflow-visible"
+    >
+      <polygon points={fillPoints} fill={fill} />
+      <polyline
+        points={points}
+        fill="none"
+        stroke={stroke}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        vectorEffect="non-scaling-stroke"
+      />
+    </svg>
+  );
+}
+
+function HeroChart({ prices }: { prices: number[] }) {
+  if (!prices || prices.length < 2) {
+    return (
+      <div className="mt-4 flex h-24 items-center justify-center rounded border border-atlas-border/30 bg-atlas-bg/30 font-mono text-[10px] uppercase tracking-wider text-atlas-muted">
+        7-day chart unavailable
+      </div>
+    );
+  }
+  return (
+    <div className="mt-4">
+      <Sparkline prices={prices} width={520} height={120} strokeWidth={2} />
+    </div>
+  );
+}
+
 export function CryptoDashboard() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<Tab>("movers");
@@ -138,12 +242,17 @@ export function CryptoDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [now, setNow] = useState<number>(() => Date.now());
 
-  const loadFeed = async () => {
-    setLoading(true);
+  const loadFeed = async (opts: { bust?: boolean } = {}) => {
+    if (opts.bust) setRefreshing(true);
+    else setLoading(true);
     setError(null);
     try {
-      const r = await fetch("/api/crypto/feed", { cache: "no-store" });
+      const url = opts.bust
+        ? "/api/crypto/feed?bust=1"
+        : "/api/crypto/feed";
+      const r = await fetch(url, { cache: "no-store" });
       const data = await r.json();
       if (!r.ok || !data.ok) {
         setError(data.error ?? `Feed endpoint returned ${r.status}`);
@@ -154,24 +263,45 @@ export function CryptoDashboard() {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
-    }
-  };
-
-  const refresh = async () => {
-    setRefreshing(true);
-    try {
-      await fetch("/api/crypto/diag", { method: "POST", cache: "no-store" });
-      await loadFeed();
-    } finally {
       setRefreshing(false);
     }
   };
 
+  // LCP-46 — auto-refresh every 30s (matches server cache TTL).
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      void loadFeed({ bust: true });
+    }, 30_000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Re-render every 5s so the "X seconds ago" stays fresh
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 5_000);
+    return () => clearInterval(id);
+  }, []);
+
   useEffect(() => {
     void loadFeed();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const hero = feed?.coins?.[0];
+
+  // LCP-46 — show how stale the data is
+  const lastFetchedAt = (feed as { lastFetch?: { lastFetchedAt?: string } } | null)?.lastFetch?.lastFetchedAt;
+  const ageLabel = (() => {
+    if (!lastFetchedAt) return null;
+    const ageMs = now - new Date(lastFetchedAt).getTime();
+    if (ageMs < 0) return "just now";
+    const sec = Math.floor(ageMs / 1000);
+    if (sec < 5) return "just now";
+    if (sec < 60) return `${sec}s ago`;
+    const min = Math.floor(sec / 60);
+    return `${min} min ago`;
+  })();
   const displayedCoins = (() => {
     if (!feed) return [];
     if (activeTab === "movers") return [...feed.gainers, ...feed.losers];
@@ -181,44 +311,77 @@ export function CryptoDashboard() {
 
   return (
     <section className="mx-auto max-w-5xl">
-      {/* Top bar — title (left) + Back button (right) */}
-      <div className="mb-6 flex items-center justify-between gap-4">
+      {/* Top bar — title (left) + Refresh + Back (right) */}
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-atlas-text">
             Crypto markets
           </h1>
           <p className="mt-1 text-xs text-atlas-muted">
-            Real-time prices and momentum for the top 50 cryptocurrencies,
-            plus African on-ramp exchanges. Updated every 5 minutes.
+            Real-time prices, momentum, and 7-day trends for the top 50
+            cryptocurrencies, plus African on-ramp exchanges.{" "}
+            {ageLabel && (
+              <span>
+                Updated {ageLabel}
+                {refreshing && " · refreshing…"}
+              </span>
+            )}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            if (typeof window !== "undefined" && window.history.length > 1) {
-              router.back();
-            } else {
-              router.push("/");
-            }
-          }}
-          aria-label="Back to Atlas"
-          className="group flex shrink-0 items-center gap-2 rounded border border-atlas-border bg-atlas-surface px-3 py-2 text-xs font-medium uppercase tracking-wider text-atlas-muted transition hover:border-atlas-accent hover:text-atlas-text"
-        >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="transition group-hover:-translate-x-0.5"
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={() => void loadFeed({ bust: true })}
+            disabled={refreshing}
+            aria-label="Refresh crypto data"
+            className="flex items-center gap-1.5 rounded border border-atlas-accent bg-atlas-accent/10 px-3 py-2 text-xs font-medium uppercase tracking-wider text-atlas-accent transition hover:bg-atlas-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <path d="M19 12H5M12 19l-7-7 7-7" />
-          </svg>
-          <span>Back</span>
-        </button>
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className={refreshing ? "animate-spin" : ""}
+            >
+              <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+              <path d="M21 3v5h-5" />
+              <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+              <path d="M8 16H3v5" />
+            </svg>
+            {refreshing ? "Refreshing" : "Refresh"}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (typeof window !== "undefined" && window.history.length > 1) {
+                router.back();
+              } else {
+                router.push("/");
+              }
+            }}
+            aria-label="Back to Atlas"
+            className="group flex items-center gap-2 rounded border border-atlas-border bg-atlas-surface px-3 py-2 text-xs font-medium uppercase tracking-wider text-atlas-muted transition hover:border-atlas-accent hover:text-atlas-text"
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="transition group-hover:-translate-x-0.5"
+            >
+              <path d="M19 12H5M12 19l-7-7 7-7" />
+            </svg>
+            <span>Back</span>
+          </button>
+        </div>
       </div>
 
       {/* Category tabs */}
@@ -391,10 +554,10 @@ export function CryptoDashboard() {
           <button
             type="button"
             disabled={refreshing}
-            onClick={refresh}
+            onClick={() => void loadFeed({ bust: true })}
             className="mt-4 rounded border border-atlas-accent bg-atlas-accent/10 px-4 py-2 text-xs font-medium uppercase tracking-wider text-atlas-accent transition hover:bg-atlas-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {refreshing ? "Refreshing…" : "Refresh (busts 5-min cache)"}
+            {refreshing ? "Refreshing…" : "Refresh"}
           </button>
         </div>
       )}
@@ -470,6 +633,8 @@ function HeroCard({
           </div>
         </div>
       </div>
+      {/* LCP-46 — 7-day price chart for the hero coin */}
+      <HeroChart prices={coin.sparkline_in_7d?.price ?? []} />
     </div>
   );
 }
@@ -517,7 +682,15 @@ function CoinRow({ coin }: { coin: CryptoCoin }) {
           MCap {formatMarketCap(coin.market_cap)}
         </div>
       </div>
-      <div className="text-right">
+      {/* LCP-46 — 7-day sparkline. hidden on small screens */}
+      <div className="hidden shrink-0 sm:block">
+        <Sparkline
+          prices={coin.sparkline_in_7d?.price ?? []}
+          width={88}
+          height={28}
+        />
+      </div>
+      <div className="shrink-0 text-right">
         <div className="font-mono text-sm text-atlas-text">
           {formatPrice(coin.current_price)}
         </div>

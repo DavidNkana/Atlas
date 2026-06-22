@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import {
+  bustCryptoCache,
   fetchTopCoins,
   getAfricanExchanges,
   getCryptoFetchStatus,
@@ -12,15 +13,25 @@ import {
  * vars, so this server route calls CoinGecko server-side where
  * process.env.COINGECKO_API_KEY is real, then returns JSON.
  *
- * Cache: 5min in-memory on the connector. This route is
- * force-dynamic so it always reads the current cache state.
+ * LCP-46 — Cache TTL is 30s (was 5min). Adds ?bust=1 support so
+ * the Refresh button can force a fresh fetch on this serverless
+ * instance (Vercel route isolation — each route has its own
+ * module-level cache, so the client must signal the feed
+ * instance directly to clear it).
  */
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const coins = await fetchTopCoins({ limit: 50 });
+    const url = new URL(req.url);
+    const shouldBust = url.searchParams.get("bust") === "1";
+    if (shouldBust) bustCryptoCache();
+
+    const coins = await fetchTopCoins({
+      limit: 50,
+      bypassCache: shouldBust,
+    });
     const exchanges = getAfricanExchanges();
 
     // Top movers — split into gainers and losers (top 5 each)
@@ -43,7 +54,7 @@ export async function GET() {
 
     return NextResponse.json({
       ok: coins.length > 0,
-      version: "crypto-v1",
+      version: "crypto-v2",
       counts: {
         coins: coins.length,
         gainers: gainers.length,
@@ -62,7 +73,7 @@ export async function GET() {
     return NextResponse.json(
       {
         ok: false,
-        version: "crypto-v1",
+        version: "crypto-v2",
         error: err instanceof Error ? err.message : String(err),
       },
       { status: 500 },
