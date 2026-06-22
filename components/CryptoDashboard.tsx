@@ -318,26 +318,37 @@ export function CryptoDashboard() {
   return (
     <section className="mx-auto max-w-5xl">
       {/* Top bar — title (left) + Refresh + Back (right) */}
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-atlas-text">
             Crypto markets
           </h1>
           <p className="mt-1 text-xs text-atlas-muted">
             Real-time prices, momentum, and 7-day trends for the top 50
-            cryptocurrencies, plus African on-ramp exchanges.{" "}
-            {ageLabel && (
-              <span>
-                Updated {ageLabel}
-                {utcLabel && (
-                  <span className="ml-1 font-mono text-atlas-muted/80">
-                    ({utcLabel})
-                  </span>
-                )}
-                {refreshing && " · refreshing…"}
-              </span>
-            )}
+            cryptocurrencies, plus African on-ramp exchanges.
           </p>
+          {/* LCP-47/48 — own header row so the trust signal isn't
+              buried inside the description. Shows relative age and
+              absolute UTC stamp side-by-side. */}
+          {(ageLabel || utcLabel) && (
+            <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[10px] uppercase tracking-wider text-atlas-muted">
+              <span
+                className={`inline-block h-1.5 w-1.5 rounded-full ${
+                  refreshing
+                    ? "animate-pulse bg-amber-400"
+                    : ageLabel === "just now"
+                      ? "bg-emerald-400"
+                      : "bg-atlas-muted/60"
+                }`}
+                aria-hidden="true"
+              />
+              {ageLabel && <span>Updated {ageLabel}</span>}
+              {utcLabel && (
+                <span className="text-atlas-muted/80">· {utcLabel}</span>
+              )}
+              {refreshing && <span>· refreshing…</span>}
+            </div>
+          )}
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <button
