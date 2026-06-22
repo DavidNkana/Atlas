@@ -70,7 +70,7 @@ interface FeedResponse {
   };
 }
 
-type Tab = "movers" | "african" | "all";
+type Tab = "movers" | "african" | "all" | "trending";
 
 const TABS: { id: Tab; label: string; description: string }[] = [
   {
@@ -87,6 +87,12 @@ const TABS: { id: Tab; label: string; description: string }[] = [
     id: "all",
     label: "All",
     description: "Top 50 cryptocurrencies by market capitalization, ranked.",
+  },
+  {
+    id: "trending",
+    label: "Trending",
+    description:
+      "What people are actually saying about each coin right now. Reddit, YouTube, CryptoPanic, GitHub. Social signal, not financial advice.",
   },
 ];
 
@@ -494,7 +500,9 @@ export function CryptoDashboard() {
                 ? "Gainers & losers"
                 : activeTab === "african"
                   ? "African on-ramp exchanges"
-                  : "All top 50"}
+                  : activeTab === "all"
+                    ? "All top 50"
+                    : ""}
             </h2>
             <div className="h-px flex-1 bg-atlas-border/40" />
           </div>
@@ -563,6 +571,9 @@ export function CryptoDashboard() {
           )}
         </div>
       )}
+
+      {/* LCP-54 — Trending tab content (independent of the crypto feed) */}
+      {activeTab === "trending" && <TrendingPanel />}
 
       {/* Empty state */}
       {!loading && !error && feed && feed.coins.length === 0 && (
@@ -746,6 +757,313 @@ function ExchangeCard({ exchange }: { exchange: AfricanExchange }) {
       </p>
       <div className="mt-2 font-mono text-[10px] text-atlas-muted">
         Pairs: {exchange.pairs}
+      </div>
+    </li>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* LCP-54 — Trending panel                                              */
+/* ------------------------------------------------------------------ */
+
+interface TrendingCoin {
+  id: string;
+  name: string;
+  symbol: string;
+  mentionCount: number;
+  lastMentionAt: string | null;
+  momentum: number;
+  sample: string[];
+}
+
+interface TrendingResult {
+  ok: boolean;
+  version: string;
+  asOf: string;
+  lists: {
+    overall: TrendingCoin[];
+    reddit: TrendingCoin[];
+    youtube: TrendingCoin[];
+    cryptopanic: TrendingCoin[];
+    github: TrendingCoin[];
+  };
+  sources: Record<string, { ok: boolean; error?: string }>;
+  methodology: {
+    ranking: string;
+    recencyWeighting: string;
+    sentimentAlgorithm: string;
+    notFinancialAdvice: boolean;
+  };
+  cache: { ttlMs: number; ageMs: number; lastFetchedAt: string };
+}
+
+type TrendingSource = "overall" | "reddit" | "youtube" | "cryptopanic" | "github";
+
+const TRENDING_TABS: { id: TrendingSource; label: string }[] = [
+  { id: "overall", label: "Overall" },
+  { id: "reddit", label: "Reddit" },
+  { id: "youtube", label: "YouTube" },
+  { id: "cryptopanic", label: "CryptoPanic" },
+  { id: "github", label: "GitHub" },
+];
+
+function TrendingPanel() {
+  const [data, setData] = useState<TrendingResult | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [now, setNow] = useState<number>(() => Date.now());
+  const [activeList, setActiveList] = useState<TrendingSource>("overall");
+
+  const load = async (opts: { bust?: boolean } = {}) => {
+    if (opts.bust) setRefreshing(true);
+    else setLoading(true);
+    setError(null);
+    try {
+      const url = opts.bust ? "/api/strategy/trending?bust=1" : "/api/strategy/trending";
+      const r = await fetch(url, { cache: "no-store" });
+      const json = await r.json();
+      if (!r.ok || !json.ok) {
+        setError(json.error ?? `Trending returned ${r.status}`);
+        return;
+      }
+      setData(json);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 5_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const lastFetchedAt = data?.cache.lastFetchedAt;
+  const ageLabel = (() => {
+    if (!lastFetchedAt) return null;
+    const ageMs = now - new Date(lastFetchedAt).getTime();
+    if (ageMs < 0) return "just now";
+    const sec = Math.floor(ageMs / 1000);
+    if (sec < 5) return "just now";
+    if (sec < 60) return `${sec}s ago`;
+    const min = Math.floor(sec / 60);
+    return `${min} min ago`;
+  })();
+
+  return (
+    <div className="space-y-6">
+      {/* Header row: status + disclaimer + refresh */}
+      <div className="rounded border border-atlas-border/40 bg-atlas-surface/40 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex-1">
+            <p className="text-sm text-atlas-text">
+              What people are saying about each coin right now.
+            </p>
+            <p className="mt-1 text-[11px] text-atlas-muted">
+              Reddit, YouTube, CryptoPanic, GitHub. Mention count + recency.{" "}
+              {ageLabel && (
+                <span className="ml-1 font-mono text-[10px] uppercase tracking-wider text-atlas-muted/80">
+                  Updated {ageLabel}
+                  {refreshing && " · refreshing…"}
+                </span>
+              )}
+            </p>
+            <p className="mt-1 text-[10px] uppercase tracking-wider text-amber-400/80">
+              Social signal — not financial advice
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void load({ bust: true })}
+            disabled={refreshing}
+            className="flex items-center gap-1.5 rounded border border-atlas-accent bg-atlas-accent/10 px-3 py-2 text-xs font-medium uppercase tracking-wider text-atlas-accent transition hover:bg-atlas-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className={refreshing ? "animate-spin" : ""}
+            >
+              <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+              <path d="M21 3v5h-5" />
+              <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+              <path d="M8 16H3v5" />
+            </svg>
+            {refreshing ? "Refreshing" : "Refresh"}
+          </button>
+        </div>
+        {data && (
+          <p className="mt-2 font-mono text-[10px] uppercase tracking-wider text-atlas-muted/60">
+            {data.methodology.ranking} · {data.methodology.recencyWeighting} · {data.methodology.sentimentAlgorithm}
+          </p>
+        )}
+      </div>
+
+      {/* Source health badges */}
+      {data && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[10px] uppercase tracking-wider text-atlas-muted">
+          <span>Sources:</span>
+          {(["reddit", "youtube", "cryptopanic", "github"] as const).map((src) => {
+            const ok = data.sources[src]?.ok;
+            return (
+              <span
+                key={src}
+                className={`inline-flex items-center gap-1 ${
+                  ok ? "text-emerald-400" : "text-rose-400"
+                }`}
+              >
+                <span
+                  className={`inline-block h-1.5 w-1.5 rounded-full ${
+                    ok ? "bg-emerald-400" : "bg-rose-400"
+                  }`}
+                />
+                {src}
+              </span>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Loading state */}
+      {loading && !data && (
+        <div className="space-y-2">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div
+              key={i}
+              className="h-14 animate-pulse rounded border border-atlas-border/40 bg-atlas-surface/40"
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Error state */}
+      {error && !data && (
+        <div className="rounded border border-rose-900/40 bg-atlas-surface/40 p-6 text-center text-sm text-rose-400">
+          <p>{error}</p>
+          <button
+            type="button"
+            onClick={() => void load({ bust: true })}
+            className="mt-3 rounded border border-atlas-accent bg-atlas-accent/10 px-3 py-1.5 text-xs font-medium uppercase tracking-wider text-atlas-accent transition hover:bg-atlas-accent/20"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
+      {/* Sub-tabs (Overall / Reddit / YouTube / CryptoPanic / GitHub) */}
+      {data && (
+        <div className="flex gap-1 overflow-x-auto border-b border-atlas-border/40">
+          {TRENDING_TABS.map((tab) => {
+            const count = data.lists[tab.id]?.length ?? 0;
+            const isActive = activeList === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveList(tab.id)}
+                className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-xs font-medium transition ${
+                  isActive
+                    ? "border-atlas-accent text-atlas-text"
+                    : "border-transparent text-atlas-muted hover:text-atlas-text"
+                }`}
+              >
+                {tab.label}
+                <span className="ml-1.5 rounded-full bg-atlas-surface px-1.5 py-0.5 font-mono text-[9px] text-atlas-muted">
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* The active list */}
+      {data && data.lists[activeList] && data.lists[activeList].length > 0 && (
+        <ul className="grid grid-cols-1 gap-2">
+          {data.lists[activeList].map((coin, idx) => (
+            <TrendingRow key={coin.id} coin={coin} rank={idx + 1} />
+          ))}
+        </ul>
+      )}
+
+      {/* Empty state for a specific list */}
+      {data && data.lists[activeList] && data.lists[activeList].length === 0 && (
+        <div className="rounded border border-atlas-border/40 bg-atlas-surface/40 p-8 text-center text-sm text-atlas-muted">
+          <p>No trending data for this source right now.</p>
+          <p className="mt-1 text-[11px]">
+            Check{" "}
+            <a href="/api/strategy/diag" className="underline">
+              /api/strategy/diag
+            </a>{" "}
+            for source health.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TrendingRow({ coin, rank }: { coin: TrendingCoin; rank: number }) {
+  const momentumColor =
+    coin.momentum > 0.6
+      ? "bg-emerald-400"
+      : coin.momentum < 0.3
+        ? "bg-rose-400"
+        : "bg-atlas-muted/60";
+
+  return (
+    <li className="rounded border border-atlas-border/40 bg-atlas-surface/40 p-3 transition hover:border-atlas-accent/50 hover:bg-atlas-surface">
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="w-6 shrink-0 text-right font-mono text-[10px] text-atlas-muted">
+          #{rank}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-semibold text-atlas-text">
+              {coin.name}
+            </span>
+            <span className="font-mono text-[10px] uppercase text-atlas-muted">
+              {coin.symbol}
+            </span>
+          </div>
+          {coin.sample && coin.sample.length > 0 && (
+            <p className="mt-1 line-clamp-1 text-[11px] text-atlas-muted">
+              {coin.sample[0]}
+            </p>
+          )}
+        </div>
+        {/* Momentum gauge */}
+        <div className="flex shrink-0 items-center gap-1.5" aria-hidden="true">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <span
+              key={i}
+              className={`h-1.5 w-3 rounded-sm ${
+                coin.momentum * 5 > i + 1 ? momentumColor : "bg-atlas-border/40"
+              }`}
+            />
+          ))}
+        </div>
+        <div className="shrink-0 text-right">
+          <div className="font-mono text-sm font-semibold text-atlas-text">
+            {coin.mentionCount}
+          </div>
+          <div className="font-mono text-[9px] uppercase text-atlas-muted">
+            mentions
+          </div>
+        </div>
       </div>
     </li>
   );
