@@ -140,12 +140,77 @@ export async function POST(req: NextRequest) {
       tavilyOk = tavilyAnswer.length > 0 || tavilySources.length > 0;
       if (!tavilyOk) tavilyError = "tavily_returned_no_data";
     } else {
-      tavilyError = `tavily_timeout_or_null_after_${TAVILY_TIMEOUT_MS}ms`;
+      tavilyError = `tavily_connector_timeout_or_null_after_${TAVILY_TIMEOUT_MS}ms`;
     }
   } catch (err) {
     tavilyElapsedMs = Date.now() - tavilyStart;
     tavilyError = err instanceof Error ? err.message : String(err);
     console.warn("[/api/chat] tavily error:", err);
+  }
+
+  // LCP-33 — INLINE Tavily call as second-attempt. If the
+  // connector returned null but the env key IS set, this
+  // inline call hits Tavily directly with the same params and
+  // recovers. Also serves as a definitive diagnostic — if the
+  // inline call also returns null, the Tavily key itself is
+  // missing or revoked on Vercel (not a code bug).
+  if (!tavilyOk) {
+    const inlineKey = process.env.TAVILY_API_KEY ?? "";
+    if (inlineKey) {
+      const inlineStart = Date.now();
+      try {
+        const inlineController = new AbortController();
+        const inlineTimeout = setTimeout(
+          () => inlineController.abort(),
+          TAVILY_TIMEOUT_MS,
+        );
+        const inlineRes = await fetch("https://api.tavily.com/search", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${inlineKey}`,
+          },
+          body: JSON.stringify({
+            api_key: inlineKey,
+            query: tavilyQuery,
+            search_depth: "advanced",
+            include_answer: "advanced",
+            include_raw_content: false,
+            max_results: 5,
+            topic: "general",
+            include_domains: [],
+          }),
+          signal: inlineController.signal,
+          cache: "no-store",
+        });
+        clearTimeout(inlineTimeout);
+        if (inlineRes.ok) {
+          const inlineData = (await inlineRes.json()) as {
+            answer?: string;
+            results?: Array<{ title: string; url: string }>;
+          };
+          tavilyAnswer = inlineData.answer ?? "";
+          tavilySources = (inlineData.results ?? []).map((r) => ({
+            title: r.title,
+            url: r.url,
+          }));
+          tavilyOk = tavilyAnswer.length > 0 || tavilySources.length > 0;
+          tavilyElapsedMs = Date.now() - inlineStart;
+          if (tavilyOk) {
+            console.log(
+              `[/api/chat] INLINE Tavily recovered after connector failed: sources=${tavilySources.length} answerLen=${tavilyAnswer.length} inMs=${tavilyElapsedMs}`,
+            );
+          } else {
+            tavilyError = `tavily_inline_returned_no_data_after_${tavilyElapsedMs}ms`;
+          }
+        } else {
+          tavilyError = `tavily_inline_http_${inlineRes.status}_after_${Date.now() - inlineStart}ms`;
+        }
+      } catch (err) {
+        tavilyError = `tavily_inline_error:${err instanceof Error ? err.message : String(err)}`;
+        console.warn("[/api/chat] inline tavily error:", err);
+      }
+    }
   }
 
   // Step 2 — Gemini synthesizes a chat-style response.
@@ -232,7 +297,7 @@ export async function POST(req: NextRequest) {
               Authorization: `Bearer ${openrouterKey}`,
             },
             body: JSON.stringify({
-              model: "meta-llama/llama-3.1-8b-instruct:free",
+              model: "openai/gpt-oss-20b:free",
               messages: [
                 {
                   role: "system",
