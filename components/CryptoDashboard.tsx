@@ -70,7 +70,7 @@ interface FeedResponse {
   };
 }
 
-type Tab = "movers" | "african" | "all" | "trending";
+type Tab = "movers" | "african" | "all" | "trending" | "algorithm";
 
 const TABS: { id: Tab; label: string; description: string }[] = [
   {
@@ -93,6 +93,12 @@ const TABS: { id: Tab; label: string; description: string }[] = [
     label: "Trending",
     description:
       "What people are actually saying about each coin right now. Reddit, YouTube, CryptoPanic, GitHub. Social signal, not financial advice.",
+  },
+  {
+    id: "algorithm",
+    label: "Atlas Algorithm",
+    description:
+      "Sum the digits. If odd, keep the item. If even, throw it away. Top 50 by mention count. The founder's boss's rule, applied at Atlas.",
   },
 ];
 
@@ -574,6 +580,9 @@ export function CryptoDashboard() {
 
       {/* LCP-54 — Trending tab content (independent of the crypto feed) */}
       {activeTab === "trending" && <TrendingPanel />}
+
+      {/* LCP-55 — Atlas Algorithm tab content */}
+      {activeTab === "algorithm" && <AlgorithmPanel />}
 
       {/* Empty state */}
       {!loading && !error && feed && feed.coins.length === 0 && (
@@ -1062,6 +1071,335 @@ function TrendingRow({ coin, rank }: { coin: TrendingCoin; rank: number }) {
           </div>
           <div className="font-mono text-[9px] uppercase text-atlas-muted">
             mentions
+          </div>
+        </div>
+      </div>
+    </li>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* LCP-55 — Atlas Algorithm panel                                      */
+/* ------------------------------------------------------------------ */
+
+interface AlgorithmSample {
+  source: "reddit" | "youtube" | "cryptopanic" | "github";
+  coin: { id: string; name: string; symbol: string };
+  number: number;
+  sum: number;
+  valueLabel: string;
+  sample: string;
+  at: string | null;
+  url: string | null;
+}
+
+interface AlgorithmTrendingCoin {
+  rank: number;
+  id: string;
+  name: string;
+  symbol: string;
+  qualifiedMentions: number;
+  bySource: { reddit: number; youtube: number; cryptopanic: number; github: number };
+  lastQualifiedAt: string | null;
+  sample: AlgorithmSample[];
+}
+
+interface AlgorithmResult {
+  ok: boolean;
+  version: string;
+  asOf: string;
+  methodology: {
+    rule: string;
+    byline: string;
+    perSource: {
+      youtube: string;
+      github: string;
+      cryptopanic: string;
+      reddit: string;
+    };
+    ranking: string;
+    outputSize: number;
+    notFinancialAdvice: boolean;
+  };
+  filterStats: {
+    youtube: { total: number; qualified: number; reason: string };
+    github: { total: number; qualified: number; reason: string };
+    cryptopanic: { total: number; qualified: number; reason: string };
+    reddit: { total: number; qualified: number; reason: string };
+  };
+  trending: AlgorithmTrendingCoin[];
+  cache: { ttlMs: number; ageMs: number; lastFetchedAt: string };
+}
+
+function AlgorithmPanel() {
+  const [data, setData] = useState<AlgorithmResult | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [now, setNow] = useState<number>(() => Date.now());
+
+  const load = async (opts: { bust?: boolean } = {}) => {
+    if (opts.bust) setRefreshing(true);
+    else setLoading(true);
+    setError(null);
+    try {
+      const url = opts.bust ? "/api/strategy/algorithm?bust=1" : "/api/strategy/algorithm";
+      const r = await fetch(url, { cache: "no-store" });
+      const json = await r.json();
+      if (!r.ok || !json.ok) {
+        setError(json.error ?? `Algorithm returned ${r.status}`);
+        return;
+      }
+      setData(json);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 5_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const lastFetchedAt = data?.cache.lastFetchedAt;
+  const ageLabel = (() => {
+    if (!lastFetchedAt) return null;
+    const ageMs = now - new Date(lastFetchedAt).getTime();
+    if (ageMs < 0) return "just now";
+    const sec = Math.floor(ageMs / 1000);
+    if (sec < 5) return "just now";
+    if (sec < 60) return `${sec}s ago`;
+    const min = Math.floor(sec / 60);
+    return `${min} min ago`;
+  })();
+
+  return (
+    <div className="space-y-6">
+      {/* Header card: the rule, plain language */}
+      <div className="rounded border border-atlas-accent/40 bg-atlas-surface/40 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex-1">
+            <h3 className="text-sm font-semibold text-atlas-text">
+              The rule
+            </h3>
+            <p className="mt-1 text-sm text-atlas-text">
+              Sum the digits. If the sum is odd, the item qualifies. If even, it doesn't.
+            </p>
+            <p className="mt-1 text-[11px] text-atlas-muted">
+              Then rank coins by mention count in the qualified set. Top 50.{" "}
+              {ageLabel && (
+                <span className="ml-1 font-mono text-[10px] uppercase tracking-wider text-atlas-muted/80">
+                  Updated {ageLabel}
+                  {refreshing && " · refreshing…"}
+                </span>
+              )}
+            </p>
+            <p className="mt-2 text-[10px] uppercase tracking-wider text-amber-400/80">
+              {data?.methodology.byline ?? "Invented by the founder's boss, applied at Atlas as a social-trend filter. Not a financial signal."}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void load({ bust: true })}
+            disabled={refreshing}
+            className="flex items-center gap-1.5 rounded border border-atlas-accent bg-atlas-accent/10 px-3 py-2 text-xs font-medium uppercase tracking-wider text-atlas-accent transition hover:bg-atlas-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className={refreshing ? "animate-spin" : ""}
+            >
+              <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+              <path d="M21 3v5h-5" />
+              <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+              <path d="M8 16H3v5" />
+            </svg>
+            {refreshing ? "Refreshing" : "Refresh"}
+          </button>
+        </div>
+      </div>
+
+      {/* Per-source filter stats — the user can see how the rule behaved */}
+      {data && (
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
+          {(["youtube", "github", "cryptopanic", "reddit"] as const).map((src) => {
+            const stat = data.filterStats[src];
+            const qualifiedPct =
+              stat.total > 0 ? Math.round((stat.qualified / stat.total) * 100) : 0;
+            const filterColor =
+              qualifiedPct >= 40
+                ? "text-emerald-400"
+                : qualifiedPct >= 20
+                  ? "text-amber-400"
+                  : "text-rose-400";
+            return (
+              <div
+                key={src}
+                className="rounded border border-atlas-border/40 bg-atlas-surface/40 p-3"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-atlas-muted">
+                    {src}
+                  </span>
+                  <span className={`font-mono text-sm font-semibold ${filterColor}`}>
+                    {stat.qualified}/{stat.total}
+                  </span>
+                </div>
+                <p className="mt-1 font-mono text-[10px] uppercase tracking-wider text-atlas-muted/60">
+                  qualified ({qualifiedPct}%)
+                </p>
+                {stat.reason && stat.reason !== "ok" && (
+                  <p className="mt-1 text-[10px] leading-relaxed text-atlas-muted/80">
+                    {stat.reason}
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Loading */}
+      {loading && !data && (
+        <div className="space-y-2">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div
+              key={i}
+              className="h-14 animate-pulse rounded border border-atlas-border/40 bg-atlas-surface/40"
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Error */}
+      {error && !data && (
+        <div className="rounded border border-rose-900/40 bg-atlas-surface/40 p-6 text-center text-sm text-rose-400">
+          <p>{error}</p>
+          <button
+            type="button"
+            onClick={() => void load({ bust: true })}
+            className="mt-3 rounded border border-atlas-accent bg-atlas-accent/10 px-3 py-1.5 text-xs font-medium uppercase tracking-wider text-atlas-accent transition hover:bg-atlas-accent/20"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
+      {/* The top-50 */}
+      {data && data.trending.length > 0 && (
+        <div>
+          <div className="mb-3 flex items-center gap-3">
+            <h2 className="font-mono text-[10px] uppercase tracking-widest text-atlas-muted">
+              Top {data.trending.length} (most mentions in the qualified set)
+            </h2>
+            <div className="h-px flex-1 bg-atlas-border/40" />
+          </div>
+          <ul className="grid grid-cols-1 gap-2">
+            {data.trending.map((coin) => (
+              <AlgorithmRow key={coin.id} coin={coin} />
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Empty state */}
+      {data && data.trending.length === 0 && (
+        <div className="rounded border border-atlas-border/40 bg-atlas-surface/40 p-8 text-center text-sm text-atlas-muted">
+          <p>
+            No coins qualified this round. Either the filters are rejecting everything,
+            or no upstream sources returned data.
+          </p>
+          <p className="mt-2 text-[11px]">
+            Check{" "}
+            <a href="/api/strategy/diag" className="underline">
+              /api/strategy/diag
+            </a>{" "}
+            for source health.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AlgorithmRow({ coin }: { coin: AlgorithmTrendingCoin }) {
+  const hasReddit = coin.bySource.reddit > 0;
+  const hasYouTube = coin.bySource.youtube > 0;
+  const hasCryptoPanic = coin.bySource.cryptopanic > 0;
+  const hasGithub = coin.bySource.github > 0;
+  const sourceCount =
+    (hasReddit ? 1 : 0) +
+    (hasYouTube ? 1 : 0) +
+    (hasCryptoPanic ? 1 : 0) +
+    (hasGithub ? 1 : 0);
+
+  return (
+    <li className="rounded border border-atlas-border/40 bg-atlas-surface/40 p-3 transition hover:border-atlas-accent/50 hover:bg-atlas-surface">
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="w-8 shrink-0 text-right font-mono text-[10px] text-atlas-muted">
+          #{coin.rank}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-semibold text-atlas-text">
+              {coin.name}
+            </span>
+            <span className="font-mono text-[10px] uppercase text-atlas-muted">
+              {coin.symbol}
+            </span>
+            <span className="font-mono text-[9px] uppercase text-atlas-muted/60">
+              · {sourceCount} source{sourceCount === 1 ? "" : "s"}
+            </span>
+          </div>
+          {coin.sample.length > 0 && (
+            <p className="mt-1 line-clamp-1 text-[11px] text-atlas-muted">
+              {coin.sample[0].valueLabel}: {coin.sample[0].sample}
+            </p>
+          )}
+        </div>
+        {/* Per-source badges */}
+        <div className="flex shrink-0 items-center gap-1" aria-hidden="true">
+          {hasReddit && (
+            <span className="rounded bg-atlas-surface px-1.5 py-0.5 font-mono text-[9px] text-atlas-muted">
+              R{coin.bySource.reddit}
+            </span>
+          )}
+          {hasYouTube && (
+            <span className="rounded bg-atlas-surface px-1.5 py-0.5 font-mono text-[9px] text-atlas-muted">
+              Y{coin.bySource.youtube}
+            </span>
+          )}
+          {hasCryptoPanic && (
+            <span className="rounded bg-atlas-surface px-1.5 py-0.5 font-mono text-[9px] text-atlas-muted">
+              C{coin.bySource.cryptopanic}
+            </span>
+          )}
+          {hasGithub && (
+            <span className="rounded bg-atlas-surface px-1.5 py-0.5 font-mono text-[9px] text-atlas-muted">
+              G{coin.bySource.github}
+            </span>
+          )}
+        </div>
+        <div className="shrink-0 text-right">
+          <div className="font-mono text-base font-semibold text-atlas-text">
+            {coin.qualifiedMentions}
+          </div>
+          <div className="font-mono text-[9px] uppercase text-atlas-muted">
+            qualified
           </div>
         </div>
       </div>
