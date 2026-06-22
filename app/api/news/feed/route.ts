@@ -1,5 +1,9 @@
-import { NextResponse } from "next/server";
-import { fetchAllCategories } from "@/lib/connectors/news";
+import { NextRequest, NextResponse } from "next/server";
+import {
+  bustNewsCache,
+  fetchAllCategories,
+  type NewsCategory,
+} from "@/lib/connectors/news";
 
 /**
  * Day 23 v5 — Client-facing news feed endpoint.
@@ -17,12 +21,42 @@ import { fetchAllCategories } from "@/lib/connectors/news";
  *
  * Cache: relies on the connector's in-memory 1-hour cache. This route
  * is force-dynamic so it always reads current cache state.
+ *
+ * LCP-45 — Vercel runs each route in its own serverless function,
+ * so the in-memory cache in /api/news/feed and /api/news/retry
+ * are different Map instances. The Retry button (POST /api/news/retry)
+ * busts its OWN cache, not the feed's. We add a `?bust=1` query
+ * param so the client can force a fresh fetch on the feed
+ * instance itself.
  */
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function GET() {
+const VALID_CATEGORIES: NewsCategory[] = [
+  "stocks",
+  "crypto",
+  "investments",
+  "real_estate",
+];
+
+export async function GET(req: NextRequest) {
   try {
+    const url = new URL(req.url);
+    const shouldBust = url.searchParams.get("bust") === "1";
+    const targetCategory = url.searchParams.get("category");
+
+    // LCP-45 — Vercel route isolation fix. When the client
+    // signals bust=1, clear the local cache for the requested
+    // category (or all) BEFORE fetching. This guarantees a
+    // fresh fetch on the same instance that handles the GET.
+    if (shouldBust) {
+      if (targetCategory && VALID_CATEGORIES.includes(targetCategory as NewsCategory)) {
+        bustNewsCache(targetCategory as NewsCategory);
+      } else {
+        bustNewsCache();
+      }
+    }
+
     const articles = await fetchAllCategories();
     const total = Object.values(articles).reduce(
       (sum, list) => sum + list.length,

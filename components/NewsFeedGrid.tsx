@@ -734,13 +734,28 @@ function EmptyState({
           onClick={async () => {
             setRetrying(true);
             try {
+              // LCP-45 — Vercel runs each route in its own
+              // serverless function, so the in-memory cache
+              // for /api/news/feed and /api/news/retry are
+              // different Map instances. We hit BOTH endpoints
+              // to bust both caches, then add ?bust=1 on the
+              // feed fetch so the SAME instance that returns
+              // the data has its cache cleared too.
               await fetch("/api/news/retry", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ category: "all" }),
                 cache: "no-store",
               });
-              await Promise.all([loadAll(), refreshDiag()]);
+              await Promise.all([
+                fetch("/api/news/feed?bust=1&category=all", {
+                  cache: "no-store",
+                }).then((r) => r.json()),
+                refreshDiag(),
+              ]);
+              // Then loadAll() will fetch fresh data on the
+              // feed's own instance with its own cache cleared
+              await loadAll();
             } finally {
               setRetrying(false);
             }
