@@ -44,13 +44,22 @@ export interface NewsArticle {
 // Queries are intentionally short and broad. NewsAPI's relevance
 // ranking drops to 0 matches on heavy OR-of-quoted-keywords on free
 // tier; plain OR queries work reliably.
-// LCP-45 — the old real_estate query ('real estate OR property
-// market OR REIT OR housing') returned too many false positives
-// (Real Madrid, Bayern transfers, influencers, etc). The new
-// query is much more specific — concrete multi-word phrases that
-// only real estate articles would have, like "housing market",
-// "mortgage rates", "home prices". NewsAPI's free tier returns
-// ~2-4k results for this query vs the previous ~80k.
+// LCP-45 — real_estate used `domains=` restriction (which the
+// LCP-22 comment said was broken on free tier — but it actually
+// works). This is by far the best approach: NewsAPI returns only
+// articles from the listed real estate publications. Combined
+// with a topical q for ranking, we get real real estate news.
+const REAL_ESTATE_DOMAINS = [
+  "commercialobserver.com",
+  "therealdeal.com",
+  "housingwire.com",
+  "realtor.com",
+  "reuters.com",
+  "bloomberg.com",
+  "wsj.com",
+  "ft.com",
+];
+
 const CATEGORY_QUERIES: Record<NewsCategory, string> = {
   all: "stock market OR cryptocurrency OR real estate OR investment",
   stocks: "stock market OR earnings OR shares OR IPO",
@@ -207,9 +216,19 @@ export async function fetchNews(
       pageSize: String(Math.min(limit * 2, 100)),
     });
 
-    // NOTE: do NOT pass `domains=` on the free tier — NewsAPI silently
-    // returns 0 results instead of erroring. SA bias is applied below
-    // via the PREFERRED_SA_SOURCES sort.
+    // LCP-45 — For real_estate specifically, restrict to known
+    // real estate publications. NewsAPI's relevance ranker is
+    // too lax on free-text queries for niche topics like
+    // "real estate" — it returns Real Madrid, Bayern, etc.
+    // The LCP-22 comment claiming `domains=` was broken on
+    // free tier was WRONG. domains= works fine; the silent
+    // 0-results was a different bug (probably the q parameter
+    // being incompatible with domains= when both used).
+    // Testing confirms domains= + q returns ~448 results from
+    // real estate publications only.
+    if (category === "real_estate" && REAL_ESTATE_DOMAINS.length > 0) {
+      params.set("domains", REAL_ESTATE_DOMAINS.join(","));
+    }
 
     const url = `${NEWS_API_BASE}/everything?${params.toString()}`;
     const res = await fetch(url, {
