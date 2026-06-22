@@ -73,6 +73,79 @@ const HERO_GRADIENT: Record<NewsCategory, string> = {
   real_estate: "from-rose-600/40 via-atlas-bg to-atlas-bg",
 };
 
+// LCP-43 — NewsAPI's relevance ranker is too lax on the real_estate
+// query. It returns "Real Madrid" football news, Bayern transfers,
+// random entertainment articles — anything that contains the
+// substring "real" in the body. The server query is fine, but the
+// relevance ranker doesn't filter that aggressively.
+//
+// We filter the real_estate tab client-side so the user only sees
+// articles whose title or description actually contains a
+// real-estate-specific term. The other tabs are stricter in the
+// news keywords ("bitcoin", "ethereum", "IPO") so the false-positive
+// problem doesn't surface there.
+//
+// Pattern: require at least one of the real-estate-specific terms
+// in title+description. Reject obvious false positives by title
+// keyword (e.g. "real madrid" or "real sociedad").
+const REAL_ESTATE_TERMS = [
+  "real estate",
+  "property",
+  "housing",
+  "mortgage",
+  "reit",
+  "home price",
+  "home sale",
+  "home sale",
+  "rent",
+  "rental",
+  "realty",
+  "land",
+  "estate agent",
+  "estate market",
+  "residential",
+  "commercial property",
+  "developer",
+  "zoning",
+  "construction",
+  "interest rate",
+  "fed rate",
+  "homebuilder",
+  "appartment",  // typo-tolerant
+  "apartment",
+  "condo",
+  "luxury home",
+  "office space",
+  "warehouse",
+  "tenant",
+  "landlord",
+  "real estate",
+];
+const REAL_ESTATE_TITLE_BLOCKLIST = [
+  "real madrid",
+  "real sociedad",
+  "real betis",
+  "real oviedo",
+  "real salt lake",
+  "for real life",  // common phrase
+  "real truth",
+  "real talk",
+];
+
+function isRealEstateArticle(article: NewsArticle): boolean {
+  const title = (article.title ?? "").toLowerCase();
+  const desc = (article.description ?? "").toLowerCase();
+  const haystack = `${title} ${desc}`;
+
+  // Reject obvious false positives by title keyword first
+  for (const blocked of REAL_ESTATE_TITLE_BLOCKLIST) {
+    if (title.includes(blocked)) return false;
+  }
+
+  // Require at least one real-estate-specific term
+  return REAL_ESTATE_TERMS.some((term) => haystack.includes(term));
+}
+
 function relativeTime(isoDate: string): string {
   const date = new Date(isoDate);
   const diffMs = Date.now() - date.getTime();
@@ -133,7 +206,13 @@ export function NewsFeedGrid() {
       const stocks = data.articles.stocks ?? [];
       const crypto = data.articles.crypto ?? [];
       const investments = data.articles.investments ?? [];
-      const real_estate = data.articles.real_estate ?? [];
+      // LCP-43 — NewsAPI's real_estate relevance is too lax.
+      // Filter client-side so we only keep articles whose
+      // title/description actually mentions a real-estate-
+      // specific term. Drops "Real Madrid" / Bayern /
+      // influencer / cartoon false positives.
+      const rawRealEstate = data.articles.real_estate ?? [];
+      const real_estate = rawRealEstate.filter(isRealEstateArticle);
       setArticlesByCat({
         stocks,
         crypto,
