@@ -823,6 +823,7 @@ const TRENDING_TABS: { id: TrendingSource; label: string }[] = [
  * "All" sends no window param to the API (server returns full data).
  */
 const TIME_WINDOWS: { label: string; minutes: number | null }[] = [
+  { label: "All", minutes: null },
   { label: "10m", minutes: 10 },
   { label: "30m", minutes: 30 },
   { label: "1h", minutes: 60 },
@@ -852,7 +853,7 @@ function TrendingPanel() {
   const [refreshing, setRefreshing] = useState(false);
   const [now, setNow] = useState<number>(() => Date.now());
   const [activeList, setActiveList] = useState<TrendingSource>("overall");
-  const [windowMinutes, setWindowMinutes] = useState<number | null>(10080); // default 7d (matches the longest window)
+  const [windowMinutes, setWindowMinutes] = useState<number | null>(null); // default: no window filter ("All")
 
   const load = async (opts: { bust?: boolean } = {}) => {
     if (opts.bust) setRefreshing(true);
@@ -1201,7 +1202,7 @@ function AlgorithmPanel() {
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [now, setNow] = useState<number>(() => Date.now());
-  const [windowMinutes, setWindowMinutes] = useState<number | null>(10080); // default 7d (matches the longest window)
+  const [windowMinutes, setWindowMinutes] = useState<number | null>(null); // default: no window filter ("All")
 
   const load = async (opts: { bust?: boolean } = {}) => {
     if (opts.bust) setRefreshing(true);
