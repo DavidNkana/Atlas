@@ -212,11 +212,14 @@ export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boole
         {/* Expand chevron is now a floating button outside the aside —
             see below. The aside is 0px wide when collapsed. */}
 
-        {/* + New button — always navigates to home */}
-        <div className="px-3">
+        {/* + New button + Day 29 Full chat button — flex row.
+            "+ New" navigates to home (existing behaviour).
+            "Chat" dispatches the atlas:openChat custom event so
+            AppShell summons the FullScreenChat modal. */}
+        <div className="flex gap-1.5 px-3">
           <Link
             href="/"
-            className="flex w-full items-center gap-2 rounded-md border border-atlas-border bg-atlas-bg px-3 py-2 text-sm text-atlas-text transition-colors hover:border-atlas-accent"
+            className="flex flex-1 items-center gap-2 rounded-md border border-atlas-border bg-atlas-bg px-3 py-2 text-sm text-atlas-text transition-colors hover:border-atlas-accent"
             title="Start a new question"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -225,6 +228,35 @@ export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boole
             </svg>
             {!collapsed && <span>New</span>}
           </Link>
+          {!collapsed && (
+            <button
+              type="button"
+              onClick={() => {
+                if (typeof window !== "undefined") {
+                  window.dispatchEvent(
+                    new CustomEvent("atlas:openChat", { detail: {} }),
+                  );
+                }
+              }}
+              className="flex items-center gap-1.5 rounded-md border border-atlas-accent/60 bg-atlas-accent/10 px-3 py-2 text-sm font-medium text-atlas-accent transition-colors hover:bg-atlas-accent/20"
+              title="Open full-screen chat"
+              data-testid="atlas-open-full-chat"
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+              </svg>
+              <span>Chat</span>
+            </button>
+          )}
         </div>
 
         {/* Day 12 v7: Pinned (max 4) + History (max 20) split.

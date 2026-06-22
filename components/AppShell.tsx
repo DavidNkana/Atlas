@@ -26,13 +26,21 @@
  * that mounts the Sidebar. Theme changes apply globally because
  * the theme is applied as a class on <html> by Sidebar's useEffect.
  *
+ * Day 29 — AppShell now also hosts the FullScreenChat modal so
+ * any page can dispatch the "atlas:openChat" custom event to
+ * summon the centered chat overlay. The Sidebar's "Full chat"
+ * button dispatches the event; ResultChatPanel's expand button
+ * does the same. This keeps the modal singleton + avoids per-
+ * page state.
+ *
  * Sign-in / sign-up pages deliberately do NOT use AppShell —
  * they have their own minimal layout (no sidebar, centered card).
  */
 
-import { ReactNode } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { Sidebar } from "./Sidebar";
 import { ClientOnly } from "./ClientOnly";
+import { FullScreenChat } from "./FullScreenChat";
 
 /**
  * Day 28 v2 — wrap Sidebar in <ClientOnly>. Sidebar reads
@@ -55,6 +63,26 @@ function SidebarSkeleton() {
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatInitial, setChatInitial] = useState<string | undefined>(
+    undefined,
+  );
+
+  // Listen for global "atlas:openChat" custom events so any
+  // component (Sidebar's "Full chat" button, ResultChatPanel
+  // expand button, future quick-actions) can summon the chat.
+  useEffect(() => {
+    function onOpen(e: Event) {
+      const detail = (e as CustomEvent<{ initialQuestion?: string }>).detail;
+      setChatInitial(detail?.initialQuestion);
+      setChatOpen(true);
+    }
+    window.addEventListener("atlas:openChat", onOpen as EventListener);
+    return () => {
+      window.removeEventListener("atlas:openChat", onOpen as EventListener);
+    };
+  }, []);
+
   return (
     <div className="flex h-screen overflow-hidden bg-atlas-bg text-atlas-text">
       <ClientOnly fallback={<SidebarSkeleton />}>
@@ -63,6 +91,13 @@ export function AppShell({ children }: { children: ReactNode }) {
       <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
         {children}
       </main>
+      <ClientOnly fallback={null}>
+        <FullScreenChat
+          open={chatOpen}
+          onClose={() => setChatOpen(false)}
+          initialQuestion={chatInitial}
+        />
+      </ClientOnly>
     </div>
   );
 }

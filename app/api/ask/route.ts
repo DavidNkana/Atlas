@@ -160,6 +160,10 @@ type AskRequest = {
   vertical: string;
   question: string;
   model?: string;
+  // Day 29 v2 — optional previous question context, used by the
+  // apply-to-results flow to keep the original city signal
+  // when the refined query alone is ambiguous.
+  previousContext?: string;
 };
 
 type RankedSite = {
@@ -393,7 +397,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  const { vertical, question, model } = body;
+  const { vertical, question, model, previousContext } = body;
 
   if (!vertical || typeof vertical !== "string") {
     return NextResponse.json(

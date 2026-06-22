@@ -119,19 +119,45 @@ export function ResultChatPanel({
   const applyToResults = async (refinedQuery: string) => {
     setApplying(refinedQuery);
     try {
+      // Day 29 v2 — David reported "we clicked apply to result
+      // and go defaulted to a no data Lusaka". Root cause was
+      // the cascade running detectCity() on ONLY the refined
+      // query (e.g. "what about in Joburg") which, combined
+      // with all upstream models failing, fell through to
+      // curatedStub with no Joburg match → Lusaka fallback.
+      //
+      // Fix: build a composite question that keeps the
+      // original context as the primary city signal. The
+      // refined query comes first so the AI sees it as the
+      // new question, but the original question is included
+      // for city detection. This way:
+      //   - "I want a gas station in Lusaka" + refine "what
+      //     about in Joburg"
+      //   - becomes: "what about in Joburg (originally: I
+      //     want a gas station in Lusaka)"
+      //   - detectCity sees BOTH Lusaka and Joburg; picks
+      //     Joburg (refined takes priority) but Lusaka is
+      //     available as fallback
+      //   - If all upstream models fail AND Joburg catalog is
+      //     empty, curatedStub can still find Lusaka gas
+      //     stations in REAL_SITE_CATALOG → real sites
+      //     instead of "no data"
+      const composedQuestion = questionContext
+        ? `${refinedQuery} (originally: ${questionContext})`
+        : refinedQuery;
       const res = await fetch("/api/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           vertical,
-          question: refinedQuery,
+          question: composedQuestion,
           model: "gemini-search",
         }),
         cache: "no-store",
       });
       const data = await res.json();
       if (data?.id) {
-        router.push(`/result/${data.id}`);
+        router.push(`/result/${data.id}?from=chat`);
       }
     } catch (err) {
       console.error("Failed to apply refinement:", err);
