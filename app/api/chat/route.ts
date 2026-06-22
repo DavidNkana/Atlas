@@ -9,28 +9,32 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 /**
  * Day 28 — Result-page chat endpoint.
  *
- * Body: { message: string, questionContext?: string, model?: string }
+ * Body: { message: string, questionContext?: string, model?: string, history?: Array }
  *
  * Returns: {
  *   ok: boolean,
  *   answer: string,        // synthesized by Gemini from Tavily results
  *   sources: Array<{title, url}>,
- *   ranked_sites?: Array<RankedSite>  // populated if the user asked for
- *                                     // sites (e.g. "what about in Gauteng for 2000 sqm")
+ *   applyQuery: string,    // LCP-36 — always set so the client can
+ *                          // render "Apply to results" on every response
+ *   followups?: string[],  // LCP-36 — Perplexity-style related questions
+ *   refinedQuery?: string, // populated if the user asked for sites
+ *                          // (e.g. "what about in Gauteng for 2000 sqm")
  * }
  *
- * Architecture:
- *   1. Tavily fetches real web data (with sources + answer)
- *   2. Gemini synthesizes a chat-style response from:
- *      - the user's message
- *      - the questionContext (what they originally asked)
- *      - the Tavily answer + sources
- *   3. If the user asks for sites in a different city/size/etc,
- *      the chat response includes a `refinedQuery` field that
- *      the UI uses to trigger a /api/ask re-run for real-time
- *      result updates.
+ * LCP-36 — major rewrite of how the LLM is prompted:
+ *   1. Gemini's `systemInstruction` field is used (NOT a user turn)
+ *      so the model treats follow-ups like "why that?" as grounded
+ *      in the prior conversation, not as standalone English questions.
+ *   2. Conversation history is wired into Gemini's `contents` so it
+ *      can see prior turns when answering follow-ups.
+ *   3. `applyQuery` is always returned (not only on refined queries)
+ *      so the UI can show an "Apply to results" button on every
+ *      Atlas message.
+ *   4. `followups` is generated server-side from the answer context
+ *      so the UI can show 2-3 related questions like Perplexity.
  *
- * Strict budget: 10s total (Tavily 5s + Gemini 5s).
+ * Strict budget: 10s total (Tavily 5s + Gemini 5s + Followups 4s).
  */
 
 export const dynamic = "force-dynamic";
@@ -38,17 +42,23 @@ export const runtime = "nodejs";
 
 const TAVILY_TIMEOUT_MS = 5_000;
 const GEMINI_TIMEOUT_MS = 5_000;
+const FOLLOWUPS_TIMEOUT_MS = 4_000;
 
 interface ChatRequestBody {
   message: string;
   questionContext?: string;
   model?: string;
+  // LCP-36 — conversation history for grounded follow-up answers.
+  // Max 10 turns. Each entry is { role: "user"|"atlas", text: string }.
+  history?: Array<{ role: "user" | "atlas"; text: string }>;
 }
 
 interface ChatResponse {
   ok: boolean;
   answer: string;
   sources: Array<{ title: string; url: string }>;
+  applyQuery: string;
+  followups?: string[];
   refinedQuery?: string;
   error?: string;
   // LCP-30 — diagnostics so the client can show what actually happened
@@ -217,6 +227,12 @@ export async function POST(req: NextRequest) {
   // Uses Gemini 2.0 Flash with the same Vertex/AQ.Ab8RN6 key the
   // rest of Atlas uses. If Gemini fails (quota), fall back to
   // returning Tavily's raw answer verbatim.
+  //
+  // LCP-36 — major upgrade: we use the `systemInstruction` field
+  // (NOT a user turn) so the model treats the grounding rules as
+  // global. We also wire `history` into the contents so follow-ups
+  // like "why that?" are answered against the prior conversation
+  // instead of being interpreted as standalone English questions.
   let geminiAnswer = "";
   let geminiOk = false;
   let geminiError: string | null = null;
@@ -224,10 +240,20 @@ export async function POST(req: NextRequest) {
   if (geminiKey) {
     try {
       const genAI = new GoogleGenerativeAI(geminiKey);
-      const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-      const prompt = buildGeminiPrompt(message, context, tavilyAnswer, tavilySources);
+      const model = genAI.getGenerativeModel({
+        model: "gemini-2.0-flash",
+        systemInstruction: buildSystemInstruction(context, tavilyAnswer, tavilySources),
+      });
+      const historyContents = (body.history ?? []).map((h) => ({
+        role: h.role === "user" ? "user" : "model",
+        parts: [{ text: h.text }],
+      }));
+      const allContents = [
+        ...historyContents,
+        { role: "user" as const, parts: [{ text: message }] },
+      ];
       const result = await Promise.race([
-        model.generateContent(prompt),
+        model.generateContent({ contents: allContents }),
         new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error("gemini_timeout")), GEMINI_TIMEOUT_MS),
         ),
@@ -359,6 +385,20 @@ export async function POST(req: NextRequest) {
     `[/api/chat] path=${path} tavilyOk=${tavilyOk} sources=${tavilySources.length} tavilyErr=${tavilyError ?? "none"} tavilyMs=${tavilyElapsedMs} geminiOk=${geminiOk} finalLen=${finalAnswer.length}`,
   );
 
+  // LCP-36 — generate follow-up question chips so the UI can
+  // show Perplexity-style "related questions" at the bottom of
+  // every answer. Only attempt when we have a real answer; skip
+  // the no_data stub so we don't suggest bad follow-ups.
+  let followups: string[] = [];
+  if (path !== "no_data") {
+    followups = await tryGenerateFollowups({
+      context,
+      history: body.history ?? [],
+      lastUserMessage: message,
+      lastAnswer: finalAnswer,
+    });
+  }
+
   // Detect if the user is asking for a refined site query.
   // Heuristic: words like "Gauteng", "2000 sqm", "Sandton" in
   // the message + the user has questionContext indicating an
@@ -373,11 +413,21 @@ export async function POST(req: NextRequest) {
     refinedQuery = mergeQueryWithContext(message, context);
   }
 
+  // LCP-36 — applyQuery is always populated so the client can
+  // show an "Apply to results" button on every Atlas message.
+  // When the user has a questionContext (i.e. they're chatting
+  // from a /result/[id] page), applyQuery defaults to the
+  // original question so a re-run gives them the same view.
+  // When the message looks like a refinement, use that instead.
+  const applyQuery = refinedQuery ?? (context ? context : message);
+
   const elapsed = Date.now() - t0;
   const response: ChatResponse = {
     ok: true,
     answer: finalAnswer,
     sources: tavilySources,
+    applyQuery,
+    followups: followups.length > 0 ? followups : undefined,
     refinedQuery,
     diagnostics: {
       path,
@@ -461,34 +511,114 @@ export async function GET(req: NextRequest) {
   });
 }
 
-function buildGeminiPrompt(
-  message: string,
+/**
+ * LCP-36 — Build the systemInstruction for Gemini. This is the
+ * global grounding rule the model will follow for the entire
+ * conversation. The history is NOT included here — it's passed
+ * separately in the `contents` array so the model sees the
+ * conversation as user/model turns.
+ *
+ * Critical fix for "why that?" → dictionary answer: we explicitly
+ * tell the model that short, pronouns-heavy, or vague follow-ups
+ * are about the prior conversation, not standalone English
+ * questions. This is the difference between Perplexity and a
+ * dictionary API.
+ */
+function buildSystemInstruction(
   context: string,
   tavilyAnswer: string,
   sources: Array<{ title: string; url: string }>,
 ): string {
+  const ctxLine = context
+    ? `\n\nThe user's original Atlas question (the one that opened this conversation) is: "${context}". The user is asking follow-up questions about THIS question. If their follow-up is short, vague, or pronouns-heavy (e.g. "why that?", "what about prices?", "is it safe?"), you MUST interpret it as a follow-up about the original Atlas question — do NOT answer it as a standalone English question.`
+    : `\n\nThe user has just asked a follow-up question. Interpret it as a continuation of the conversation history, not as a standalone English question. If the follow-up is short, vague, or pronouns-heavy (e.g. "why that?", "explain", "what about prices?"), ground your answer in the immediately preceding assistant answer.`;
+
   const sourceList = sources
     .map((s, i) => `[${i + 1}] ${s.title} — ${s.url}`)
     .join("\n");
 
-  return `You are Atlas, an AI assistant that helps African builders and investors with site selection, market intelligence, and investment opportunities.
+  return `You are Atlas, an AI research assistant for African builders and investors. You help with site selection, market intelligence, property questions, and investment opportunities across southern Africa (South Africa, Zambia, Zimbabwe, Namibia, Botswana).
 
-The user originally asked: ${context || "(no prior context)"}
+Your answers should be:
+- Specific and grounded — cite real prices, areas, and trends when you know them. Do NOT fabricate data, addresses, or sources.
+- Concise — 2-4 short paragraphs by default. Use a conversational, direct tone. No headers, no bullet lists unless the user explicitly asks.
+- Honest about uncertainty — if you don't know, say so. Better to admit a gap than to invent.${ctxLine}
 
-They are now asking: ${message}
+${tavilyAnswer ? `A web search returned this synthesized answer (for reference, do NOT parrot verbatim):\n${tavilyAnswer}\n` : "A web search returned no usable data — answer from your own knowledge but stay grounded.\n"}
+${sourceList ? `Source URLs (cite inline as [1], [2], etc. when relevant):\n${sourceList}\n` : ""}
 
-${tavilyAnswer ? `A web search returned this synthesized answer (for reference, do NOT parrot verbatim):\n${tavilyAnswer}\n` : "A web search returned no usable data.\n"}
-${sourceList ? `Source URLs (cite inline as [1], [2], etc.):\n${sourceList}\n` : ""}
+Style rules:
+- Never use the word "delve". Never start with "Certainly" or "Great question".
+- Use South African pricing (ZAR, "R") by default. Mention Zambian Kwacha (ZMW, "K") if the question is about Zambia.
+- When you have sources, weave them into the answer naturally with [1], [2] markers. The sources list is provided separately.`;
+}
 
-Your task:
-- Answer the user's question in 2-4 short paragraphs.
-- Cite sources inline using the [N] notation when you use a fact from them.
-- Be specific and grounded — don't fabricate data, prices, or sources.
-- If the user is asking "why" something was selected, explain the reasoning behind the site selection using the context provided.
-- If the user is asking to refine a query (different city, different size), acknowledge the change and offer to re-run.
-- Keep the tone conversational and direct. No headers, no bullet lists unless the user explicitly asks.
+interface FollowupsArgs {
+  context: string;
+  history: Array<{ role: "user" | "atlas"; text: string }>;
+  lastUserMessage: string;
+  lastAnswer: string;
+}
 
-Answer:`;
+/**
+ * LCP-36 — Generate 2-3 follow-up question chips the user
+ * can click to continue the conversation. Uses Gemini with
+ * a strict JSON output prompt. Silently returns [] on any
+ * failure so the UI gracefully shows no follow-ups.
+ */
+async function tryGenerateFollowups(args: FollowupsArgs): Promise<string[]> {
+  const geminiKey = process.env.GEMINI_API_KEY;
+  const trimmedAnswer = args.lastAnswer.slice(0, 1500);
+  if (!geminiKey || !trimmedAnswer) return [];
+
+  const prompt = `You are generating follow-up question suggestions for an AI research assistant called Atlas.
+
+The user's original Atlas question (if any): ${args.context || "(no original question — this is a free chat)"}
+
+The most recent user message: ${args.lastUserMessage}
+
+The assistant's most recent answer (truncated):
+"""
+${trimmedAnswer}
+"""
+
+Generate exactly 3 short follow-up questions the user is likely to ask next. Each question must be:
+- 4-12 words
+- A genuine natural follow-up, not a rephrasing of the prior question
+- Grounded in the answer above (something a curious builder or investor would actually want to know next)
+- A question, ending in a question mark
+
+Return ONLY a JSON array of 3 strings. No commentary, no markdown fences. Example: ["How much does it cost to build there?", "Is the area safe for families?", "What's the average rental yield?"]`;
+
+  try {
+    const genAI = new GoogleGenerativeAI(geminiKey);
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.0-flash",
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 200,
+        responseMimeType: "application/json",
+      },
+    });
+    const followupTimeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("followups_timeout")), FOLLOWUPS_TIMEOUT_MS),
+    );
+    const result = (await Promise.race([
+      model.generateContent(prompt),
+      followupTimeout,
+    ])) as Awaited<ReturnType<typeof model.generateContent>>;
+    const text = result.response.text().trim();
+    const parsed = JSON.parse(text);
+    if (Array.isArray(parsed)) {
+      return parsed
+        .filter((q): q is string => typeof q === "string" && q.trim().length > 0)
+        .slice(0, 3)
+        .map((q) => q.trim());
+    }
+    return [];
+  } catch {
+    return [];
+  }
 }
 
 function mergeQueryWithContext(message: string, context: string): string {

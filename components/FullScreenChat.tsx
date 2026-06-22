@@ -3,16 +3,18 @@
 /**
  * Day 29 v1 — Full-screen streaming chat modal.
  *
- * Larger, centered, full-height. Uses the same chat UX as
- * ResultChatPanel but with:
- *   - w-[min(960px,95vw)] h-[min(720px,90vh)] centered
- *   - SSE-streamed response with typewriter animation
- *   - Same fallback chain (Gemini → Tavily → OpenRouter)
- *   - Apply-to-results button on every refined query
+ * LCP-36 — major UI upgrade:
+ *   - Apply to results on EVERY atlas message (not only refined)
+ *   - Perplexity-style: inline source markers ([1], [2]) + follow-up
+ *     question chips at the bottom of every answer
+ *   - Removed "Try asking" recommendations — chat opens empty with
+ *     just a context-aware one-liner
+ *   - History persists per questionContext (LCP-35)
  *
- * Reachable from a button next to "+ New" in the top bar.
- * Also reachable from ResultChatPanel's "Open in full chat"
- * button (Day 29 v2 — Phase 2).
+ * Architecture: w-[min(960px,95vw)] h-[min(720px,90vh)] centered,
+ * SSE-streamed response with typewriter animation, fallback chain
+ * Gemini → Tavily → OpenRouter. Reachable from a button next to
+ * "+ New" in the top bar.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -28,7 +30,12 @@ interface ChatMessage {
   role: "user" | "atlas";
   text: string;
   sources?: ChatSource[];
-  refinedQuery?: string;
+  // LCP-36 — applyQuery is set by the server on EVERY response,
+  // not only on refined queries. Default behavior: applyQuery
+  // === the questionContext (re-run the original result with the
+  // same view) OR the user's latest message for free chat.
+  applyQuery?: string;
+  followups?: string[];
   ts: number;
   streaming?: boolean;
 }
@@ -43,10 +50,12 @@ interface FullScreenChatProps {
 }
 
 interface SSEEvent {
-  type: "sources" | "token" | "done" | "error";
+  type: "sources" | "token" | "followups" | "done" | "error";
   text?: string;
   sources?: ChatSource[];
+  questions?: string[];
   path?: string;
+  applyQuery?: string;
   message?: string;
 }
 
@@ -77,9 +86,6 @@ export function FullScreenChat({
     : "atlas:chat:default";
 
   // LCP-35 — hydrate messages from localStorage on mount.
-  // Skip when a new question is opened (no questionContext yet)
-  // because we don't want a stale "default" chat bleeding into
-  // a new session.
   useEffect(() => {
     if (!open || typeof window === "undefined") return;
     try {
@@ -98,18 +104,16 @@ export function FullScreenChat({
   }, [open, historyKey]);
 
   // LCP-35 — persist messages to localStorage as they change.
-  // Only after hydration so we don't overwrite stored history
-  // with the initial empty state.
   useEffect(() => {
     if (!hydrated || typeof window === "undefined") return;
     try {
-      // Trim streaming + applying state for storage
       const persistable = messages.map((m) => ({
         id: m.id,
         role: m.role,
         text: m.text,
         sources: m.sources,
-        refinedQuery: m.refinedQuery,
+        applyQuery: m.applyQuery,
+        followups: m.followups,
         ts: m.ts,
       }));
       window.localStorage.setItem(historyKey, JSON.stringify(persistable));
@@ -119,8 +123,6 @@ export function FullScreenChat({
   }, [messages, hydrated, historyKey]);
 
   // LCP-35 — clear history when questionContext changes
-  // (different question opened in same session). The hydrate
-  // effect re-loads from the new key.
   useEffect(() => {
     if (!hydrated) return;
     setMessages([]);
@@ -133,11 +135,6 @@ export function FullScreenChat({
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
-
-  // LCP-35 — REMOVED the auto-send on open. The chat now opens
-  // empty with example prompts visible. The user types their
-  // own first message instead of seeing Atlas ask itself a
-  // pre-filled question.
 
   // Close on Escape
   useEffect(() => {
@@ -156,6 +153,26 @@ export function FullScreenChat({
       abortRef.current = null;
     }
   }, [open]);
+
+  // LCP-36 — listen for follow-up chip clicks dispatched by
+  // the FollowupChip component. The chip dispatches
+  // 'atlas:chat:followup' on window with the question detail.
+  // We then call send() to inject it as a user message.
+  useEffect(() => {
+    if (!open) return;
+    function onFollowup(e: Event) {
+      const ce = e as CustomEvent<{ question: string }>;
+      const q = ce.detail?.question?.trim();
+      if (q) {
+        // Defer slightly so the chip click animation completes
+        // and the chat scrolls into view.
+        setTimeout(() => void send(q), 50);
+      }
+    }
+    window.addEventListener("atlas:chat:followup", onFollowup);
+    return () => window.removeEventListener("atlas:chat:followup", onFollowup);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, sending, messages]);
 
   const send = async (overrideText?: string) => {
     const text = (overrideText ?? input).trim();
@@ -195,11 +212,6 @@ export function FullScreenChat({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: text,
-          // LCP-35 — send the RAW questionContext prop, not
-          // a re-formatted string. The server builds a clean
-          // system prompt from it. This way the LLM has the
-          // exact city / vertical signal for follow-up
-          // questions like 'why Durbanville?'.
           questionContext: questionContext ?? "",
           history: historySnapshot,
         }),
@@ -216,28 +228,25 @@ export function FullScreenChat({
       let buffer = "";
       let accumulatedText = "";
       let sources: ChatSource[] = [];
+      let followups: string[] = [];
       let path: string | undefined;
+      let applyQuery: string | undefined;
 
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
-        // SSE events are separated by \n\n
         const events = buffer.split("\n\n");
         buffer = events.pop() ?? "";
 
         for (const eventText of events) {
           if (!eventText.trim()) continue;
-          // Each event line starts with "data: "
           const line = eventText
             .split("\n")
             .find((l) => l.startsWith("data: "));
           if (!line) continue;
           const data = line.slice("data: ".length).trim();
-          if (data === "[DONE]") {
-            // Stream complete
-            break;
-          }
+          if (data === "[DONE]") break;
           try {
             const ev = JSON.parse(data) as SSEEvent;
             if (ev.type === "token" && ev.text) {
@@ -251,8 +260,11 @@ export function FullScreenChat({
               );
             } else if (ev.type === "sources" && ev.sources) {
               sources = ev.sources;
+            } else if (ev.type === "followups" && ev.questions) {
+              followups = ev.questions;
             } else if (ev.type === "done") {
               path = ev.path;
+              applyQuery = ev.applyQuery;
             } else if (ev.type === "error") {
               accumulatedText += `\n\n[error: ${ev.message}]`;
               setMessages((prev) =>
@@ -263,14 +275,16 @@ export function FullScreenChat({
                 ),
               );
             }
-          } catch (parseErr) {
+          } catch {
             // Skip malformed events
           }
         }
       }
 
-      // Finalize: strip streaming flag, attach sources + refined query
-      const refinedQuery = detectRefinedQuery(text, questionContext ?? "");
+      // LCP-36 — applyQuery is now set on EVERY response (not
+      // only on refined queries). For contextual chats the
+      // server returns the questionContext so the user can
+      // re-apply the original Atlas result with one click.
       setMessages((prev) =>
         prev.map((m) =>
           m.id === atlasId
@@ -278,7 +292,8 @@ export function FullScreenChat({
                 ...m,
                 streaming: false,
                 sources: sources.length > 0 ? sources : undefined,
-                refinedQuery,
+                applyQuery: applyQuery ?? (questionContext || text),
+                followups: followups.length > 0 ? followups : undefined,
               }
             : m,
         ),
@@ -303,31 +318,29 @@ export function FullScreenChat({
     }
   };
 
-  const applyToResults = async (refinedQuery: string) => {
-    setApplying(refinedQuery);
+  const applyToResults = async (applyQuery: string) => {
+    setApplying(applyQuery);
     try {
       const res = await fetch("/api/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           vertical: vertical ?? "residential_land",
-          question: refinedQuery,
+          question: applyQuery,
           model: "gemini-search",
         }),
         cache: "no-store",
       });
       const data = await res.json();
       if (data?.id) {
-        // Day 29 fix — navigate to /result/[id]?chat=1 so the
+        // Day 29 fix — navigate to /result/[id]?from=chat so the
         // page knows to keep the chat panel open with the new
-        // result context, instead of landing on a generic
-        // /result/[id] page that has no question context and
-        // cascade falls back to "no data Lusaka".
+        // result context.
         router.push(`/result/${data.id}?from=chat`);
         onClose();
       }
     } catch (err) {
-      console.error("Failed to apply refinement:", err);
+      console.error("Failed to apply:", err);
     } finally {
       setApplying(null);
     }
@@ -355,7 +368,7 @@ export function FullScreenChat({
               Atlas Chat
             </div>
             <div className="font-mono text-[10px] uppercase tracking-wider text-atlas-muted">
-              Live research · Tavily + Gemini + OpenRouter fallback
+              Live research · sources cited inline
             </div>
           </div>
           <button
@@ -372,31 +385,15 @@ export function FullScreenChat({
 
         {/* Messages */}
         <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto p-6">
+          {/* LCP-36 — Removed "Try asking" recommendations. The
+              empty state is now a single context-aware line. */}
           {messages.length === 0 && (
-            <div className="space-y-3 text-sm text-atlas-muted">
+            <div className="space-y-2 text-sm text-atlas-muted">
               <p className="text-atlas-text">
                 {questionContext
-                  ? "Ask Atlas a follow-up about this result."
-                  : "Ask Atlas anything about land development, real estate, business intelligence, or investment opportunities across Africa."}
+                  ? "Ask Atlas a follow-up about this result — sources will appear inline with the answer."
+                  : "Ask Atlas anything about land, property, business intelligence, or investment opportunities across Africa. Sources appear inline."}
               </p>
-              <p className="text-xs">Try asking:</p>
-              <ul className="ml-4 list-disc space-y-1 text-xs">
-                {questionContext ? (
-                  <>
-                    <li>&ldquo;Why did you pick the top result?&rdquo;</li>
-                    <li>&ldquo;What about a different size or budget?&rdquo;</li>
-                    <li>&ldquo;What are the risks here?&rdquo;</li>
-                    <li>&ldquo;How does this compare to nearby suburbs?&rdquo;</li>
-                  </>
-                ) : (
-                  <>
-                    <li>&ldquo;What about a 2,000 sqm plot in Sandton?&rdquo;</li>
-                    <li>&ldquo;Compare Lusaka vs Nairobi for a retail business&rdquo;</li>
-                    <li>&ldquo;What land-use rules apply to commercial in Cape Town?&rdquo;</li>
-                    <li>&ldquo;What are the current logistics costs from Durban port to Zambia?&rdquo;</li>
-                  </>
-                )}
-              </ul>
             </div>
           )}
 
@@ -405,7 +402,7 @@ export function FullScreenChat({
               key={msg.id}
               msg={msg}
               onApply={applyToResults}
-              applying={applying === msg.refinedQuery}
+              applying={applying === msg.applyQuery}
             />
           ))}
         </div>
@@ -437,7 +434,7 @@ export function FullScreenChat({
             </button>
           </div>
           <div className="mt-2 font-mono text-[10px] uppercase tracking-wider text-atlas-muted">
-            Press Enter to send · Esc to close · Sources appear inline
+            Press Enter to send · Esc to close · Sources cited inline
           </div>
         </div>
       </div>
@@ -451,7 +448,7 @@ function FullScreenChatBubble({
   applying,
 }: {
   msg: ChatMessage;
-  onApply: (refinedQuery: string) => void;
+  onApply: (applyQuery: string) => void;
   applying: boolean;
 }) {
   const isUser = msg.role === "user";
@@ -464,30 +461,37 @@ function FullScreenChatBubble({
             : "bg-atlas-surface text-atlas-text"
         }`}
       >
+        {/* LCP-36 — render the body with inline source markers
+            [1], [2] rendered as small chips that link to the
+            source URL. This is the Perplexity pattern. */}
         <div className="whitespace-pre-wrap">
-          {msg.text}
+          {renderWithSourceMarkers(msg.text, msg.sources)}
           {msg.streaming && (
             <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-atlas-text align-middle" />
           )}
         </div>
 
-        {/* Sources */}
-        {!isUser && msg.sources && msg.sources.length > 0 && (
+        {/* LCP-36 — Perplexity-style: compact source list under
+            the answer with the actual URLs. The inline markers
+            above are the quick reference; this is the full
+            citation block. */}
+        {!isUser && msg.sources && msg.sources.length > 0 && !msg.streaming && (
           <div className="mt-3 space-y-1.5 border-t border-atlas-border/40 pt-3">
             <div className="font-mono text-[10px] uppercase tracking-wider text-atlas-muted">
               Sources ({msg.sources.length})
             </div>
-            <ul className="space-y-1.5">
+            <ul className="space-y-1">
               {msg.sources.slice(0, 5).map((s, i) => (
                 <li key={i}>
                   <a
                     href={s.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="block truncate text-xs text-atlas-accent hover:underline"
+                    className="flex gap-1.5 text-xs text-atlas-accent hover:underline"
                     title={s.title}
                   >
-                    [{i + 1}] {s.title}
+                    <span className="font-mono text-atlas-muted">[{i + 1}]</span>
+                    <span className="truncate">{s.title}</span>
                   </a>
                 </li>
               ))}
@@ -495,12 +499,15 @@ function FullScreenChatBubble({
           </div>
         )}
 
-        {/* Apply to results — only on atlas messages with refinedQuery */}
-        {!isUser && msg.refinedQuery && !msg.streaming && (
+        {/* LCP-36 — Apply to results on EVERY atlas message.
+            This makes the chat a quick way to re-run a result
+            with the same question, plus the server can mark
+            refinements with a richer applyQuery. */}
+        {!isUser && !msg.streaming && msg.applyQuery && (
           <div className="mt-3 border-t border-atlas-border/40 pt-3">
             <button
               type="button"
-              onClick={() => onApply(msg.refinedQuery!)}
+              onClick={() => onApply(msg.applyQuery!)}
               disabled={applying}
               className="inline-flex items-center gap-1.5 rounded border border-atlas-accent/60 bg-atlas-accent/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider text-atlas-accent transition hover:bg-atlas-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -524,45 +531,93 @@ function FullScreenChatBubble({
             </button>
           </div>
         )}
+
+        {/* LCP-36 — Perplexity-style follow-up question chips.
+            Clicking a chip sends that question as the next
+            user message — the chat continues the conversation
+            naturally. */}
+        {!isUser && msg.followups && msg.followups.length > 0 && !msg.streaming && (
+          <div className="mt-3 border-t border-atlas-border/40 pt-3">
+            <div className="mb-2 font-mono text-[10px] uppercase tracking-wider text-atlas-muted">
+              Related
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {msg.followups.map((q, i) => (
+                <FollowupChip key={i} question={q} />
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function buildContext(
-  originalQuestion?: string,
-  rankedSites?: Array<{ name: string; suburb?: string }>,
-): string {
-  const parts: string[] = [];
-  if (originalQuestion) parts.push(`Original question: ${originalQuestion}`);
-  if (rankedSites && rankedSites.length > 0) {
-    const siteList = rankedSites
-      .slice(0, 5)
-      .map((s) => `- ${s.name}${s.suburb ? ` (${s.suburb})` : ""}`)
-      .join("\n");
-    parts.push(`Top results:\n${siteList}`);
-  }
-  return parts.join("\n\n");
+function FollowupChip({ question }: { question: string }) {
+  // The chip uses a custom event so the parent can pick it up
+  // and submit it. The FullScreenChat component listens for
+  // `atlas:chat:followup` on window and calls `send(q)`.
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("atlas:chat:followup", { detail: { question } }),
+          );
+        }
+      }}
+      className="rounded-full border border-atlas-border bg-atlas-bg/50 px-3 py-1 text-xs text-atlas-text transition hover:border-atlas-accent/60 hover:bg-atlas-accent/10 hover:text-atlas-accent"
+    >
+      {question}
+    </button>
+  );
 }
 
-function detectRefinedQuery(
-  message: string,
-  context: string,
-): string | undefined {
-  // Heuristic: if the user mentions a new city, size, or specific
-  // location keywords, treat it as a refined site query.
-  const hasRefinementKeyword =
-    /\b(gauteng|sandton|cape town|lusaka|johannesburg|durban|pretoria|nairobi|kampala|accra|lagos|abidjan|harare|maputo|gaborone|windhoek|kigali|2[0-9]{3}\s*(sqm|m2|square|m\xB2)|hectare|ha\b|commercial|residential|industrial|retail|warehouse)\b/i.test(
-      message,
-    );
-  if (!hasRefinementKeyword) return undefined;
-  // If the message already contains the original context, don't double-up
-  if (!context) return message;
-  const contextWords = new Set(
-    context.toLowerCase().split(/\s+/).filter((w) => w.length > 4),
-  );
-  const messageWords = message.toLowerCase().split(/\s+/);
-  const overlap = messageWords.filter((w) => contextWords.has(w)).length;
-  if (overlap >= 3) return message;
-  return `${message} (originally: ${context})`;
+/**
+ * LCP-36 — Render body text with [1], [2] source markers
+ * turned into inline links. The marker pattern is matched
+ * against msg.sources; any un-matched markers (e.g. the
+ * server referenced [6] but only 5 sources) are rendered as
+ * plain superscripts so the user can see they exist.
+ */
+function renderWithSourceMarkers(
+  text: string,
+  sources?: ChatSource[],
+): React.ReactNode[] {
+  if (!text) return [];
+  const sourcePattern = /\[(\d+)\]/g;
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  let key = 0;
+  while ((match = sourcePattern.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index));
+    }
+    const sourceNum = parseInt(match[1], 10);
+    const source = sources?.[sourceNum - 1];
+    if (source) {
+      parts.push(
+        <a
+          key={`src-${key++}`}
+          href={source.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex h-4 min-w-[1rem] items-center justify-center rounded bg-atlas-accent/20 px-1 align-middle font-mono text-[10px] text-atlas-accent hover:bg-atlas-accent/30"
+          title={source.title}
+        >
+          [{sourceNum}]
+        </a>,
+      );
+    } else {
+      // Source out of range — render as plain text
+      parts.push(`[${sourceNum}]`);
+    }
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+  return parts;
 }
