@@ -377,12 +377,59 @@ export default async function ResultPage({
               {question.questionText}
             </p>
           </div>
-          <a
-            href="/"
-            className="shrink-0 rounded-md border border-atlas-border bg-atlas-surface px-3 py-1.5 text-xs font-medium text-atlas-text transition-colors hover:border-atlas-accent"
-          >
-            ← New
-          </a>
+          <div className="flex shrink-0 items-center gap-2">
+            {/* Day 30 — Chat button opens the full-screen chat
+                modal. Same accent-bordered pill style as the
+                sidebar version; dispatches the same
+                'atlas:openChat' CustomEvent so AppShell's
+                singleton FullScreenChat mounts. The button
+                also pre-fills the chat with the current
+                question context so the user can ask
+                follow-ups immediately. */}
+            <button
+              type="button"
+              onClick={() => {
+                if (typeof window !== "undefined") {
+                  window.dispatchEvent(
+                    new CustomEvent("atlas:openChat", {
+                      detail: {
+                        initialQuestion: `Tell me more about: ${question.questionText}`,
+                        questionContext: question.questionText,
+                        vertical: question.vertical,
+                        rankedSites: rankedSites.map((s) => ({
+                          name: s.name,
+                          suburb: (s as any).suburb,
+                        })),
+                      },
+                    }),
+                  );
+                }
+              }}
+              className="flex items-center gap-1.5 rounded-md border border-atlas-accent/60 bg-atlas-accent/10 px-3 py-1.5 text-xs font-medium text-atlas-accent transition-colors hover:bg-atlas-accent/20"
+              title="Open full-screen chat with this question"
+              data-testid="atlas-open-full-chat-result"
+            >
+              <svg
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+              </svg>
+              <span>Chat</span>
+            </button>
+            <a
+              href="/"
+              className="rounded-md border border-atlas-border bg-atlas-surface px-3 py-1.5 text-xs font-medium text-atlas-text transition-colors hover:border-atlas-accent"
+            >
+              ← New
+            </a>
+          </div>
         </header>
 
         <div className="flex-1 px-6 py-6">
