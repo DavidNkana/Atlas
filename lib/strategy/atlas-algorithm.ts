@@ -386,14 +386,15 @@ export function buildAlgorithm(
         existing.lastQualifiedAt = m.at;
       }
     }
-    // Keep up to 3 most recent mentions (by timestamp)
+    // Keep ALL qualified mentions, sorted by recency. The UI is
+    // responsible for collapsing/rendering the list. We don't cap
+    // here because the user asked to "show all qualified ones."
     existing.sample.push(m);
     existing.sample.sort((a, b) => {
       const at = new Date(a.at ?? 0).getTime();
       const bt = new Date(b.at ?? 0).getTime();
       return bt - at;
     });
-    existing.sample = existing.sample.slice(0, 3);
     agg.set(m.coin.id, existing);
   }
 

@@ -1347,6 +1347,20 @@ function AlgorithmRow({ coin }: { coin: AlgorithmTrendingCoin }) {
     (hasCryptoPanic ? 1 : 0) +
     (hasGithub ? 1 : 0);
 
+  // Per-row expand/collapse state. Default open so the user sees all
+  // qualified mentions on first render (matches the "show all qualified
+  // ones" request). User can collapse individual rows if the list is
+  // long.
+  const [expanded, setExpanded] = useState<boolean>(true);
+
+  const hasMoreThanOne = coin.sample.length > 1;
+  const SOURCE_LABEL: Record<AlgorithmSample["source"], string> = {
+    reddit: "Reddit",
+    youtube: "YouTube",
+    cryptopanic: "CryptoPanic",
+    github: "GitHub",
+  };
+
   return (
     <li className="rounded border border-atlas-border/40 bg-atlas-surface/40 p-3 transition hover:border-atlas-accent/50 hover:bg-atlas-surface">
       <div className="flex flex-wrap items-center gap-3">
@@ -1365,9 +1379,25 @@ function AlgorithmRow({ coin }: { coin: AlgorithmTrendingCoin }) {
               · {sourceCount} source{sourceCount === 1 ? "" : "s"}
             </span>
           </div>
+          {/* Top-line summary: first sample if present, plus a toggle
+              when there are more. */}
           {coin.sample.length > 0 && (
             <p className="mt-1 line-clamp-1 text-[11px] text-atlas-muted">
+              <span className="font-mono text-[10px] uppercase text-atlas-muted/80">
+                [{SOURCE_LABEL[coin.sample[0].source]}]
+              </span>{" "}
               {coin.sample[0].valueLabel}: {coin.sample[0].sample}
+              {hasMoreThanOne && (
+                <button
+                  type="button"
+                  onClick={() => setExpanded((v) => !v)}
+                  className="ml-2 font-mono text-[10px] uppercase text-atlas-accent hover:underline"
+                >
+                  {expanded
+                    ? `Hide ${coin.sample.length - 1} more`
+                    : `Show all ${coin.sample.length} qualified`}
+                </button>
+              )}
             </p>
           )}
         </div>
@@ -1403,6 +1433,35 @@ function AlgorithmRow({ coin }: { coin: AlgorithmTrendingCoin }) {
           </div>
         </div>
       </div>
+      {/* Expanded list of ALL qualified mentions. */}
+      {hasMoreThanOne && expanded && (
+        <ul className="mt-3 space-y-1.5 border-t border-atlas-border/30 pt-3">
+          {coin.sample.slice(1).map((m, i) => (
+            <li
+              key={`${m.source}-${m.at ?? "no-ts"}-${i}`}
+              className="flex flex-wrap items-baseline gap-2 text-[11px] text-atlas-muted"
+            >
+              <span className="font-mono text-[10px] uppercase text-atlas-muted/80">
+                [{SOURCE_LABEL[m.source]}]
+              </span>
+              {m.url ? (
+                <a
+                  href={m.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="line-clamp-1 flex-1 text-atlas-text hover:text-atlas-accent hover:underline"
+                >
+                  {m.valueLabel}: {m.sample}
+                </a>
+              ) : (
+                <span className="line-clamp-1 flex-1 text-atlas-text">
+                  {m.valueLabel}: {m.sample}
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
     </li>
   );
 }
