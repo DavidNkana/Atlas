@@ -454,7 +454,7 @@ export function buildAlgorithm(
     methodology: {
       rule: "Sum the digits. If odd, keep the item. If even, throw it away. Rank by mention count in the qualified set.",
       byline:
-        "Invented by the founder's boss, applied at Atlas as a social-trend filter. Not a financial signal.",
+        "Invented by Mr. Naazeem Osman, applied at Atlas as a social-trend filter. Not a financial signal.",
       perSource: {
         youtube:
           "Video duration as raw displayed digits (colon-stripped). '6:47' → 6+4+7=17 (odd, qualifies). '20:15' → 2+0+1+5=8 (even, disqualified).",

@@ -1280,7 +1280,7 @@ function AlgorithmPanel() {
               )}
             </p>
             <p className="mt-2 text-[10px] uppercase tracking-wider text-amber-400/80">
-              {data?.methodology.byline ?? "Invented by the founder's boss, applied at Atlas as a social-trend filter. Not a financial signal."}
+              {data?.methodology.byline ?? "Invented by Mr. Naazeem Osman, applied at Atlas as a social-trend filter. Not a financial signal."}
             </p>
           </div>
           <div className="flex items-center gap-2">
