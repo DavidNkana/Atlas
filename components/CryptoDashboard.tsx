@@ -290,7 +290,10 @@ export function CryptoDashboard() {
 
   const hero = feed?.coins?.[0];
 
-  // LCP-46 — show how stale the data is
+  // LCP-46 — show how stale the data is (relative + absolute UTC).
+  // The relative label is human-friendly ("12s ago") for at-a-glance
+  // trust; the absolute UTC label is precise — you can verify
+  // against an external clock that the snapshot is what we say it is.
   const lastFetchedAt = (feed as { lastFetch?: { lastFetchedAt?: string } } | null)?.lastFetch?.lastFetchedAt;
   const ageLabel = (() => {
     if (!lastFetchedAt) return null;
@@ -302,6 +305,9 @@ export function CryptoDashboard() {
     const min = Math.floor(sec / 60);
     return `${min} min ago`;
   })();
+  const utcLabel = lastFetchedAt
+    ? new Date(lastFetchedAt).toISOString().slice(11, 19) + " UTC"
+    : null;
   const displayedCoins = (() => {
     if (!feed) return [];
     if (activeTab === "movers") return [...feed.gainers, ...feed.losers];
@@ -323,6 +329,11 @@ export function CryptoDashboard() {
             {ageLabel && (
               <span>
                 Updated {ageLabel}
+                {utcLabel && (
+                  <span className="ml-1 font-mono text-atlas-muted/80">
+                    ({utcLabel})
+                  </span>
+                )}
                 {refreshing && " · refreshing…"}
               </span>
             )}
