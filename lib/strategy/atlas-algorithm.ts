@@ -1,7 +1,7 @@
 /**
  * LCP-55 — Atlas Algorithm.
  *
- * The founder's boss's rule: "Sum the digits. If odd, keep it. If even,
+ * Mr. Naazeem Osman's rule: "Sum the digits. If odd, keep it. If even,
  * throw it away." Then rank by mention count in the qualified set.
  *
  * Per-source "number to digit-sum":
@@ -19,7 +19,7 @@
  * Trending = count of qualified mentions per coin, ranked descending.
  * Return top 50.
  *
- * IMPORTANT: this is the founder's boss's rule, applied at Atlas.
+ * IMPORTANT: this is Mr. Naazeem Osman's rule, applied at Atlas.
  * Not a financial signal. The rule and its origin are surfaced
  * verbatim in the response's methodology field so anyone who sees
  * the data knows where it came from.
@@ -210,7 +210,7 @@ function filterReddit(posts: RedditPost[]): SourceFilterResult {
 
 function filterYouTube(videos: YouTubeVideoTitle[]): SourceFilterResult {
   // LCP-56 — YouTube connector now returns `duration` (ISO 8601 from
-  // contentDetails.duration). Apply the founder's boss's rule: sum
+  // contentDetails.duration). Apply Mr. Naazeem Osman's rule: sum
   // the displayed digits of the duration (colon-stripped); if odd,
   // qualify.
   const qualified: QualifiedMention[] = [];

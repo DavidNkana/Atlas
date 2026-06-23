@@ -235,30 +235,7 @@ export default function DemoPage() {
           <ScheduleDemoForm />
         </div>
         <div className="mt-6 flex justify-center">
-          {/* Day 10: downloadable one-pager for investors. PDF is in
-              /public, served as a static asset. The download attribute
-              hints the browser to save rather than navigate. */}
-          <a
-            href="/atlas-investor-one-pager.pdf"
-            download="atlas-investor-one-pager.pdf"
-            className="inline-flex items-center gap-2 rounded-md border border-atlas-border bg-atlas-bg px-4 py-2 text-xs font-medium text-atlas-text transition-colors hover:border-atlas-accent hover:text-atlas-text"
-          >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="7 10 12 15 17 10" />
-              <line x1="12" y1="15" x2="12" y2="3" />
-            </svg>
-            Download investor one-pager (PDF)
-          </a>
+          {/* Investor one-pager hidden per founder request — uncomment when ready. */}
         </div>
       </section>
 
@@ -268,7 +245,7 @@ export default function DemoPage() {
           <div className="text-sm font-semibold text-atlas-text">
             David Nkana
           </div>
-          <div className="text-xs text-atlas-muted">Founder</div>
+          <div className="text-xs text-atlas-muted">Developer</div>
           <div className="mt-2 text-xs text-atlas-text">
             African real estate operator, market knowledge, customer
             relationships.
@@ -276,7 +253,7 @@ export default function DemoPage() {
         </div>
         <div className="rounded-md border border-atlas-border bg-atlas-surface p-4">
           <div className="text-sm font-semibold text-atlas-text">Atlas</div>
-          <div className="text-xs text-atlas-muted">AI co-founder</div>
+          <div className="text-xs text-atlas-muted">AI developer</div>
           <div className="mt-2 text-xs text-atlas-text">
             Architecture, implementation, deployment, ops. On call 24/7.
           </div>
