@@ -118,9 +118,9 @@ export const geminiSearch: Model = {
       // (8s default) so we don't blow the route budget.
       const modelIdsToTry = [
         { model: 'gemini-2.0-flash', tool: 'googleSearch' },
-        // 1.5-flash-8b doesn't support googleSearch. Use the older
-        // googleSearchRetrieval tool or no tools at all (plain text).
-        { model: 'gemini-1.5-flash-8b', tool: 'none' },
+        // 1.5-flash-8b returned 404 — deprecated or not available. Only
+        // keep the primary model. On 429, retry after 5s then fall through
+        // to OpenRouter.
       ];
       let text: string | undefined;
       let result: any;

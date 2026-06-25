@@ -10,17 +10,22 @@ function humanVertical(v: string): string {
 }
 
 function buildPrompt(req: ModelRequest): string {
-  // Day 17 v1: drop response_format requirement, allow prose. The
-  // lenient parser extracts sites from either shape.
+  // LCP-64 v2 — sectioned rationale matching Gemini's upgraded format.
   return (
-    'You are Atlas, a site-selection intelligence engine. The user wants to find the best location for a ' +
-    humanVertical(req.vertical) +
-    ' given this question: "' +
-    req.question +
-    '".\n\n' +
-    'Either return JSON in this shape:\n' +
-    '{"ranked_sites":[{"rank":1,"name":"<place>","suburb":"<suburb label>","score":<0-1>,"confidence":<0-1>,"rationale":"<1-2 sentences>","lat":<decimal latitude>,"lng":<decimal longitude>}]}\n\n' +
-    'Or return a natural prose answer naming up to 5 real place names with their city context (e.g. "Observatory, Cape Town"). Use real suburb names. Be specific.'
+    'You are Atlas, a site-selection intelligence engine for African builders and investors.\n' +
+    'The user wants to find the best location for a ' + humanVertical(req.vertical) +
+    ' given this question: "' + req.question + '".\n\n' +
+    'Return STRICT JSON (no markdown, no commentary) in this exact shape:\n' +
+    '{"answer":"<one paragraph summary>","ranked_sites":[' +
+    '{"rank":1,"name":"<suburb or area name>","suburb":"<suburb>","score":<0-1>,"confidence":<0-1>,' +
+    '"rationale":"<2-3 sentences: why this fits>",' +
+    '"advantages":{"economic":"<1 paragraph: commercial activity, prices, business density, spending power>",' +
+    '"geographic":"<1 paragraph: terrain, flood risk, soil, elevation>",' +
+    '"logistical":"<1 paragraph: road access, freight routes, public transport, airports>",' +
+    '"demographic":"<1 paragraph: population, income brackets, age, growth rate>"},' +
+    '"disadvantages":"<1 paragraph: competition, zoning, congestion, crime, supplier distance, seasonal demand>"},' +
+    '"lat":<decimal>,"lng":<decimal>}]}\n\n' +
+    'Provide up to 5 ranked sites. Use real suburb names, real property price bands, real landmarks. Be specific.'
   );
 }
 
