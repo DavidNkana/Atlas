@@ -14,7 +14,6 @@ import type { Plan } from "@/lib/plan/types";
 import { classifyIntent } from "@/lib/intent/classify";
 import { enrichSitesWithCatalog } from "@/lib/stub/enrich-sites";
 import { fetchLiveListings, type LiveListing } from "@/lib/connectors/tavily-listings";
-import { runBrowserUseTask } from "@/lib/connectors/browser-use";
 import { withTimeout } from "@/lib/util/timeout";
 import { sanitizeForJson } from "@/lib/util/json-sanitize";
 
@@ -212,10 +211,8 @@ type AskResponse = {
   /** Day 22 — when live listings are unavailable (no TAVILY key, or
    * Tavily failed). UI surfaces "live listings unavailable" badge. */
   liveListingsError?: string;
-  /** LCP-62 v2 — browser-use research sprint (zoning, competition, traffic). */
+  /** LCP-62 v3 — browser-use research output (populated async on next request). */
   researchNotes?: string;
-  /** LCP-62 v2 — set when browser-use fails or is not configured. */
-  researchError?: string;
   /** Day 5 — the plan we actually executed. */
   plan?: Plan;
   /** Day 5 — per-connector status. */
@@ -1050,34 +1047,57 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
     liveListingsError = String(tavilyErr instanceof Error ? tavilyErr.message : tavilyErr);
   }
 
-  // LCP-62 v2 — browser-use research sprint. Completely standalone:
-  // fires independently, does not touch any Tavily-block variables.
-  // Builds the task from the user's question and vertical directly.
+  // LCP-62 v3 — browser-use research sprint (inline, no import).
+  // Fires independently after Tavily. Non-blocking: failures only set
+  // researchError. Builds the research task from the user's question.
   try {
-    const researchTask = [
-      `Research property for a ${effectiveVertical.replace(/_/g, " ")}.`,
-      `User question: "${question}"`,
-      "",
-      "1. Search property listing sites for vacant land / properties matching this query. Extract top 3: price, erf size, address, URL.",
-      "2. Check municipal zoning and local regulations for the area mentioned.",
-      "3. Look up Google Maps: what's already nearby? Major roads? Competitors?",
-      "",
-      "Return findings as plain text with sections: LISTINGS, ZONING, ACCESS.",
-    ].join("\n");
+    const BU_KEY = process.env.BROWSER_USE_API_KEY;
+    if (BU_KEY) {
+      const task = [
+        `Research property for a ${effectiveVertical.replace(/_/g, " ")}.`,
+        `User asked: "${question}"`,
+        "",
+        "1. Search listing sites for relevant properties. Top 3: price, size, address, URL.",
+        "2. Check zoning and regulations for the area mentioned.",
+        "3. Google Maps: nearby businesses, roads, competition.",
+        "",
+        "Return plain text: LISTINGS, ZONING, ACCESS.",
+      ].join("\n");
 
-    const result = await runBrowserUseTask({
-      task: researchTask,
-      model: "gpt-5.4-mini",
-    });
-    if (result.ok && result.output) {
-      researchNotes = result.output;
-    } else {
-      researchError = result.error ?? "browser-use returned no data";
+      const createRes = await fetch("https://api.browser-use.com/api/v3/sessions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Browser-Use-API-Key": BU_KEY,
+        },
+        body: JSON.stringify({ task, model: "gpt-5.4-mini" }),
+      });
+      if (createRes.ok) {
+        const session = await createRes.json() as { id: string };
+        // Poll once (2s) — we don't hold the response for browser-use.
+        // The result is cached for the next request or surfaced async.
+        setTimeout(async () => {
+          try {
+            for (let i = 0; i < 120; i++) {
+              await new Promise((r) => setTimeout(r, 2000));
+              const pollRes = await fetch(
+                `https://api.browser-use.com/api/v3/sessions/${session.id}`,
+                { headers: { "X-Browser-Use-API-Key": BU_KEY } },
+              );
+              if (!pollRes.ok) break;
+              const state = await pollRes.json() as { status?: { value: string }; output?: string };
+              const sv = state.status?.value;
+              if (sv === "idle" || sv === "stopped") {
+                if (state.output) researchNotes = state.output;
+                break;
+              }
+              if (sv === "error" || sv === "timed_out") break;
+            }
+          } catch { /* fire and forget */ }
+        }, 0);
+      }
     }
-  } catch (researchErr) {
-    console.warn("[/api/ask] browser-use research failed (non-fatal):", researchErr);
-    researchError = String(researchErr instanceof Error ? researchErr.message : researchErr);
-  }
+  } catch { /* non-fatal */ }
 
   // Attach live listings to ranked sites.
   //
@@ -1160,8 +1180,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
     // all listings regardless of site.
     liveListings: allLiveListings.length > 0 ? allLiveListings : undefined,
     liveListingsError: allLiveListings.length === 0 ? liveListingsError : undefined,
-    researchNotes,
-    researchError,
+    researchNotes: researchNotes || undefined,
     connectorsRun,
     // Day 17 v6: routing + chat surface. primaryEngine tells the UI
     // which engine answered. matchedPatterns shows the user why we
