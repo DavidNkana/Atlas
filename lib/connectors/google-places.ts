@@ -7,8 +7,9 @@
  * wedding venues near a Constantia plot, restaurants near a CBD spot.
  *
  * API: /place/nearbysearch/json?location={lat},{lng}&radius={radius}&type={type}&key={KEY}
- * Key: NEXT_PUBLIC_GOOGLE_MAPS_API_KEY (same key as Maps, needs Places API enabled).
- * Free tier: 200 requests/day. We stay well under it by caching 1 hour.
+ * Key: GOOGLE_PLACES_API_KEY (separate from Maps key — server calls have
+ * no HTTP referrer. Create one at console.cloud.google.com/apis/credentials
+ * with no restriction or IP restriction). Falls back to NEXT_PUBLIC_GOOGLE_MAPS_API_KEY.
  *
  * Business-type mapping: the vertical name (gas_station, restaurant, etc.)
  * is mapped to Google Places types. If no exact type match, we use a keyword
@@ -16,7 +17,7 @@
  * funeral_home, cattery, etc.).
  */
 
-const PLACES_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+const PLACES_KEY = process.env.GOOGLE_PLACES_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 const PLACES_BASE = "https://maps.googleapis.com/maps/api/place/nearbysearch/json";
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour — competitors don't change hourly
 
