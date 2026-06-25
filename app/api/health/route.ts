@@ -5,7 +5,7 @@
  *
  * Tests each research model in sequence and reports:
  *   - Is the key configured?
- *   - Is the key format valid (AIzaSy for AI Studio, sk-or-v1 for
+ *   - Is the key format valid (recognized prefix check)
  *     OpenRouter, etc)?
  *   - Does a tiny test call succeed?
  *
@@ -50,15 +50,8 @@ function checkKey(
     };
   }
   // Detect common wrong formats
-  if (key.startsWith("AQ.") && envName.includes("GEMINI")) {
-    return {
-      id: envName,
-      configured: true,
-      keyFormat: "wrong-format",
-      detail:
-        "Vertex AI service account key detected. Atlas needs an AI Studio AIzaSy... key instead. Get one free at aistudio.google.com/apikey",
-    };
-  }
+  // (removed AQ. rejection — Google AI Studio now issues AQ.* keys,
+  // replacing the old AIzaSy... format as of 2026.)
   return {
     id: envName,
     configured: true,
@@ -75,13 +68,13 @@ export async function GET(_req: NextRequest) {
   const perplexityKey = process.env.PERPLEXITY_API_KEY;
 
   const checks: ModelHealth[] = [
-    checkKey("GEMINI_API_KEY", geminiKey, ["AIzaSy"]),
+    checkKey("GEMINI_API_KEY", geminiKey, ["AIzaSy", "AQ."]),
     checkKey("TAVILY_API_KEY", tavilyKey, ["tvly-"]),
     checkKey("OPENROUTER_API_KEY", openrouterKey, ["sk-or-"]),
     checkKey("PERPLEXITY_API_KEY", perplexityKey, ["pplx-"]),
   ];
 
-  // Test Gemini with a tiny call if it's a valid AI Studio key
+  // Test Gemini with a tiny call if the key format is recognized
   const geminiCheck = checks[0];
   if (geminiCheck.keyFormat === "valid" && geminiKey) {
     try {
@@ -161,9 +154,9 @@ export async function GET(_req: NextRequest) {
         anyMissing,
       },
       fixInstructions: anyMissing
-        ? "Set the missing env vars in Vercel. For GEMINI_API_KEY, use an AI Studio key (AIzaSy...) from aistudio.google.com/apikey. Vertex AI AQ.* keys will not work with Atlas's reasoning engine."
+        ? "Set the missing env vars in Vercel. For GEMINI_API_KEY, use an AI Studio key from aistudio.google.com/apikey."
         : checks.find((c) => c.keyFormat === "wrong-format")
-          ? "GEMINI_API_KEY is set but uses the wrong format (Vertex AI AQ.*). Atlas needs an AI Studio AIzaSy... key. Get one free at aistudio.google.com/apikey"
+          ? "GEMINI_API_KEY is set but uses an unrecognized format. Atlas needs an AI Studio key. Get one free at aistudio.google.com/apikey"
           : "All keys configured.",
       elapsedMs: Date.now() - t0,
     },
