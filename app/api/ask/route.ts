@@ -13,6 +13,7 @@ import { buildPlan } from "@/lib/plan/planner";
 import type { Plan } from "@/lib/plan/types";
 import { classifyIntent } from "@/lib/intent/classify";
 import { enrichSitesWithCatalog } from "@/lib/stub/enrich-sites";
+import { detectCity } from "@/lib/stub/detect";
 import { fetchLiveListings, type LiveListing } from "@/lib/connectors/tavily-listings";
 import { runBrowserUseTask, buildAtlasResearchTask, type BrowserUseResult } from "@/lib/connectors/browser-use";
 import { withTimeout } from "@/lib/util/timeout";
@@ -977,7 +978,12 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   }> = [];
   try {
     location = deriveLocation(rankedSites);
-    cityName = (location as any)?.name ?? null;
+    // deriveLocation returns {lat, lng, label} — NOT {name}.
+    // Use label first, then fall back to detecting the city from the user's question text.
+    cityName = location?.label ?? null;
+    if (!cityName || cityName.length < 2) {
+      cityName = detectCity(question).name;
+    }
     // Build per-site price/erf hints from enriched sites (so the query
     // matches what the developer asked for, not generic suburb terms).
     hints = rankedSites
@@ -1008,11 +1014,15 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
     // not STEP_B_TIMEOUT_MS (5s) — the listings pipeline takes 6-10s
     // minimum for 7 portal searches + extracts. creditBudget=14
     // covers all 7 portals.
+    // Detect actual country for Tavily queries (before LCP-60 this was
+    // hardcoded to "" which made every query use the broad web fallback).
+    const detectedCity = detectCity(question);
+    const countryName = detectedCity?.country ?? "";
     const perSuburbResults = await Promise.allSettled(
       hints.map((h) =>
         withTimeout(
           fetchLiveListings({
-            city: { id: "", name: h.cityName, country: "" },
+            city: { id: "", name: h.cityName, country: countryName },
             suburb: h.suburb,
             vertical: effectiveVertical,
             priceBand: h.priceBand,
