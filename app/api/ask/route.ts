@@ -1009,6 +1009,20 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
       .filter((h): h is NonNullable<typeof h> => h !== null)
       .slice(0, 3);
 
+    // Fallback: if no sites yielded hints (common for non-SA cities
+    // where Gemini doesn't return geographically-identifiable suburbs),
+    // fire a single city-level search with the detected city name.
+    // Without this, Lusaka/Nairobi/Kitwe queries burn zero Tavily calls
+    // while looking like they tried.
+    if (hints.length === 0 && cityName) {
+      hints = [{
+        suburb: null,
+        cityName,
+        priceBand: null,
+        plotSizeHectares: null,
+      }];
+    }
+
     // Day 22 v12: run one search per hint (max 3) — gives Perplexity-
     // style depth (per-suburb). Use TAVILY_LISTINGS_TIMEOUT_MS (15s)
     // not STEP_B_TIMEOUT_MS (5s) — the listings pipeline takes 6-10s
