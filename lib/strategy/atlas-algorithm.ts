@@ -214,6 +214,7 @@ function filterYouTube(videos: YouTubeVideoTitle[]): SourceFilterResult {
   // the displayed digits of the duration (colon-stripped); if odd,
   // qualify.
   const qualified: QualifiedMention[] = [];
+  const seen = new Set<string>(); // track (videoId, coinId) pairs to de-duplicate
   for (const video of videos) {
     if (!video.duration) continue;
     const check = youTubeDurationQualifies(video.duration);
@@ -221,6 +222,12 @@ function filterYouTube(videos: YouTubeVideoTitle[]): SourceFilterResult {
     const text = `${video.title} ${video.description}`;
     const coin = pickCoinInText(text);
     if (!coin) continue;
+    // De-duplicate: the same video often appears in multiple YouTube
+    // search results (different coin queries resolve to the same coin
+    // via pickCoinInText). Count each (video, coin) pair only once.
+    const key = `${video.id}:${coin.id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
     qualified.push({
       source: "youtube",
       coin,
