@@ -148,6 +148,13 @@ export const SA_PORTALS = [
     vacantLandPath: "vacant-land",
     salePath: "for-sale",
   },
+  {
+    id: "web",
+    label: "Web",
+    domain: "",
+    vacantLandPath: "",
+    salePath: "",
+  },
 ] as const;
 
 export type SaPortalId = (typeof SA_PORTALS)[number]["id"];
@@ -171,6 +178,7 @@ export function buildListingsQuery(opts: ListingsFetchOptions): {
   const secondaryKw = wantLand ? "vacant land" : verticalKws[1] ?? primaryKw;
 
   const city = opts.city.name;
+  const country = opts.city.country;
   const locationParts = opts.suburb ? `${opts.suburb} ${city}` : city;
 
   let sizeHint = "";
@@ -181,13 +189,27 @@ export function buildListingsQuery(opts: ListingsFetchOptions): {
 
   const base = `${primaryKw} ${secondaryKw} ${locationParts}${sizeHint}`.trim();
 
-  return {
-    queries: SA_PORTALS.map((p) => ({
-      portal: p.id,
-      query: `site:${p.domain} ${base}`.trim(),
-      label: p.label,
-    })),
-  };
+  // Pick portals based on the detected country. South Africa uses the
+  // site:-restricted SA portals (Property24, PrivateProperty, etc.).
+  // Cities in other countries use a single broad Tavily search — the
+  // city + country names in the query naturally bias results to local
+  // portals without needing per-country portal lists.
+  const isSA = country === "South Africa";
+  const portals = isSA
+    ? SA_PORTALS.map((p) => ({
+        portal: p.id,
+        query: `site:${p.domain} ${base}`.trim(),
+        label: p.label,
+      }))
+    : [
+        {
+          portal: "web" as SaPortalId,
+          query: `${base} ${country} property for sale`,
+          label: `Web (${city}, ${country})`,
+        },
+      ];
+
+  return { queries: portals };
 }
 
 /**
@@ -535,8 +557,8 @@ function inferPortalFromUrl(url: string): SaPortalId {
   if (lower.includes("pamgolding.co.za")) return "pamgolding";
   if (lower.includes("seeff.com")) return "seeff";
   if (lower.includes("chaseveritt.co.za")) return "chaseveritt";
-  // Unknown — label as property24 as fallback (most common)
-  return "property24";
+  // Unknown — label as generic web portal (non-SA listing or unrecognized portal)
+  return "web";
 }
 
 function hashUrl(url: string): string {
