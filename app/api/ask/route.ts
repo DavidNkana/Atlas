@@ -1094,6 +1094,8 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
       } else {
         researchError = `browser-use session creation failed (${createRes.status})`;
       }
+    } else {
+      researchError = "BROWSER_USE_API_KEY not set in Vercel env";
     }
   } catch (researchErr) {
     researchError = String(researchErr instanceof Error ? researchErr.message : researchErr);
