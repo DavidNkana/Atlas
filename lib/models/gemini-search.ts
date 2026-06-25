@@ -34,14 +34,21 @@ Return STRICT JSON (no markdown, no commentary, just the JSON object) in this ex
       "suburb": "<suburb name>",
       "score": <0.0-1.0>,
       "confidence": <0.0-1.0>,
-      "rationale": "<2-3 sentences: why this area fits what the user asked, mention specific real schools/amenities/landmarks, property price band if relevant>",
+      "rationale": "<2-3 sentences: why this area fits what the user asked, key advantages>",
+      "advantages": {
+        "economic": "<1 paragraph: commercial activity in this area, property price trends, business density, spending power of residents, rental yields if relevant>",
+        "geographic": "<1 paragraph: terrain, altitude, flood risk, soil type if relevant to the query (e.g. good for foundations, slope for drainage, near water source)>",
+        "logistical": "<1 paragraph: access to main roads, distance to CBD, public transport, freight routes, nearest airport or port>",
+        "demographic": "<1 paragraph: population density, income brackets, age profile, commuter patterns, growth rate>"
+      },
+      "disadvantages": "<1 paragraph: what makes this site harder — competition, zoning restrictions, traffic congestion, crime, distance from suppliers, seasonal demand issues>",
       "lat": <decimal latitude>,
       "lng": <decimal longitude>
     }
   ]
 }
 
-Provide up to 5 ranked suburbs. Use real suburb names. Mention real school names, real property price bands (e.g. 'R 4-6M family homes', 'R 12-25M luxury estates'), and real landmarks where you know them. Cite Wikipedia / property portals / news sites you can find with a quick search. For each suburb, also include "lat" and "lng" as decimal coordinates so we can plot it on a map.`;
+Provide up to 5 ranked suburbs. For each, write full paragraphs in advantages (economic, geographic, logistical, demographic) and disadvantages. Use real data: property price bands (e.g. 'R 4-6M family homes'), real school names, real landmarks. Cite sources where you can. Include lat/lng for every site.`;
 }
 
 /**
