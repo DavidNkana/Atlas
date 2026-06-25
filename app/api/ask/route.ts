@@ -14,6 +14,7 @@ import type { Plan } from "@/lib/plan/types";
 import { classifyIntent } from "@/lib/intent/classify";
 import { enrichSitesWithCatalog } from "@/lib/stub/enrich-sites";
 import { fetchLiveListings, type LiveListing } from "@/lib/connectors/tavily-listings";
+import { runBrowserUseTask } from "@/lib/connectors/browser-use";
 import { withTimeout } from "@/lib/util/timeout";
 import { sanitizeForJson } from "@/lib/util/json-sanitize";
 
@@ -211,6 +212,10 @@ type AskResponse = {
   /** Day 22 — when live listings are unavailable (no TAVILY key, or
    * Tavily failed). UI surfaces "live listings unavailable" badge. */
   liveListingsError?: string;
+  /** LCP-62 v2 — browser-use research sprint (zoning, competition, traffic). */
+  researchNotes?: string;
+  /** LCP-62 v2 — set when browser-use fails or is not configured. */
+  researchError?: string;
   /** Day 5 — the plan we actually executed. */
   plan?: Plan;
   /** Day 5 — per-connector status. */
@@ -835,6 +840,8 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   let allLiveListings: LiveListing[] = [];
   /** Day 22 — when Tavily fails for any reason; UI surfaces a non-fatal badge. */
   let liveListingsError: string | undefined;
+  let researchNotes: string | undefined;
+  let researchError: string | undefined;
 
   try {
     await withTimeout((async () => {
@@ -1043,6 +1050,35 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
     liveListingsError = String(tavilyErr instanceof Error ? tavilyErr.message : tavilyErr);
   }
 
+  // LCP-62 v2 — browser-use research sprint. Completely standalone:
+  // fires independently, does not touch any Tavily-block variables.
+  // Builds the task from the user's question and vertical directly.
+  try {
+    const researchTask = [
+      `Research property for a ${effectiveVertical.replace(/_/g, " ")}.`,
+      `User question: "${question}"`,
+      "",
+      "1. Search property listing sites for vacant land / properties matching this query. Extract top 3: price, erf size, address, URL.",
+      "2. Check municipal zoning and local regulations for the area mentioned.",
+      "3. Look up Google Maps: what's already nearby? Major roads? Competitors?",
+      "",
+      "Return findings as plain text with sections: LISTINGS, ZONING, ACCESS.",
+    ].join("\n");
+
+    const result = await runBrowserUseTask({
+      task: researchTask,
+      model: "gpt-5.4-mini",
+    });
+    if (result.ok && result.output) {
+      researchNotes = result.output;
+    } else {
+      researchError = result.error ?? "browser-use returned no data";
+    }
+  } catch (researchErr) {
+    console.warn("[/api/ask] browser-use research failed (non-fatal):", researchErr);
+    researchError = String(researchErr instanceof Error ? researchErr.message : researchErr);
+  }
+
   // Attach live listings to ranked sites.
   //
   // Day 22 v14: the strict suburb-name match (`listingSuburb === siteSuburb`)
@@ -1124,6 +1160,8 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
     // all listings regardless of site.
     liveListings: allLiveListings.length > 0 ? allLiveListings : undefined,
     liveListingsError: allLiveListings.length === 0 ? liveListingsError : undefined,
+    researchNotes,
+    researchError,
     connectorsRun,
     // Day 17 v6: routing + chat surface. primaryEngine tells the UI
     // which engine answered. matchedPatterns shows the user why we
