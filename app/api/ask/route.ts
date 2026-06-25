@@ -1074,7 +1074,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
       if (createRes.ok) {
         const session = await createRes.json() as { id: string; live_url?: string };
         researchLiveUrl = session.live_url;
-        // Poll for up to 8 seconds — enough for simple tasks to complete.
+        // Poll for up to 8 seconds
         const deadline = Date.now() + 8000;
         while (Date.now() < deadline) {
           await new Promise((r) => setTimeout(r, 1500));
@@ -1092,7 +1092,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
           if (sv === "error" || sv === "timed_out") break;
         }
       } else {
-        researchError = `browser-use session failed (${createRes.status})`;
+        researchError = `browser-use session creation failed (${createRes.status})`;
       }
     }
   } catch (researchErr) {

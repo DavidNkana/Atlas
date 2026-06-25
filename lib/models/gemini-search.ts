@@ -110,31 +110,40 @@ export const geminiSearch: Model = {
       // then 2.5-flash. Each try has its own per-model timeout
       // (8s default) so we don't blow the route budget.
       const modelIdsToTry = [
+        // gemini-1.5-flash deprecated (404), gemini-2.5-flash unstable (503).
+        // Keep only the stable one. On 429, retry once with a 2s delay.
         { model: 'gemini-2.0-flash', tool: 'googleSearch' },
-        { model: 'gemini-1.5-flash', tool: 'googleSearchRetrieval' },
-        { model: 'gemini-2.5-flash', tool: 'googleSearch' },
       ];
       let text: string | undefined;
       let result: any;
       const errorLog: string[] = [];
       for (const { model: modelId, tool: toolName } of modelIdsToTry) {
-        try {
-          const m = genAI.getGenerativeModel({
-            model: modelId,
-            tools: toolName === 'googleSearch'
-              ? [{ googleSearch: {} } as any]
-              : [{ googleSearchRetrieval: {} } as any],
-          });
-          const r = await m.generateContent(buildPrompt(req));
-          text = r.response.text();
-          result = r;
-          // If we got here, this model worked. Break out of the loop.
-          break;
-        } catch (modelErr) {
-          const msg = modelErr instanceof Error ? modelErr.message : String(modelErr);
-          errorLog.push(`${modelId}: ${msg.slice(0, 150)}`);
-          // Try the next model.
+        // Try the model. On 429 (rate limited), wait 2s and retry once.
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            const m = genAI.getGenerativeModel({
+              model: modelId,
+              tools: toolName === 'googleSearch'
+                ? [{ googleSearch: {} } as any]
+                : [{ googleSearchRetrieval: {} } as any],
+            });
+            const r = await m.generateContent(buildPrompt(req));
+            text = r.response.text();
+            result = r;
+            break; // success — exit retry loop
+          } catch (modelErr) {
+            const msg = modelErr instanceof Error ? modelErr.message : String(modelErr);
+            const isRateLimit = msg.includes("429");
+            if (isRateLimit && attempt === 0) {
+              errorLog.push(`${modelId}: 429 (retrying in 2s)`);
+              await new Promise((r) => setTimeout(r, 2000));
+              continue; // retry
+            }
+            errorLog.push(`${modelId}: ${msg.slice(0, 150)}`);
+            break; // non-429 or exhausted retries
+          }
         }
+        if (text && result) break; // got a result, stop trying models
       }
       if (!text || !result) {
         return {
