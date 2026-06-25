@@ -110,11 +110,10 @@ export const geminiSearch: Model = {
       // then 2.5-flash. Each try has its own per-model timeout
       // (8s default) so we don't blow the route budget.
       const modelIdsToTry = [
-        // gemini-1.5-flash deprecated (404), gemini-2.5-flash unstable (503).
-        // Try 2.0-flash first (primary). If rate-limited (429), fall back to
-        // 1.5-flash-8b which may have separate quota. Both have Google Search.
         { model: 'gemini-2.0-flash', tool: 'googleSearch' },
-        { model: 'gemini-1.5-flash-8b', tool: 'googleSearch' },
+        // 1.5-flash-8b doesn't support googleSearch. Use the older
+        // googleSearchRetrieval tool or no tools at all (plain text).
+        { model: 'gemini-1.5-flash-8b', tool: 'none' },
       ];
       let text: string | undefined;
       let result: any;
@@ -125,9 +124,11 @@ export const geminiSearch: Model = {
           try {
             const m = genAI.getGenerativeModel({
               model: modelId,
-              tools: toolName === 'googleSearch'
-                ? [{ googleSearch: {} } as any]
-                : [{ googleSearchRetrieval: {} } as any],
+              ...(toolName === 'googleSearch'
+                ? { tools: [{ googleSearch: {} } as any] }
+                : toolName === 'googleSearchRetrieval'
+                  ? { tools: [{ googleSearchRetrieval: {} } as any] }
+                  : {}), // 'none' — no tools, plain text generation
             });
             const r = await m.generateContent(buildPrompt(req));
             text = r.response.text();
