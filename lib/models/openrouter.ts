@@ -39,6 +39,8 @@ const CURATED_STUB_SLUGS: string[] = [
   'meta-llama/llama-3.3-70b-instruct:free',
   'google/gemini-2.0-flash-exp:free',
   'mistralai/mistral-small-3.2-24b-instruct:free',
+  'nousresearch/deephermes-3-llama-3-8b:free',
+  'deepseek/deepseek-r1-distill-qwen-32b:free',
 ];
 
 /**
