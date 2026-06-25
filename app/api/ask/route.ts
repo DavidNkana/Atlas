@@ -14,6 +14,7 @@ import type { Plan } from "@/lib/plan/types";
 import { classifyIntent } from "@/lib/intent/classify";
 import { enrichSitesWithCatalog } from "@/lib/stub/enrich-sites";
 import { fetchLiveListings, type LiveListing } from "@/lib/connectors/tavily-listings";
+import { runBrowserUseTask, buildAtlasResearchTask, type BrowserUseResult } from "@/lib/connectors/browser-use";
 import { withTimeout } from "@/lib/util/timeout";
 import { sanitizeForJson } from "@/lib/util/json-sanitize";
 
@@ -211,6 +212,11 @@ type AskResponse = {
   /** Day 22 — when live listings are unavailable (no TAVILY key, or
    * Tavily failed). UI surfaces "live listings unavailable" badge. */
   liveListingsError?: string;
+  /** LCP-62 — browser-use research agent output. Multi-site research
+   * sprint: zoning, competitor analysis, traffic data. */
+  researchNotes?: string;
+  /** LCP-62 — when browser-use fails or is not configured. */
+  researchError?: string;
   /** Day 5 — the plan we actually executed. */
   plan?: Plan;
   /** Day 5 — per-connector status. */
@@ -835,6 +841,8 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   let allLiveListings: LiveListing[] = [];
   /** Day 22 — when Tavily fails for any reason; UI surfaces a non-fatal badge. */
   let liveListingsError: string | undefined;
+  let researchNotes: string | undefined;
+  let researchError: string | undefined;
 
   try {
     await withTimeout((async () => {
@@ -959,12 +967,20 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   //   2. site.name — split on "," and take the first segment
   //      (e.g. "Sandton CBD, Johannesburg" → "Sandton CBD")
   //   3. detectCity(question).name — city-only fallback
+  let location: any = null;
+  let cityName: string | null = null;
+  let hints: Array<{
+    suburb: string | null;
+    cityName: string;
+    priceBand: string | null;
+    plotSizeHectares: number | null;
+  }> = [];
   try {
-    const location = deriveLocation(rankedSites);
-    const cityName = (location as any)?.name ?? null;
+    location = deriveLocation(rankedSites);
+    cityName = (location as any)?.name ?? null;
     // Build per-site price/erf hints from enriched sites (so the query
     // matches what the developer asked for, not generic suburb terms).
-    const hints = rankedSites
+    hints = rankedSites
       .map((s) => {
         const explicitSuburb = ((s as any).suburb as string | undefined) ?? null;
         const nameField = (s.name ?? "").trim();
@@ -1029,6 +1045,47 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   } catch (tavilyErr) {
     console.warn("[/api/ask] tavily-listings failed (non-fatal):", tavilyErr);
     liveListingsError = String(tavilyErr instanceof Error ? tavilyErr.message : tavilyErr);
+  }
+
+  // LCP-62 — browser-use multi-site research sprint.
+  // Fires in parallel with Tavily listings (above). Uses the first
+  // hint's city/suburb to build a research task. Browser-use spins
+  // up a real browser with stealth + residential proxy, navigates
+  // Property24 + municipal zoning + Google Maps, and returns a
+  // structured research summary.
+  //
+  // Timeboxed at 4 minutes. If it times out or fails, the response
+  // still ships — researchNotes is non-blocking.
+  try {
+    const primaryHint = hints.length > 0 ? hints[0] : null;
+    if (primaryHint) {
+      const researchTask = buildAtlasResearchTask({
+        city: primaryHint.cityName,
+        country: "South Africa", // default; city detection picks this up
+        suburb: primaryHint.suburb,
+        vertical: effectiveVertical,
+        plotSizeHectares: primaryHint.plotSizeHectares ?? undefined,
+      });
+      const proxyCountry = primaryHint.cityName === "Lusaka" || primaryHint.cityName === "Kitwe" || primaryHint.cityName === "Ndola" || primaryHint.cityName === "Livingstone" ? "zm"
+        : primaryHint.cityName === "Nairobi" || primaryHint.cityName === "Mombasa" ? "ke"
+        : primaryHint.cityName === "Harare" ? "zw"
+        : "za";
+
+      const researchResult = await runBrowserUseTask({
+        task: researchTask,
+        model: "gpt-5.4-mini",
+        proxyCountryCode: proxyCountry,
+      });
+
+      if (researchResult.ok) {
+        researchNotes = researchResult.output;
+      } else {
+        researchError = researchResult.error ?? "browser-use returned no data";
+      }
+    }
+  } catch (researchErr) {
+    console.warn("[/api/ask] browser-use research failed (non-fatal):", researchErr);
+    researchError = String(researchErr instanceof Error ? researchErr.message : researchErr);
   }
 
   // Attach live listings to ranked sites.
@@ -1112,6 +1169,8 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
     // all listings regardless of site.
     liveListings: allLiveListings.length > 0 ? allLiveListings : undefined,
     liveListingsError: allLiveListings.length === 0 ? liveListingsError : undefined,
+    researchNotes,
+    researchError,
     connectorsRun,
     // Day 17 v6: routing + chat surface. primaryEngine tells the UI
     // which engine answered. matchedPatterns shows the user why we
