@@ -111,8 +111,10 @@ export const geminiSearch: Model = {
       // (8s default) so we don't blow the route budget.
       const modelIdsToTry = [
         // gemini-1.5-flash deprecated (404), gemini-2.5-flash unstable (503).
-        // Keep only the stable one. On 429, retry once with a 2s delay.
+        // Try 2.0-flash first (primary). If rate-limited (429), fall back to
+        // 1.5-flash-8b which may have separate quota. Both have Google Search.
         { model: 'gemini-2.0-flash', tool: 'googleSearch' },
+        { model: 'gemini-1.5-flash-8b', tool: 'googleSearch' },
       ];
       let text: string | undefined;
       let result: any;
@@ -135,8 +137,8 @@ export const geminiSearch: Model = {
             const msg = modelErr instanceof Error ? modelErr.message : String(modelErr);
             const isRateLimit = msg.includes("429");
             if (isRateLimit && attempt === 0) {
-              errorLog.push(`${modelId}: 429 (retrying in 2s)`);
-              await new Promise((r) => setTimeout(r, 2000));
+              errorLog.push(`${modelId}: 429 (retrying in 5s)`);
+              await new Promise((r) => setTimeout(r, 5000));
               continue; // retry
             }
             errorLog.push(`${modelId}: ${msg.slice(0, 150)}`);
