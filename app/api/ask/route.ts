@@ -211,8 +211,10 @@ type AskResponse = {
   /** Day 22 — when live listings are unavailable (no TAVILY key, or
    * Tavily failed). UI surfaces "live listings unavailable" badge. */
   liveListingsError?: string;
-  /** LCP-62 v3 — browser-use research output (populated async on next request). */
+  /** LCP-62 v4 — browser-use research output (polled for up to 8s). */
   researchNotes?: string;
+  /** LCP-62 v4 — live browser URL to watch the agent work. */
+  researchLiveUrl?: string;
   /** Day 5 — the plan we actually executed. */
   plan?: Plan;
   /** Day 5 — per-connector status. */
@@ -839,6 +841,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   let liveListingsError: string | undefined;
   let researchNotes: string | undefined;
   let researchError: string | undefined;
+  let researchLiveUrl: string | undefined;
 
   try {
     await withTimeout((async () => {
@@ -1047,9 +1050,9 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
     liveListingsError = String(tavilyErr instanceof Error ? tavilyErr.message : tavilyErr);
   }
 
-  // LCP-62 v3 — browser-use research sprint (inline, no import).
-  // Fires independently after Tavily. Non-blocking: failures only set
-  // researchError. Builds the research task from the user's question.
+  // LCP-62 v4 — browser-use research sprint (synchronous, 8s max).
+  // Creates a session, polls for up to 8 seconds, returns whatever
+  // output the agent produced plus a liveUrl to watch the rest.
   try {
     const BU_KEY = process.env.BROWSER_USE_API_KEY;
     if (BU_KEY) {
@@ -1057,47 +1060,44 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
         `Research property for a ${effectiveVertical.replace(/_/g, " ")}.`,
         `User asked: "${question}"`,
         "",
-        "1. Search listing sites for relevant properties. Top 3: price, size, address, URL.",
+        "1. Search listing sites. Top 3: price, size, address, URL.",
         "2. Check zoning and regulations for the area mentioned.",
         "3. Google Maps: nearby businesses, roads, competition.",
-        "",
         "Return plain text: LISTINGS, ZONING, ACCESS.",
       ].join("\n");
 
       const createRes = await fetch("https://api.browser-use.com/api/v3/sessions", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Browser-Use-API-Key": BU_KEY,
-        },
+        headers: { "Content-Type": "application/json", "X-Browser-Use-API-Key": BU_KEY },
         body: JSON.stringify({ task, model: "gpt-5.4-mini" }),
       });
       if (createRes.ok) {
-        const session = await createRes.json() as { id: string };
-        // Poll once (2s) — we don't hold the response for browser-use.
-        // The result is cached for the next request or surfaced async.
-        setTimeout(async () => {
-          try {
-            for (let i = 0; i < 120; i++) {
-              await new Promise((r) => setTimeout(r, 2000));
-              const pollRes = await fetch(
-                `https://api.browser-use.com/api/v3/sessions/${session.id}`,
-                { headers: { "X-Browser-Use-API-Key": BU_KEY } },
-              );
-              if (!pollRes.ok) break;
-              const state = await pollRes.json() as { status?: { value: string }; output?: string };
-              const sv = state.status?.value;
-              if (sv === "idle" || sv === "stopped") {
-                if (state.output) researchNotes = state.output;
-                break;
-              }
-              if (sv === "error" || sv === "timed_out") break;
-            }
-          } catch { /* fire and forget */ }
-        }, 0);
+        const session = await createRes.json() as { id: string; live_url?: string };
+        researchLiveUrl = session.live_url;
+        // Poll for up to 8 seconds — enough for simple tasks to complete.
+        const deadline = Date.now() + 8000;
+        while (Date.now() < deadline) {
+          await new Promise((r) => setTimeout(r, 1500));
+          const pollRes = await fetch(
+            `https://api.browser-use.com/api/v3/sessions/${session.id}`,
+            { headers: { "X-Browser-Use-API-Key": BU_KEY } },
+          );
+          if (!pollRes.ok) break;
+          const state = await pollRes.json() as { status?: { value: string }; output?: string };
+          const sv = state.status?.value;
+          if (sv === "idle" || sv === "stopped") {
+            if (state.output) researchNotes = state.output;
+            break;
+          }
+          if (sv === "error" || sv === "timed_out") break;
+        }
+      } else {
+        researchError = `browser-use session failed (${createRes.status})`;
       }
     }
-  } catch { /* non-fatal */ }
+  } catch (researchErr) {
+    researchError = String(researchErr instanceof Error ? researchErr.message : researchErr);
+  }
 
   // Attach live listings to ranked sites.
   //
@@ -1181,6 +1181,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
     liveListings: allLiveListings.length > 0 ? allLiveListings : undefined,
     liveListingsError: allLiveListings.length === 0 ? liveListingsError : undefined,
     researchNotes: researchNotes || undefined,
+    researchLiveUrl: researchLiveUrl || undefined,
     connectorsRun,
     // Day 17 v6: routing + chat surface. primaryEngine tells the UI
     // which engine answered. matchedPatterns shows the user why we
