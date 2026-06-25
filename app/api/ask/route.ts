@@ -215,6 +215,8 @@ type AskResponse = {
   researchNotes?: string;
   /** LCP-62 v4 — live browser URL to watch the agent work. */
   researchLiveUrl?: string;
+  /** LCP-62 v4 — set when browser-use fails, has no key, or is misconfigured. */
+  researchError?: string;
   /** Day 5 — the plan we actually executed. */
   plan?: Plan;
   /** Day 5 — per-connector status. */
@@ -1184,6 +1186,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
     liveListingsError: allLiveListings.length === 0 ? liveListingsError : undefined,
     researchNotes: researchNotes || undefined,
     researchLiveUrl: researchLiveUrl || undefined,
+    researchError: researchError || undefined,
     connectorsRun,
     // Day 17 v6: routing + chat surface. primaryEngine tells the UI
     // which engine answered. matchedPatterns shows the user why we
