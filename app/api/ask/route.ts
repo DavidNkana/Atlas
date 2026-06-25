@@ -212,6 +212,8 @@ type AskResponse = {
   /** Day 22 — when live listings are unavailable (no TAVILY key, or
    * Tavily failed). UI surfaces "live listings unavailable" badge. */
   liveListingsError?: string;
+  /** LCP-64 — Google Places competitor search error (if any). */
+  placesError?: string;
   /** LCP-62 v4 — browser-use research output (polled for up to 8s). */
   researchNotes?: string;
   /** LCP-62 v4 — live browser URL to watch the agent work. */
@@ -842,6 +844,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   let allLiveListings: LiveListing[] = [];
   /** Day 22 — when Tavily fails for any reason; UI surfaces a non-fatal badge. */
   let liveListingsError: string | undefined;
+  let placesError: string | undefined;
   let researchNotes: string | undefined;
   let researchError: string | undefined;
   let researchLiveUrl: string | undefined;
@@ -947,12 +950,22 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
             }),
           ),
         );
+        let anyOk = false;
+        const errors: string[] = [];
         rankedSites.forEach((site, i) => {
           const r = competitorResults[i];
-          if (r.status === "fulfilled" && r.value.places.length > 0) {
-            (site as any).competitors = r.value;
+          if (r.status === "fulfilled") {
+            if (r.value.ok && r.value.places.length > 0) {
+              (site as any).competitors = r.value;
+              anyOk = true;
+            } else if (r.value.error) {
+              errors.push(`${site.name}: ${r.value.error}`);
+            }
           }
         });
+        if (!anyOk && errors.length > 0) {
+          placesError = errors.slice(0, 3).join(" | ");
+        }
       } catch { /* non-fatal */ }
 
       allConnectorsFailed =
@@ -1206,6 +1219,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
     // all listings regardless of site.
     liveListings: allLiveListings.length > 0 ? allLiveListings : undefined,
     liveListingsError: allLiveListings.length === 0 ? liveListingsError : undefined,
+    placesError: placesError || undefined,
     researchNotes: researchNotes || undefined,
     researchLiveUrl: researchLiveUrl || undefined,
     researchError: researchError || undefined,
