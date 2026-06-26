@@ -1,4 +1,3 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import type { Model, ModelRequest, ModelResponse, RankedSite } from './types';
 import { detectCity } from '../stub/detect';
 import { getRealSiteCandidates } from '../stub/real-sites';
@@ -107,92 +106,59 @@ export const geminiSearch: Model = {
       if (!key) {
         return { ok: false, error: 'GEMINI_API_KEY not set' } as any;
       }
-      const genAI = new GoogleGenerativeAI(key);
-      // Day 12 v26: Vercel is serving stale builds (stuck on
-      // v22's gemini-1.5-flash even though main has v25's
-      // gemini-2.0-flash). The 1.5-flash on this Vertex-format
-      // key returns 404. So we now try multiple model ids in
-      // sequence — whichever one this key actually has access
-      // to. Order: 2.0-flash first (preferred), then 1.5-flash,
-      // then 2.5-flash. Each try has its own per-model timeout
-      // (8s default) so we don't blow the route budget.
-      const modelIdsToTry = [
-        { model: 'gemini-2.0-flash', tool: 'googleSearch' },
-        // 1.5-flash-8b returned 404 — deprecated or not available. Only
-        // keep the primary model. On 429, retry after 5s then fall through
-        // to OpenRouter.
-      ];
-      let text: string | undefined;
-      let result: any;
+      // Use raw fetch instead of the SDK — the health endpoint proves
+      // this works with AQ keys and the SDK was consistently hitting
+      // a different auth path that returned 429 regardless of actual
+      // quota state.
+      const modelId = 'gemini-2.0-flash';
       const errorLog: string[] = [];
-      for (const { model: modelId, tool: toolName } of modelIdsToTry) {
-        // Try the model. On 429 (rate limited), wait 2s and retry once.
-        for (let attempt = 0; attempt < 2; attempt++) {
-          try {
-            const m = genAI.getGenerativeModel({
-              model: modelId,
-              ...(toolName === 'googleSearch'
-                ? { tools: [{ googleSearch: {} } as any] }
-                : toolName === 'googleSearchRetrieval'
-                  ? { tools: [{ googleSearchRetrieval: {} } as any] }
-                  : {}), // 'none' — no tools, plain text generation
-            });
-            const r = await m.generateContent(buildPrompt(req));
-            text = r.response.text();
-            result = r;
-            break; // success — exit retry loop
-          } catch (modelErr) {
-            const msg = modelErr instanceof Error ? modelErr.message : String(modelErr);
-            const isRateLimit = msg.includes("429");
-            if (isRateLimit && attempt === 0) {
+      const groundingSources: Array<{ title?: string; url: string }> = [];
+      let text: string | undefined;
+
+      // Single model, raw HTTP, retry on 429 once.
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${key}`;
+          const body = {
+            contents: [{ parts: [{ text: buildPrompt(req) }] }],
+            tools: [{ googleSearch: {} }],
+          };
+          const res = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          if (res.status === 429) {
+            if (attempt === 0) {
               errorLog.push(`${modelId}: 429 (retrying in 5s)`);
               await new Promise((r) => setTimeout(r, 5000));
-              continue; // retry
+              continue;
             }
-            errorLog.push(`${modelId}: ${msg.slice(0, 150)}`);
-            break; // non-429 or exhausted retries
+            errorLog.push(`${modelId}: 429 (exhausted retries)`);
+            break;
           }
+          if (!res.ok) {
+            const errText = await res.text();
+            errorLog.push(`${modelId}: ${res.status} ${errText.slice(0, 100)}`);
+            break;
+          }
+          const data = await res.json() as any;
+          text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (text) break;
+          errorLog.push(`${modelId}: no text in response`);
+          break;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          errorLog.push(`${modelId}: ${msg.slice(0, 150)}`);
+          break;
         }
-        if (text && result) break; // got a result, stop trying models
       }
-      if (!text || !result) {
+
+      if (!text) {
         return {
           ok: false,
           error: `All Gemini models failed: ${errorLog.join(' | ')}`,
         } as any;
-      }
-
-      // Extract grounding citations from the response metadata.
-      // Gemini puts citation URLs in groundingMetadata.groundingChunks[].
-      // We surface them as the "sources" array the result page renders.
-      let groundingSources: Array<{ title?: string; url: string }> = [];
-      try {
-        const candidates = result.response.candidates ?? [];
-        for (const cand of candidates) {
-          const gm = cand?.groundingMetadata;
-          if (!gm) continue;
-          const chunks = gm.groundingChunks ?? [];
-          for (const ch of chunks) {
-            if (ch?.web?.uri) {
-              groundingSources.push({
-                title: ch.web.title ?? ch.web.uri,
-                url: ch.web.uri,
-              });
-            }
-          }
-          // Also check searchEntryPoint renderedContent for the
-          // search queries Gemini used (useful for debugging).
-        }
-        // Dedupe by URL
-        const seen = new Set<string>();
-        groundingSources = groundingSources.filter((s) => {
-          if (seen.has(s.url)) return false;
-          seen.add(s.url);
-          return true;
-        });
-      } catch {
-        // Grounding metadata is optional — never fail the call
-        // because we couldn't read it.
       }
 
       // Parse JSON from the model's text. Gemini may wrap the
