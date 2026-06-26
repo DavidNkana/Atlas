@@ -110,49 +110,38 @@ export const geminiSearch: Model = {
       // this works with AQ keys and the SDK was consistently hitting
       // a different auth path that returned 429 regardless of actual
       // quota state.
-      const modelId = 'gemini-2.0-flash';
+      const modelIdsToTry = ['gemini-1.5-flash', 'gemini-2.0-flash-lite'];
       const keyPrefix = key.slice(0, 8) + '...';
       const errorLog: string[] = [];
       const groundingSources: Array<{ title?: string; url: string }> = [];
       let text: string | undefined;
 
-      // Single model, raw HTTP, retry on 429 once.
-      for (let attempt = 0; attempt < 2; attempt++) {
+      for (const modelId of modelIdsToTry) {
         try {
           const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${key}`;
           const body = {
             contents: [{ parts: [{ text: buildPrompt(req) }] }],
-            // No tools — Google Search grounding requires billing on free tier
           };
           const res = await fetch(url, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body),
           });
+          const errText = res.ok ? "" : await res.text();
           if (res.status === 429) {
-            const errText = await res.text();
-            if (attempt === 0) {
-              errorLog.push(`${modelId}: 429 (retrying in 5s) key=${keyPrefix} body=${errText.slice(0, 80)}`);
-              await new Promise((r) => setTimeout(r, 5000));
-              continue;
-            }
-            errorLog.push(`${modelId}: 429 (exhausted) body=${errText.slice(0, 80)}`);
-            break;
+            errorLog.push(`${modelId}: 429 ${errText.slice(0, 80)}`);
+            continue; // try next model
           }
           if (!res.ok) {
-            const errText = await res.text();
-            errorLog.push(`${modelId}: ${res.status} ${errText.slice(0, 100)}`);
-            break;
+            errorLog.push(`${modelId}: ${res.status} ${errText.slice(0, 80)}`);
+            continue;
           }
           const data = await res.json() as any;
           text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
           if (text) break;
-          errorLog.push(`${modelId}: no text in response`);
-          break;
+          errorLog.push(`${modelId}: no text`);
         } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          errorLog.push(`${modelId}: ${msg.slice(0, 150)}`);
-          break;
+          errorLog.push(`${modelId}: ${(err instanceof Error ? err.message : String(err)).slice(0, 100)}`);
         }
       }
 
