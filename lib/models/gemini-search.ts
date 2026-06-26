@@ -121,7 +121,7 @@ export const geminiSearch: Model = {
           const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${key}`;
           const body = {
             contents: [{ parts: [{ text: buildPrompt(req) }] }],
-            tools: [{ googleSearch: {} }],
+            // No tools — Google Search grounding requires billing on free tier
           };
           const res = await fetch(url, {
             method: "POST",
