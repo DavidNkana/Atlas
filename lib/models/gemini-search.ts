@@ -129,12 +129,13 @@ export const geminiSearch: Model = {
             body: JSON.stringify(body),
           });
           if (res.status === 429) {
+            const errText = await res.text();
             if (attempt === 0) {
-              errorLog.push(`${modelId}: 429 (retrying in 5s)`);
+              errorLog.push(`${modelId}: 429 (retrying in 5s) body=${errText.slice(0, 80)}`);
               await new Promise((r) => setTimeout(r, 5000));
               continue;
             }
-            errorLog.push(`${modelId}: 429 (exhausted retries)`);
+            errorLog.push(`${modelId}: 429 (exhausted) body=${errText.slice(0, 80)}`);
             break;
           }
           if (!res.ok) {
