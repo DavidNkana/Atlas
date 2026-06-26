@@ -126,9 +126,8 @@ export const geminiSearch: Model = {
       let result: any;
       const errorLog: string[] = [];
       for (const { model: modelId, tool: toolName } of modelIdsToTry) {
-        // Try the model. On 429 (rate limited), wait 2s and retry once.
-        for (let attempt = 0; attempt < 2; attempt++) {
-          try {
+        // Single attempt — no retry. Retrying wastes quota and keeps us rate-limited.
+        try {
             const m = genAI.getGenerativeModel({
               model: modelId,
               ...(toolName === 'googleSearch'
@@ -140,20 +139,11 @@ export const geminiSearch: Model = {
             const r = await m.generateContent(buildPrompt(req));
             text = r.response.text();
             result = r;
-            break; // success — exit retry loop
+            break;
           } catch (modelErr) {
-            const msg = modelErr instanceof Error ? modelErr.message : String(modelErr);
-            const isRateLimit = msg.includes("429");
-            if (isRateLimit && attempt === 0) {
-              errorLog.push(`${modelId}: 429 (retrying in 5s)`);
-              await new Promise((r) => setTimeout(r, 5000));
-              continue; // retry
-            }
-            errorLog.push(`${modelId}: ${msg.slice(0, 150)}`);
-            break; // non-429 or exhausted retries
+            errorLog.push(`${modelId}: ${(modelErr instanceof Error ? modelErr.message : String(modelErr)).slice(0, 120)}`);
           }
-        }
-        if (text && result) break; // got a result, stop trying models
+        if (text && result) break;
       }
       if (!text || !result) {
         return {
