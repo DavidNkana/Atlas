@@ -111,6 +111,7 @@ export const geminiSearch: Model = {
       // a different auth path that returned 429 regardless of actual
       // quota state.
       const modelId = 'gemini-2.0-flash';
+      const keyPrefix = key.slice(0, 8) + '...';
       const errorLog: string[] = [];
       const groundingSources: Array<{ title?: string; url: string }> = [];
       let text: string | undefined;
@@ -131,7 +132,7 @@ export const geminiSearch: Model = {
           if (res.status === 429) {
             const errText = await res.text();
             if (attempt === 0) {
-              errorLog.push(`${modelId}: 429 (retrying in 5s) body=${errText.slice(0, 80)}`);
+              errorLog.push(`${modelId}: 429 (retrying in 5s) key=${keyPrefix} body=${errText.slice(0, 80)}`);
               await new Promise((r) => setTimeout(r, 5000));
               continue;
             }
