@@ -173,6 +173,31 @@ export const curatedStub: Model = {
       usingRealCatalog = true; // treat as curated for banner copy
     }
 
+    // LCP-65: generate sectioned advantages/disadvantages from signal data
+    for (const site of sites) {
+      const s = site as any;
+      if (s.advantages) continue;
+      const medIncome = s.medianIncome ? `R${Number(s.medianIncome).toLocaleString()}` : "varying";
+      const priceRange = s.priceRange ?? "market-related";
+      const arterial = s.arterial ?? "major routes";
+      const highway = s.nearestHighwayKm ? `${s.nearestHighwayKm}km` : "within reach";
+      const zoning = s.zoning ?? "mixed-use";
+      const plotSize = s.plotSizeHectares ? `${s.plotSizeHectares} hectares` : "various sizes";
+      const facing = s.facing ? `${s.facing}-facing` : "well-positioned";
+      const incomeVal = s.medianIncome ? Number(s.medianIncome) : 0;
+      s.advantages = {
+        economic: `Property prices in the ${priceRange} range with median household income around ${medIncome}. ${plotSize} available, zoned ${zoning}.`,
+        geographic: `${facing} with ${plotSize} of land via ${arterial}, ${highway} from the nearest highway.`,
+        logistical: `Connected via ${arterial}, highway access ${highway} away. Suitable for logistics and distribution operations.`,
+        demographic: `Median income around ${medIncome}${incomeVal > 50000 ? ", indicating strong spending power" : ""}.`,
+      };
+      if ((s as any).competition) {
+        s.disadvantages = `Nearby competition: ${(s as any).competition.slice(0, 3).join(", ")}. Verify with a site visit.`;
+      } else {
+        s.disadvantages = "No known competitors in the immediate area — verify with a site visit.";
+      }
+    }
+
     const payload: StubPayload = {
       status: 'stub_demo',
       vertical,
