@@ -224,7 +224,7 @@ export const geminiSearch: Model = {
         const hasLng = typeof s.lng === 'number' && isFinite(s.lng) && Math.abs(s.lng) <= 180;
         const lat = hasLat ? s.lat : (fallbackSite?.lat ?? city.lat);
         const lng = hasLng ? s.lng : (fallbackSite?.lng ?? city.lng);
-        return {
+        const site: any = {
           rank: s.rank ?? i + 1,
           name: s.name ?? 'Unknown',
           score: typeof s.score === 'number' ? s.score : 0.7,
@@ -233,6 +233,10 @@ export const geminiSearch: Model = {
           lat,
           lng,
         };
+        if (s.advantages) site.advantages = s.advantages;
+        if (s.disadvantages) site.disadvantages = s.disadvantages;
+        if (s.suburb) site.suburb = s.suburb;
+        return site;
       });
 
       // Day 22 v24 fix: if the model returned parseable JSON but
