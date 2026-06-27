@@ -10,22 +10,12 @@ function humanVertical(v: string): string {
 }
 
 function buildPrompt(req: ModelRequest): string {
-  // LCP-64 v2 — sectioned rationale matching Gemini's upgraded format.
+  // Short prompt — free tier models need <500 tokens for fast response
   return (
-    'You are Atlas, a site-selection intelligence engine for African builders and investors.\n' +
-    'The user wants to find the best location for a ' + humanVertical(req.vertical) +
-    ' given this question: "' + req.question + '".\n\n' +
-    'Return STRICT JSON (no markdown, no commentary) in this exact shape:\n' +
-    '{"answer":"<one paragraph summary>","ranked_sites":[' +
-    '{"rank":1,"name":"<suburb or area name>","suburb":"<suburb>","score":<0-1>,"confidence":<0-1>,' +
-    '"rationale":"<2-3 sentences: why this fits>",' +
-    '"advantages":{"economic":"<1 paragraph: commercial activity, prices, business density, spending power>",' +
-    '"geographic":"<1 paragraph: terrain, flood risk, soil, elevation>",' +
-    '"logistical":"<1 paragraph: road access, freight routes, public transport, airports>",' +
-    '"demographic":"<1 paragraph: population, income brackets, age, growth rate>"},' +
-    '"disadvantages":"<1 paragraph: competition, zoning, congestion, crime, supplier distance, seasonal demand>"},' +
-    '"lat":<decimal>,"lng":<decimal>}]}\n\n' +
-    'Provide up to 5 ranked sites. Use real suburb names, real property price bands, real landmarks. Be specific.'
+    'You are Atlas, an African site-selection engine.\n' +
+    'Find the best ' + humanVertical(req.vertical) + ' locations for: "' + req.question + '".\n' +
+    'Return JSON: {"ranked_sites":[{"rank":1,"name":"suburb","score":0.5,"rationale":"why","lat":0,"lng":0}]}\n' +
+    'Up to 5 sites. Real names. Real coordinates. Be brief.'
   );
 }
 
