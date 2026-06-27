@@ -35,12 +35,9 @@ function buildPrompt(req: ModelRequest): string {
  * /models endpoint is down.
  */
 const CURATED_STUB_SLUGS: string[] = [
-  'meta-llama/llama-3.3-70b-instruct',
-  'nousresearch/hermes-3-llama-3.1-405b:free',
-  'qwen/qwen3-next-80b-a3b-instruct',
-  'meta-llama/llama-3.2-3b-instruct',
-  'mistralai/mistral-small-24b-instruct-2501',
-  'google/gemini-2.0-flash-001',
+  'meta-llama/llama-3.2-3b-instruct',   // fastest (192ms)
+  'qwen/qwen3-next-80b-a3b-instruct',  // fast (292ms)
+  'meta-llama/llama-3.3-70b-instruct', // best quality (507ms)
 ];
 
 /**
@@ -79,7 +76,7 @@ function makeOpenRouterModel(
         if (!key) {
           return { ok: false, error: 'OPENROUTER_API_KEY not set' } as any;
         }
-        const client = new OpenAI({ apiKey: key, baseURL: 'https://openrouter.ai/api/v1', timeout: 15000 });
+        const client = new OpenAI({ apiKey: key, baseURL: 'https://openrouter.ai/api/v1', timeout: 30000 });
 
         const discoveredIds = await fetchOpenRouterFreeModelIds();
         const chain: string[] = [];
