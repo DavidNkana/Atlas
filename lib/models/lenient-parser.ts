@@ -127,15 +127,20 @@ function tryExtractStrictJson(
           typeof s.lng === "number",
       )
       .slice(0, 5)
-      .map((s: any, i: number) => ({
-        rank: typeof s.rank === "number" ? s.rank : i + 1,
-        name: s.name,
-        suburb: typeof s.suburb === "string" ? s.suburb : undefined,
-        score: typeof s.score === "number" ? s.score : 0.5,
-        confidence: typeof s.confidence === "number" ? s.confidence : 0.5,
-        rationale: typeof s.rationale === "string" ? s.rationale : "",
-        lat: s.lat,
-        lng: s.lng,
+      .map((s: any, i: number) => {
+        const site: any = {
+          rank: typeof s.rank === "number" ? s.rank : i + 1,
+          name: s.name,
+          suburb: typeof s.suburb === "string" ? s.suburb : undefined,
+          score: typeof s.score === "number" ? s.score : 0.5,
+          confidence: typeof s.confidence === "number" ? s.confidence : 0.5,
+          rationale: typeof s.rationale === "string" ? s.rationale : "",
+          lat: s.lat,
+          lng: s.lng,
+        };
+        if (s.advantages) site.advantages = s.advantages;
+        if (s.disadvantages) site.disadvantages = s.disadvantages;
+        return site;
       }));
     return { ok: sites.length > 0, ranked_sites: sites };
   } catch {
