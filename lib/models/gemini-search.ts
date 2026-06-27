@@ -54,7 +54,9 @@ export const geminiSearch: Model = {
     brandColor: '#34A853',
     logoPath: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z',
   },
-  isAvailable: () => !!process.env.GEMINI_API_KEY,
+  // LCP-64: Gemini free tier is perpetually rate-limited with AQ keys.
+  // Disabled until a working API key is available. OpenRouter handles all queries.
+  isAvailable: () => false,
   call: async (req: ModelRequest): Promise<ModelResponse> => {
     const key = process.env.GEMINI_API_KEY;
     if (!key) return { ok: false, error: 'GEMINI_API_KEY not set' } as any;
