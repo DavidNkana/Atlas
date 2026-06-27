@@ -942,13 +942,16 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
             (site as any).competitors = {
               ok: true,
               places: r.value.places ?? [],
-              searchLat: r.value.searchLat,
-              searchLng: r.value.searchLng,
-              radiusM: r.value.radiusM,
-              searchedType: r.value.searchedType,
-              searchedKeyword: r.value.searchedKeyword,
               noCompetition: r.value.places && r.value.places.length === 0,
             };
+            // Override stub competition data with real Places results
+            if (r.value.places && r.value.places.length > 0) {
+              (site as any).competition = r.value.places.map((p: any) =>
+                `${p.name} (${Math.round(p.distanceM)}m)`
+              );
+            } else {
+              (site as any).competition = ["No direct competitors within 3km"];
+            }
           }
         });
       } catch { /* non-fatal */ }
