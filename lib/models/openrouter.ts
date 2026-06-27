@@ -79,7 +79,7 @@ function makeOpenRouterModel(
         if (!key) {
           return { ok: false, error: 'OPENROUTER_API_KEY not set' } as any;
         }
-        const client = new OpenAI({ apiKey: key, baseURL: 'https://openrouter.ai/api/v1' });
+        const client = new OpenAI({ apiKey: key, baseURL: 'https://openrouter.ai/api/v1', timeout: 15000 });
 
         const discoveredIds = await fetchOpenRouterFreeModelIds();
         const chain: string[] = [];
