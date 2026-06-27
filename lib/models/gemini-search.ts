@@ -18,30 +18,33 @@ function buildPrompt(req: ModelRequest): string {
   // property price band, and lat/lng for the map.
   return `You are Atlas, an African land-development research engine. The user is searching for: "${req.question}".
 
-The user wants a SUBURB-LEVEL answer, not 5 random sites. They want to know WHERE to look first, what makes that area a fit for what they asked, and which real schools/amenities/landmarks are nearby.
+The user wants a SUBURB-LEVEL answer with real, detailed analysis. For each site, provide WHY it fits — not generic descriptions, but specific reasons based on real data about that location.
 
-Return STRICT JSON (no markdown, no commentary, just the JSON object) in this exact shape:
+Return STRICT JSON (no markdown, just the JSON):
 
 {
-  "answer": "<one paragraph summary: what makes a good fit for this question in this city, the criteria the user implicitly cares about>",
-  "sources": [
-    {"title": "<article or page title>", "url": "<real URL if you can cite one — e.g. wikipedia.org/wiki/Constantia_Cape_Town>"}
-  ],
-  "ranked_sites": [
-    {
-      "rank": 1,
-      "name": "<suburb or area name, e.g. 'Constantia, Cape Town'>",
-      "suburb": "<suburb name>",
-      "score": <0.0-1.0>,
-      "confidence": <0.0-1.0>,
-      "rationale": "<2-3 sentences: why this area fits what the user asked, mention specific real schools/amenities/landmarks, property price band if relevant>",
-      "lat": <decimal latitude>,
-      "lng": <decimal longitude>
-    }
-  ]
+  "answer": "<one paragraph summary of the best fit for this query>",
+  "sources": [{"title":"<source>", "url":"<real URL>"}],
+  "ranked_sites": [{
+    "rank": 1,
+    "name": "<suburb or area name>",
+    "suburb": "<suburb name>",
+    "score": <0-1>,
+    "confidence": <0-1>,
+    "rationale": "<2-3 sentences: why this fits>",
+    "advantages": {
+      "economic": "<paragraph: property prices, business activity, spending power, commercial density, rental yields>",
+      "geographic": "<paragraph: terrain, soil, altitude, flood risk, any land constraints or advantages>",
+      "logistical": "<paragraph: access to main roads, distance to CBD, freight routes, public transport, major airports>",
+      "demographic": "<paragraph: population, income brackets, age profile, commuter patterns, education levels>"
+    },
+    "disadvantages": "<paragraph: specific drawbacks — competition, zoning restrictions, traffic congestion, crime concerns, supplier distance, seasonal demand issues. Be honest and specific.>",
+    "lat": <decimal>,
+    "lng": <decimal>
+  }]
 }
 
-Provide up to 5 ranked suburbs. Use real suburb names. Mention real school names, real property price bands (e.g. 'R 4-6M family homes', 'R 12-25M luxury estates'), and real landmarks where you know them. Cite Wikipedia / property portals / news sites you can find with a quick search. For each suburb, also include "lat" and "lng" as decimal coordinates so we can plot it on a map.`;
+Provide up to 5 ranked sites. Use real suburb names, real property price bands, real school names, real landmarks. Write full paragraphs for each section. Be specific — not generic filler.`;
 }
 
 /**

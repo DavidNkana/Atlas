@@ -14,6 +14,7 @@ import type { Plan } from "@/lib/plan/types";
 import { classifyIntent } from "@/lib/intent/classify";
 import { enrichSitesWithCatalog } from "@/lib/stub/enrich-sites";
 import { fetchLiveListings, type LiveListing } from "@/lib/connectors/tavily-listings";
+import { fetchNearbyCompetitors } from "@/lib/connectors/google-places";
 import { withTimeout } from "@/lib/util/timeout";
 import { sanitizeForJson } from "@/lib/util/json-sanitize";
 
@@ -923,6 +924,34 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
         site.signals = signals;
         site.scoreBreakdown = breakdown;
       }
+
+      // LCP-64: Google Places competitor search for each ranked site
+      try {
+        const results = await Promise.allSettled(
+          rankedSites.map((site) =>
+            fetchNearbyCompetitors({
+              lat: site.lat ?? location.lat,
+              lng: site.lng ?? location.lng,
+              vertical: effectiveVertical,
+            }),
+          ),
+        );
+        rankedSites.forEach((site, i) => {
+          const r = results[i];
+          if (r.status === "fulfilled") {
+            (site as any).competitors = {
+              ok: true,
+              places: r.value.places ?? [],
+              searchLat: r.value.searchLat,
+              searchLng: r.value.searchLng,
+              radiusM: r.value.radiusM,
+              searchedType: r.value.searchedType,
+              searchedKeyword: r.value.searchedKeyword,
+              noCompetition: r.value.places && r.value.places.length === 0,
+            };
+          }
+        });
+      } catch { /* non-fatal */ }
 
       allConnectorsFailed =
         connectorsRun.length > 0 &&
