@@ -142,7 +142,7 @@ export const llamaFree: Model = makeOpenRouterModel(
   'llama-free',
   'Llama 3.3 70B (free)',
   'Meta Llama 3.3 70B Instruct via OpenRouter free tier. Dynamically discovers currently-free models so slugs do not go stale.',
-  'meta-llama/llama-3.3-70b-instruct:free',
+  'meta-llama/llama-3.3-70b-instruct',
   // Meta blue
   '#0866FF',
   // Simplified Meta infinity mark
@@ -153,7 +153,7 @@ export const mistralFree: Model = makeOpenRouterModel(
   'mistral-free',
   'Qwen 2.5 72B (free)',
   'Qwen 2.5 72B Instruct via OpenRouter free tier. Dynamically discovers currently-free models so slugs do not go stale.',
-  'qwen/qwen-2.5-72b-instruct:free',
+  'qwen/qwen3-next-80b-a3b-instruct',
   // Qwen purple-ish
   '#7C3AED',
   // Simplified Qwen / Mistral flame
