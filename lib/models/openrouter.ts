@@ -105,6 +105,18 @@ function makeOpenRouterModel(
               lastError = `OpenRouter (${modelId}): ${parsed.error}`;
               continue;
             }
+            // Attach advantages/disadvantages from the raw JSON response
+            // (the lenient parser strips them, so we re-parse the original)
+            try {
+              const cleaned = text.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
+              const rawJson = JSON.parse(cleaned);
+              const rawSites = rawJson?.ranked_sites ?? [];
+              parsed.ranked_sites.forEach((site: any, i: number) => {
+                const orig = rawSites[i];
+                if (orig?.advantages) site.advantages = orig.advantages;
+                if (orig?.disadvantages) site.disadvantages = orig.disadvantages;
+              });
+            } catch { /* non-fatal */ }
             return {
               ranked_sites: parsed.ranked_sites,
               raw: text,
