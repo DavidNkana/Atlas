@@ -994,7 +994,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   try {
     const location = deriveLocation(rankedSites);
     // deriveLocation returns {lat, lng, label} — use label, not name
-    const cityName = location?.label ?? null;
+    const cityName = (location?.label ?? null)?.replace(/\s*\(fallback\)\s*$/i, '') ?? null;
     // Build per-site price/erf hints from enriched sites (so the query
     // matches what the developer asked for, not generic suburb terms).
     let hints = rankedSites
