@@ -41,7 +41,7 @@ export const ALL_MODELS: Model[] = [
 // and any other UI that surfaces "which AI answered?". Two models
 // only: Gemini Search (when working) and Curated Stub (always works).
 export const MODEL_INFO: ModelInfo[] = ALL_MODELS
-  .filter((m) => m.info.id === 'gemini-search' || m.info.id === 'curated-stub')
+  .filter((m) => m.info.id === 'mistral-free' || m.info.id === 'llama-free' || m.info.id === 'curated-stub')
   .map((m) => m.info);
 
 export function getModel(id: string): Model {
