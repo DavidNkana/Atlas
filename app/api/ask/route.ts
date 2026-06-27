@@ -993,14 +993,14 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   //   3. detectCity(question).name — city-only fallback
   try {
     const location = deriveLocation(rankedSites);
-    const cityName = (location as any)?.name ?? null;
+    // deriveLocation returns {lat, lng, label} — use label, not name
+    const cityName = location?.label ?? null;
     // Build per-site price/erf hints from enriched sites (so the query
     // matches what the developer asked for, not generic suburb terms).
-    const hints = rankedSites
+    let hints = rankedSites
       .map((s) => {
         const explicitSuburb = ((s as any).suburb as string | undefined) ?? null;
         const nameField = (s.name ?? "").trim();
-        // Extract suburb from name like "Constantia, Cape Town" → "Constantia"
         const nameSuburb =
           nameField.includes(",") ? nameField.split(",")[0].trim() : nameField || null;
         const suburb = explicitSuburb || nameSuburb || null;
@@ -1018,6 +1018,17 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
       })
       .filter((h): h is NonNullable<typeof h> => h !== null)
       .slice(0, 3);
+
+    // Fallback for non-SA cities: if no sites produced hints, fire a
+    // single city-level Tavily search with the detected city name.
+    if (hints.length === 0 && cityName) {
+      hints = [{
+        suburb: null,
+        cityName,
+        priceBand: null,
+        plotSizeHectares: null,
+      }];
+    }
 
     // Day 22 v12: run one search per hint (max 3) — gives Perplexity-
     // style depth (per-suburb). Use TAVILY_LISTINGS_TIMEOUT_MS (15s)
