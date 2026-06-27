@@ -106,7 +106,7 @@ const MODEL_TIMEOUT_MS = 8_000;
 // not per-attempt. So we need 60s budget for the full
 // 3-attempt cascade.
 const MODEL_TIMEOUT_OVERRIDES: Record<string, number> = {
-  'gemini-search': 60_000,
+  'gemini-search': 15_000, // was 60s — too slow with sectioned prompt
   'tavily': 45_000,
 };
 
