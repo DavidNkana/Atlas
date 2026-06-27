@@ -447,7 +447,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   partialQuestionText = trimmedQuestion;
 
   // 3. Resolve model — default to gemini-flash
-  const requestedModelId = (model && typeof model === "string") ? model : "gemini-flash";
+  const requestedModelId = (model && typeof model === "string") ? model : "mistral-free";
   let activeModel: Model;
   let activeInfo: ModelInfo;
   let fallbackUsed = false;
@@ -483,13 +483,23 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
     activeModel = getModel(requestedModelId);
     activeInfo = activeModel.info;
     if (!activeModel.isAvailable()) {
-      // Requested model has no key set — fall back to curated stub
-      console.warn(`[/api/ask] model ${requestedModelId} not available, falling back to curated-stub`);
+      // Day 27 hotfix: don't jump straight to curated-stub when primary
+      // isn't available. Try the next available model in the chain first.
       pushAttempted(requestedModelId);
-      activeModel = curatedStub;
-      activeInfo = curatedStub.info;
-      fallbackUsed = true;
-      responseStatus = "stub_fallback";
+      const nextAvailable = ALL_MODELS.find(
+        (m) => m.info.id !== requestedModelId && m.isAvailable(),
+      );
+      if (nextAvailable) {
+        activeModel = nextAvailable;
+        activeInfo = nextAvailable.info;
+        fallbackUsed = true;
+        responseStatus = "ok";
+      } else {
+        activeModel = curatedStub;
+        activeInfo = curatedStub.info;
+        fallbackUsed = true;
+        responseStatus = "stub_fallback";
+      }
     }
   } catch {
     // Unknown model id — fall back to curated stub
