@@ -35,12 +35,12 @@ function buildPrompt(req: ModelRequest): string {
  * /models endpoint is down.
  */
 const CURATED_STUB_SLUGS: string[] = [
-  'qwen/qwen-2.5-72b-instruct:free',
-  'meta-llama/llama-3.3-70b-instruct:free',
-  'google/gemini-2.0-flash-exp:free',
-  'mistralai/mistral-small-3.2-24b-instruct:free',
-  'nousresearch/deephermes-3-llama-3-8b:free',
-  'deepseek/deepseek-r1-distill-qwen-32b:free',
+  'meta-llama/llama-3.3-70b-instruct',
+  'nousresearch/hermes-3-llama-3.1-405b:free',
+  'qwen/qwen3-next-80b-a3b-instruct',
+  'meta-llama/llama-3.2-3b-instruct',
+  'mistralai/mistral-small-24b-instruct-2501',
+  'google/gemini-2.0-flash-001',
 ];
 
 /**
