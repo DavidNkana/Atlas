@@ -57,6 +57,8 @@ type Site = {
   score: number;
   confidence: number;
   rationale: string;
+  advantages?: { economic?: string; geographic?: string; logistical?: string; demographic?: string; };
+  disadvantages?: string;
   lat?: number;
   lng?: number;
   signals?: Signal[];
@@ -456,6 +458,60 @@ export function RankedSiteCard({
                   fallbackLat={fallbackLatLng?.lat}
                   fallbackLng={fallbackLatLng?.lng}
                 />
+              </div>
+            </section>
+          )}
+
+          {/* LCP-65: Sectioned advantages from Gemini */}
+          {site.advantages && (
+            <section className="mb-4">
+              <div className="mb-2 flex items-center gap-2">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-emerald-400">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-emerald-400">Regional advantages</h4>
+              </div>
+              <div className="ml-6 space-y-3 text-sm leading-relaxed text-atlas-text">
+                {site.advantages.economic && (
+                  <div>
+                    <h5 className="text-xs font-semibold uppercase tracking-wider text-atlas-muted mb-1">Economic</h5>
+                    <p>{site.advantages.economic}</p>
+                  </div>
+                )}
+                {site.advantages.geographic && (
+                  <div>
+                    <h5 className="text-xs font-semibold uppercase tracking-wider text-atlas-muted mb-1">Geographic</h5>
+                    <p>{site.advantages.geographic}</p>
+                  </div>
+                )}
+                {site.advantages.logistical && (
+                  <div>
+                    <h5 className="text-xs font-semibold uppercase tracking-wider text-atlas-muted mb-1">Logistical</h5>
+                    <p>{site.advantages.logistical}</p>
+                  </div>
+                )}
+                {site.advantages.demographic && (
+                  <div>
+                    <h5 className="text-xs font-semibold uppercase tracking-wider text-atlas-muted mb-1">Demographic</h5>
+                    <p>{site.advantages.demographic}</p>
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
+
+          {/* Disadvantages */}
+          {site.disadvantages && (
+            <section className="mb-4">
+              <div className="mb-2 flex items-center gap-2">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-amber-400">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-amber-400">Disadvantages &amp; risks</h4>
+              </div>
+              <div className="ml-6 text-sm leading-relaxed text-atlas-text">
+                <p>{site.disadvantages}</p>
               </div>
             </section>
           )}

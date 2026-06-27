@@ -738,6 +738,8 @@ export default async function ResultPage({
                 arterial: (s as any).arterial,
                 nearestHighwayKm: (s as any).nearestHighwayKm,
                 competition: (s as any).competition,
+                advantages: (s as any).advantages,
+                disadvantages: (s as any).disadvantages,
                 medianIncome: (s as any).medianIncome,
                 dataProvenance: (s as any).dataProvenance,
               }))}
@@ -778,6 +780,8 @@ export default async function ResultPage({
                   arterial: (s as any).arterial,
                   nearestHighwayKm: (s as any).nearestHighwayKm,
                   competition: (s as any).competition,
+                  advantages: (s as any).advantages,
+                  disadvantages: (s as any).disadvantages,
                   medianIncome: (s as any).medianIncome,
                   dataProvenance: (s as any).dataProvenance,
                   liveListings: (s as any).liveListings,
