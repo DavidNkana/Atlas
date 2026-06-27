@@ -173,35 +173,6 @@ export const curatedStub: Model = {
       usingRealCatalog = true; // treat as curated for banner copy
     }
 
-    // LCP-65 — Generate sectioned advantages/disadvantages from real
-    // signal data, so curated-stub sites read like full AI responses.
-    for (const site of sites) {
-      const s = site as any;
-      if (s.advantages) continue; // already enriched
-
-      const medIncome = s.medianIncome ? `R${Number(s.medianIncome).toLocaleString()}` : "varying";
-      const priceRange = s.priceRange ?? "market-related prices";
-      const arterial = s.arterial ?? "a major arterial route";
-      const highway = s.nearestHighwayKm ? `${s.nearestHighwayKm}km` : "within reach";
-      const zoning = s.zoning ?? "mixed-use";
-      const plotSize = s.plotSizeHectares ? `${s.plotSizeHectares} hectares` : "various plot sizes";
-      const facing = s.facing ? `${s.facing}-facing` : "well-positioned";
-      const competition = Array.isArray(s.competition) && s.competition.length > 0
-        ? s.competition.join(", ")
-        : "no known nearby competitors";
-      const incomeVal = s.medianIncome ? Number(s.medianIncome) : 0;
-
-      s.advantages = {
-        economic: `The area supports ${priceRange} with a median household income around ${medIncome}. ${plotSize} available for development, zoned ${zoning}.`,
-        geographic: `${facing} with ${plotSize} of land. Accessible via ${arterial}, ${highway} from the nearest highway.`,
-        logistical: `Connected via ${arterial} with highway access ${highway} away. ${competition ? "Served by local amenities." : "Proximity to main transport routes."}`,
-        demographic: `Median household income around ${medIncome}${incomeVal > 50000 ? ", indicating strong spending power in the catchment area" : ""}.`,
-      };
-      s.disadvantages = competition
-        ? `Nearby competition includes ${competition}. ${s.amenityCount === 0 || s.signals?.length === 0 ? "Limited amenities within walking distance may affect foot traffic." : ""}`
-        : "No known competitors in the immediate area — verify with a site visit.";
-    }
-
     const payload: StubPayload = {
       status: 'stub_demo',
       vertical,

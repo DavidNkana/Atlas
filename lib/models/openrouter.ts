@@ -10,12 +10,17 @@ function humanVertical(v: string): string {
 }
 
 function buildPrompt(req: ModelRequest): string {
-  // Short prompt — free tier models need <500 tokens for fast response
+  // Day 17 v1: drop response_format requirement, allow prose. The
+  // lenient parser extracts sites from either shape.
   return (
-    'You are Atlas, an African site-selection engine.\n' +
-    'Find the best ' + humanVertical(req.vertical) + ' locations for: "' + req.question + '".\n' +
-    'Return JSON: {"ranked_sites":[{"rank":1,"name":"suburb","score":0.5,"rationale":"why","lat":0,"lng":0}]}\n' +
-    'Up to 5 sites. Real names. Real coordinates. Be brief.'
+    'You are Atlas, a site-selection intelligence engine. The user wants to find the best location for a ' +
+    humanVertical(req.vertical) +
+    ' given this question: "' +
+    req.question +
+    '".\n\n' +
+    'Either return JSON in this shape:\n' +
+    '{"ranked_sites":[{"rank":1,"name":"<place>","suburb":"<suburb label>","score":<0-1>,"confidence":<0-1>,"rationale":"<1-2 sentences>","lat":<decimal latitude>,"lng":<decimal longitude>}]}\n\n' +
+    'Or return a natural prose answer naming up to 5 real place names with their city context (e.g. "Observatory, Cape Town"). Use real suburb names. Be specific.'
   );
 }
 
@@ -25,9 +30,10 @@ function buildPrompt(req: ModelRequest): string {
  * /models endpoint is down.
  */
 const CURATED_STUB_SLUGS: string[] = [
-  'meta-llama/llama-3.2-3b-instruct',   // fastest (192ms)
-  'qwen/qwen3-next-80b-a3b-instruct',  // fast (292ms)
-  'meta-llama/llama-3.3-70b-instruct', // best quality (507ms)
+  'qwen/qwen-2.5-72b-instruct:free',
+  'meta-llama/llama-3.3-70b-instruct:free',
+  'google/gemini-2.0-flash-exp:free',
+  'mistralai/mistral-small-3.2-24b-instruct:free',
 ];
 
 /**
@@ -66,7 +72,7 @@ function makeOpenRouterModel(
         if (!key) {
           return { ok: false, error: 'OPENROUTER_API_KEY not set' } as any;
         }
-        const client = new OpenAI({ apiKey: key, baseURL: 'https://openrouter.ai/api/v1', timeout: 30000 });
+        const client = new OpenAI({ apiKey: key, baseURL: 'https://openrouter.ai/api/v1' });
 
         const discoveredIds = await fetchOpenRouterFreeModelIds();
         const chain: string[] = [];
@@ -129,7 +135,7 @@ export const llamaFree: Model = makeOpenRouterModel(
   'llama-free',
   'Llama 3.3 70B (free)',
   'Meta Llama 3.3 70B Instruct via OpenRouter free tier. Dynamically discovers currently-free models so slugs do not go stale.',
-  'meta-llama/llama-3.3-70b-instruct',
+  'meta-llama/llama-3.3-70b-instruct:free',
   // Meta blue
   '#0866FF',
   // Simplified Meta infinity mark
@@ -140,7 +146,7 @@ export const mistralFree: Model = makeOpenRouterModel(
   'mistral-free',
   'Qwen 2.5 72B (free)',
   'Qwen 2.5 72B Instruct via OpenRouter free tier. Dynamically discovers currently-free models so slugs do not go stale.',
-  'qwen/qwen3-next-80b-a3b-instruct',
+  'qwen/qwen-2.5-72b-instruct:free',
   // Qwen purple-ish
   '#7C3AED',
   // Simplified Qwen / Mistral flame

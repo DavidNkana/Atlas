@@ -14,7 +14,6 @@ import type { Plan } from "@/lib/plan/types";
 import { classifyIntent } from "@/lib/intent/classify";
 import { enrichSitesWithCatalog } from "@/lib/stub/enrich-sites";
 import { fetchLiveListings, type LiveListing } from "@/lib/connectors/tavily-listings";
-import { fetchNearbyCompetitors } from "@/lib/connectors/google-places";
 import { withTimeout } from "@/lib/util/timeout";
 import { sanitizeForJson } from "@/lib/util/json-sanitize";
 
@@ -212,14 +211,6 @@ type AskResponse = {
   /** Day 22 — when live listings are unavailable (no TAVILY key, or
    * Tavily failed). UI surfaces "live listings unavailable" badge. */
   liveListingsError?: string;
-  /** LCP-64 — Google Places competitor search error (if any). */
-  placesError?: string;
-  /** LCP-62 v4 — browser-use research output (polled for up to 8s). */
-  researchNotes?: string;
-  /** LCP-62 v4 — live browser URL to watch the agent work. */
-  researchLiveUrl?: string;
-  /** LCP-62 v4 — set when browser-use fails, has no key, or is misconfigured. */
-  researchError?: string;
   /** Day 5 — the plan we actually executed. */
   plan?: Plan;
   /** Day 5 — per-connector status. */
@@ -447,7 +438,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   partialQuestionText = trimmedQuestion;
 
   // 3. Resolve model — default to gemini-flash
-  const requestedModelId = (model && typeof model === "string") ? model : "mistral-free";
+  const requestedModelId = (model && typeof model === "string") ? model : "gemini-flash";
   let activeModel: Model;
   let activeInfo: ModelInfo;
   let fallbackUsed = false;
@@ -483,23 +474,13 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
     activeModel = getModel(requestedModelId);
     activeInfo = activeModel.info;
     if (!activeModel.isAvailable()) {
-      // Day 27 hotfix: don't jump straight to curated-stub when primary
-      // isn't available. Try the next available model in the chain first.
+      // Requested model has no key set — fall back to curated stub
+      console.warn(`[/api/ask] model ${requestedModelId} not available, falling back to curated-stub`);
       pushAttempted(requestedModelId);
-      const nextAvailable = ALL_MODELS.find(
-        (m) => m.info.id !== requestedModelId && m.isAvailable(),
-      );
-      if (nextAvailable) {
-        activeModel = nextAvailable;
-        activeInfo = nextAvailable.info;
-        fallbackUsed = true;
-        responseStatus = "ok";
-      } else {
-        activeModel = curatedStub;
-        activeInfo = curatedStub.info;
-        fallbackUsed = true;
-        responseStatus = "stub_fallback";
-      }
+      activeModel = curatedStub;
+      activeInfo = curatedStub.info;
+      fallbackUsed = true;
+      responseStatus = "stub_fallback";
     }
   } catch {
     // Unknown model id — fall back to curated stub
@@ -612,51 +593,6 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
 
   try {
     await withTimeout((async () => {
-      // LCP-66: try OpenRouter directly first. Bypasses the model abstraction
-      // layer. If it works in <5s, use the result. If not, fall through.
-      const orKey = process.env.OPENROUTER_API_KEY;
-      if (orKey && !("_skip_or" in (req as any))) {
-        try {
-          const orRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${orKey}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              model: "qwen/qwen3-next-80b-a3b-instruct",
-              messages: [{
-                role: "user",
-                content: `List 5 real suburbs in or near ${ trimmedQuestion }. Return as JSON array: [{"name":"suburb name","lat":-26,"lng":28,"why":"one sentence"}]`,
-              }],
-              max_tokens: 500,
-            }),
-          });
-          if (orRes.ok) {
-            const data = await orRes.json() as any;
-            const text = data?.choices?.[0]?.message?.content;
-            if (text) {
-              const parsed = JSON.parse(text.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim());
-              if (Array.isArray(parsed) && parsed.length > 0) {
-                rankedSites = parsed.map((s: any, i: number) => ({
-                  rank: i + 1,
-                  name: String(s.name ?? ''),
-                  score: 0.7,
-                  confidence: 0.8,
-                  rationale: String(s.why ?? ''),
-                  lat: Number(s.lat) || 0,
-                  lng: Number(s.lng) || 0,
-                }));
-                activeInfo = { id: 'mistral-free', displayName: 'Mistral (OpenRouter)', shortName: 'Mistral', provider: 'openrouter', free: true, description: '', brandColor: '#7C3AED', logoPath: '' };
-                responseStatus = 'ok';
-                pushAttempted('mistral-free');
-                return;
-              }
-            }
-          }
-        } catch { /* fall through to model chain */ }
-      }
-
       try {
         const result = await callModel(activeModel);
         if (result.ok && result.sites.length > 0) {
@@ -899,10 +835,6 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   let allLiveListings: LiveListing[] = [];
   /** Day 22 — when Tavily fails for any reason; UI surfaces a non-fatal badge. */
   let liveListingsError: string | undefined;
-  let placesError: string | undefined;
-  let researchNotes: string | undefined;
-  let researchError: string | undefined;
-  let researchLiveUrl: string | undefined;
 
   try {
     await withTimeout((async () => {
@@ -992,37 +924,6 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
         site.scoreBreakdown = breakdown;
       }
 
-      // LCP-64 — Google Places competitor search for each ranked site.
-      // Fires in parallel after scoring. Each site gets a `competitors`
-      // field with nearby businesses matching the vertical.
-      try {
-        const competitorResults = await Promise.allSettled(
-          rankedSites.map((site) =>
-            fetchNearbyCompetitors({
-              lat: site.lat ?? location.lat,
-              lng: site.lng ?? location.lng,
-              vertical: effectiveVertical,
-            }),
-          ),
-        );
-        let anyOk = false;
-        const errors: string[] = [];
-        rankedSites.forEach((site, i) => {
-          const r = competitorResults[i];
-          if (r.status === "fulfilled") {
-            if (r.value.ok && r.value.places.length > 0) {
-              (site as any).competitors = r.value;
-              anyOk = true;
-            } else if (r.value.error) {
-              errors.push(`${site.name}: ${r.value.error}`);
-            }
-          }
-        });
-        if (!anyOk && errors.length > 0) {
-          placesError = errors.slice(0, 3).join(" | ");
-        }
-      } catch { /* non-fatal */ }
-
       allConnectorsFailed =
         connectorsRun.length > 0 &&
         connectorsRun.every((c) => c.status !== "ok" || c.signalCount === 0);
@@ -1060,11 +961,10 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   //   3. detectCity(question).name — city-only fallback
   try {
     const location = deriveLocation(rankedSites);
-    // deriveLocation returns {lat, lng, label} — not {name}. Use label.
-    const cityName = location?.label ?? null;
+    const cityName = (location as any)?.name ?? null;
     // Build per-site price/erf hints from enriched sites (so the query
     // matches what the developer asked for, not generic suburb terms).
-    let hints = rankedSites
+    const hints = rankedSites
       .map((s) => {
         const explicitSuburb = ((s as any).suburb as string | undefined) ?? null;
         const nameField = (s.name ?? "").trim();
@@ -1086,17 +986,6 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
       })
       .filter((h): h is NonNullable<typeof h> => h !== null)
       .slice(0, 3);
-
-    // Fallback for non-SA cities: if Gemini didn't return identifiable
-    // suburbs, fire a single city-level Tavily search anyway.
-    if (hints.length === 0 && cityName) {
-      hints = [{
-        suburb: null,
-        cityName,
-        priceBand: null,
-        plotSizeHectares: null,
-      }];
-    }
 
     // Day 22 v12: run one search per hint (max 3) — gives Perplexity-
     // style depth (per-suburb). Use TAVILY_LISTINGS_TIMEOUT_MS (15s)
@@ -1140,57 +1029,6 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   } catch (tavilyErr) {
     console.warn("[/api/ask] tavily-listings failed (non-fatal):", tavilyErr);
     liveListingsError = String(tavilyErr instanceof Error ? tavilyErr.message : tavilyErr);
-  }
-
-  // LCP-62 v4 — browser-use research sprint (synchronous, 8s max).
-  // Creates a session, polls for up to 8 seconds, returns whatever
-  // output the agent produced plus a liveUrl to watch the rest.
-  try {
-    const BU_KEY = process.env.BROWSER_USE_API_KEY;
-    if (BU_KEY) {
-      const task = [
-        `Research property for a ${effectiveVertical.replace(/_/g, " ")}.`,
-        `User asked: "${question}"`,
-        "",
-        "1. Search listing sites. Top 3: price, size, address, URL.",
-        "2. Check zoning and regulations for the area mentioned.",
-        "3. Google Maps: nearby businesses, roads, competition.",
-        "Return plain text: LISTINGS, ZONING, ACCESS.",
-      ].join("\n");
-
-      const createRes = await fetch("https://api.browser-use.com/api/v3/sessions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Browser-Use-API-Key": BU_KEY },
-        body: JSON.stringify({ task, model: "gpt-5.4-mini" }),
-      });
-      if (createRes.ok) {
-        const session = await createRes.json() as { id: string; live_url?: string };
-        researchLiveUrl = session.live_url;
-        // Poll for up to 8 seconds
-        const deadline = Date.now() + 8000;
-        while (Date.now() < deadline) {
-          await new Promise((r) => setTimeout(r, 1500));
-          const pollRes = await fetch(
-            `https://api.browser-use.com/api/v3/sessions/${session.id}`,
-            { headers: { "X-Browser-Use-API-Key": BU_KEY } },
-          );
-          if (!pollRes.ok) break;
-          const state = await pollRes.json() as { status?: { value: string }; output?: string };
-          const sv = state.status?.value;
-          if (sv === "idle" || sv === "stopped") {
-            if (state.output) researchNotes = state.output;
-            break;
-          }
-          if (sv === "error" || sv === "timed_out") break;
-        }
-      } else {
-        researchError = `browser-use session creation failed (${createRes.status})`;
-      }
-    } else {
-      researchError = "BROWSER_USE_API_KEY not set in Vercel env";
-    }
-  } catch (researchErr) {
-    researchError = String(researchErr instanceof Error ? researchErr.message : researchErr);
   }
 
   // Attach live listings to ranked sites.
@@ -1274,10 +1112,6 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
     // all listings regardless of site.
     liveListings: allLiveListings.length > 0 ? allLiveListings : undefined,
     liveListingsError: allLiveListings.length === 0 ? liveListingsError : undefined,
-    placesError: placesError || undefined,
-    researchNotes: researchNotes || undefined,
-    researchLiveUrl: researchLiveUrl || undefined,
-    researchError: researchError || undefined,
     connectorsRun,
     // Day 17 v6: routing + chat surface. primaryEngine tells the UI
     // which engine answered. matchedPatterns shows the user why we
