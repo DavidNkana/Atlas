@@ -10,17 +10,15 @@ function humanVertical(v: string): string {
 }
 
 function buildPrompt(req: ModelRequest): string {
-  // Day 17 v1: drop response_format requirement, allow prose. The
-  // lenient parser extracts sites from either shape.
   return (
-    'You are Atlas, a site-selection intelligence engine. The user wants to find the best location for a ' +
-    humanVertical(req.vertical) +
-    ' given this question: "' +
-    req.question +
-    '".\n\n' +
-    'Either return JSON in this shape:\n' +
-    '{"ranked_sites":[{"rank":1,"name":"<place>","suburb":"<suburb label>","score":<0-1>,"confidence":<0-1>,"rationale":"<1-2 sentences>","lat":<decimal latitude>,"lng":<decimal longitude>}]}\n\n' +
-    'Or return a natural prose answer naming up to 5 real place names with their city context (e.g. "Observatory, Cape Town"). Use real suburb names. Be specific.'
+    'You are Atlas, a site-selection engine for African builders.\n' +
+    'Find the best ' + humanVertical(req.vertical) + ' for: "' + req.question + '".\n' +
+    'Return JSON with this shape:\n' +
+    '{"ranked_sites":[{"rank":1,"name":"suburb","suburb":"name","score":0.8,"confidence":0.9,"rationale":"1-2 sentences",' +
+    '"advantages":{"economic":"1 paragraph: prices,business,spending","geographic":"1 paragraph: terrain,soil",' +
+    '"logistical":"1 paragraph: roads,transport","demographic":"1 paragraph: population,income"},' +
+    '"disadvantages":"1 paragraph: honest drawbacks","lat":0,"lng":0}]}\n' +
+    'Use real suburbs. Write full paragraphs. Be specific.'
   );
 }
 
