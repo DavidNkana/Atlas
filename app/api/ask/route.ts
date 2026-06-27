@@ -612,6 +612,51 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
 
   try {
     await withTimeout((async () => {
+      // LCP-66: try OpenRouter directly first. Bypasses the model abstraction
+      // layer. If it works in <5s, use the result. If not, fall through.
+      const orKey = process.env.OPENROUTER_API_KEY;
+      if (orKey && !("_skip_or" in (req as any))) {
+        try {
+          const orRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${orKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model: "qwen/qwen3-next-80b-a3b-instruct",
+              messages: [{
+                role: "user",
+                content: `List 5 real suburbs in or near ${ trimmedQuestion }. Return as JSON array: [{"name":"suburb name","lat":-26,"lng":28,"why":"one sentence"}]`,
+              }],
+              max_tokens: 500,
+            }),
+          });
+          if (orRes.ok) {
+            const data = await orRes.json() as any;
+            const text = data?.choices?.[0]?.message?.content;
+            if (text) {
+              const parsed = JSON.parse(text.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim());
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                rankedSites = parsed.map((s: any, i: number) => ({
+                  rank: i + 1,
+                  name: String(s.name ?? ''),
+                  score: 0.7,
+                  confidence: 0.8,
+                  rationale: String(s.why ?? ''),
+                  lat: Number(s.lat) || 0,
+                  lng: Number(s.lng) || 0,
+                }));
+                activeInfo = { id: 'mistral-free', displayName: 'Mistral (OpenRouter)', shortName: 'Mistral', provider: 'openrouter', free: true, description: '', brandColor: '#7C3AED', logoPath: '' };
+                responseStatus = 'ok';
+                pushAttempted('mistral-free');
+                return;
+              }
+            }
+          }
+        } catch { /* fall through to model chain */ }
+      }
+
       try {
         const result = await callModel(activeModel);
         if (result.ok && result.sites.length > 0) {
