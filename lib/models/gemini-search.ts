@@ -96,7 +96,7 @@ export const geminiSearch: Model = {
         if (!t) { errorLog.push(`${modelId}: empty response`); continue; }
         text = t;
         try {
-          for (const cand of r.candidates ?? []) {
+          for (const cand of r.response.candidates ?? []) {
             for (const ch of (cand?.groundingMetadata as any)?.groundingChunks ?? []) {
               if (ch?.web?.uri) groundingSources.push({ title: ch.web.title ?? ch.web.uri, url: ch.web.uri });
             }
