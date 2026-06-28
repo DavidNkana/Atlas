@@ -383,7 +383,7 @@ export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boole
                     {user.firstName ?? user.username ?? "You"}
                   </div>
                   <div className="truncate text-[10px] text-atlas-muted">
-                    {user.primaryEmailAddress?.emailAddress ?? "Profile"}
+                    Free Demo plan
                   </div>
                 </div>
               )}

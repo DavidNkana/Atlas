@@ -10,12 +10,9 @@ export const metadata: Metadata = {
     "Atlas blends multiple data sources, models, and live signals to help African builders, operators, and investors find the right place to build, operate, or invest.",
   icons: {
     icon: [
-      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/AI.png", type: "image/png" },
     ],
-    // Day 28 v2 — stop /favicon.ico 404s by adding a 32x32 ico
-    // fallback. Some browsers (and Lighthouse) still hit
-    // /favicon.ico unconditionally regardless of <link rel=icon>.
-    shortcut: "/icon.svg",
+    shortcut: "/AI.png",
   },
 };
 
