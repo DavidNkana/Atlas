@@ -26,12 +26,11 @@ export default function PricingPage() {
     <div className="mx-auto w-full max-w-5xl px-6 py-10">
       <div className="mb-10 text-center">
         <h2 className="mb-3 text-3xl font-semibold tracking-tight text-atlas-text sm:text-4xl">
-          Find the right plot in 30 seconds, not 6 weeks.
+          Atlas — Africa's site selection engine.
         </h2>
         <p className="mx-auto max-w-2xl text-sm text-atlas-muted">
-          Free to start. Pro when you need real data. Team when
-          you scale. All plans include the same Atlas intelligence
-          engine — you pay for volume and integrations.
+          Pick a city, pick a vertical, ask anything. Atlas finds the best sites
+          with real data, real coordinates, and AI reasoning.
         </p>
       </div>
 
@@ -60,9 +59,10 @@ export default function PricingPage() {
           cta={{ kind: "checkout", plan: "pro", label: "Join waitlist" }}
           features={[
             "Unlimited questions",
-            "All 4 data connectors (real-time)",
-            "Real Google Places POI density",
-            "Real StatsSA demographics",
+            "12 African cities + expanding",
+            "10 verticals (gas station, restaurant, warehouse, civic, more)",
+            "Real Google Places competitor search",
+            "Real StatsSA demographics per suburb",
             "Save + pin unlimited history",
             "Email support",
             "Cancel any time",
@@ -94,14 +94,16 @@ export default function PricingPage() {
           What every plan includes
         </h3>
         <ul className="grid grid-cols-1 gap-2 text-xs text-atlas-text sm:grid-cols-2">
-          <li>· AI reasoning engine (Gemini + Tavily + Llama 3.3 70B + Qwen 2.5 72B + curated stub fallback)</li>
-          <li>· Mapbox map with markers, popups, and auto-fit</li>
+          <li>· AI reasoning (Gemini + OpenRouter + curated stub)</li>
+          <li>· Interactive map with markers, popups, and auto-fit</li>
           <li>· Real-time ranking chart with hover tooltips</li>
-          <li>· OpenStreetMap POI density data</li>
-          <li>· Suburb demographic profiles (census data)</li>
-          <li>· 23 African cities with location-aware data</li>
-          <li>· Click-to-expand site cards with full AI reasoning</li>
-          <li>· Dark theme + light theme + custom theme toggle</li>
+          <li>· 10 signal connectors (OSM, Places, StatsSA, schools, transit)</li>
+          <li>· 12 African cities with hand-curated site catalogs</li>
+          <li>· Suburb-level demographic profiles (census data)</li>
+          <li>· Click-to-expand site cards with AI reasoning</li>
+          <li>· Voice input + image attachment + auto-expand prompt</li>
+          <li>· Dark/light theme toggle</li>
+          <li>· Real property listings from SA portals</li>
         </ul>
       </div>
 

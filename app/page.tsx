@@ -528,8 +528,8 @@ export default function HomePage() {
             <a href="/pricing" className="hover:text-atlas-accent">
               Pricing
             </a>
-            <a href="/demo" className="hover:text-atlas-accent">
-              For builders
+            <a href="/investors" className="hover:text-atlas-accent">
+              Investors
             </a>
           </div>
         </header>
