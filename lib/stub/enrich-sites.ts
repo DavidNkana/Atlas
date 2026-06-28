@@ -38,14 +38,47 @@ import { REAL_SITE_CATALOG, type RealSite } from "./real-sites";
  * catalog sites the AI didn't mention, ranked below the AI results,
  * so the user always sees the full candidate set.
  */
-export function supplementMissingCatalogSites<T extends { name: string }>(
+export function supplementMissingCatalogSites<T extends { name: string; suburb?: string }>(
   sites: T[],
   cityName: string,
   vertical: string,
 ): T[] {
   // Normalise city display name → catalog key
-  const catalogKey = cityName.toLowerCase().replace(/\s+/g, "_");
-  const candidates = REAL_SITE_CATALOG[catalogKey]?.[vertical];
+  let catalogKey = cityName.toLowerCase().replace(/\s+/g, "_");
+  let candidates = REAL_SITE_CATALOG[catalogKey]?.[vertical];
+
+  // Day 28 hotfix v2: if direct catalog-key lookup fails (cityName is
+  // a suburb like "Brooklyn"), try two fallbacks:
+  //   a) Scan catalog entries for a matching name/suburb.
+  //   b) Trust the caller to pass detectCity(question).id as cityName,
+  //      which is already a valid catalog key.
+  // Both are done here so the caller doesn't need catalog knowledge.
+  if (!candidates) {
+    const searchKey = cityName.toLowerCase().trim();
+    for (const [cityKey, verticals] of Object.entries(REAL_SITE_CATALOG)) {
+      const vertEntries = verticals[vertical];
+      if (!vertEntries) continue;
+      // Check if any site name or suburb contains the search key
+      const found = vertEntries.some(
+        (rs: RealSite) =>
+          rs.name.toLowerCase().includes(searchKey) ||
+          (rs.suburb && rs.suburb.toLowerCase().includes(searchKey))
+      );
+      if (found) {
+        catalogKey = cityKey;
+        candidates = REAL_SITE_CATALOG[catalogKey]?.[vertical];
+        break;
+      }
+    }
+    // If still no match, try the cityName as a catalog key for ALL
+    // verticals (it might be a valid city key that has this vertical
+    // but the key format didn't match due to casing/spacing).
+    if (!candidates && REAL_SITE_CATALOG[catalogKey]) {
+      // The city exists but this vertical doesn't — return empty.
+      return sites;
+    }
+  }
+
   if (!candidates || candidates.length === 0) return sites;
 
   // Which catalog names are already in the AI results?

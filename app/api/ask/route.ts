@@ -18,6 +18,7 @@ import { fetchLiveListings, type LiveListing } from "@/lib/connectors/tavily-lis
 import { fetchNearbyCompetitors } from "@/lib/connectors/google-places";
 import { withTimeout } from "@/lib/util/timeout";
 import { sanitizeForJson } from "@/lib/util/json-sanitize";
+import { detectCity } from "@/lib/stub/detect";
 
 /**
  * Day 5 hotfix — handler-level budget.
@@ -1048,13 +1049,13 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
     const cityName = (location?.label ?? null)?.replace(/\s*\(fallback\)\s*$/i, '') ?? null;
 
     // Day 28 — fill out AI-ranked sites with any hand-curated catalog
-    // entries the model missed. The AI models know 1-3 sites from
-    // training data; the catalog has 5-7 per city×vertical. This
-    // ensures the user always sees the full candidate set.
-    if (cityName && rankedSites.length > 0) {
+    // entries the model missed. location.label is often a suburb
+    // (e.g. "Brooklyn") not a city. detectCity(question) reliably
+    // extracts the city from the user's query text.
+    if (rankedSites.length > 0) {
       rankedSites = supplementMissingCatalogSites(
         rankedSites,
-        cityName,
+        detectCity(question).id,
         effectiveVertical,
       );
     }
