@@ -113,11 +113,11 @@ export async function GET(_req: NextRequest) {
   // Test OpenRouter with a tiny call using the live models Atlas uses
   const orCheck = checks[2];
   if (orCheck.keyFormat === "valid" && openrouterKey) {
-    // Test each live model in parallel
+    // Test the exact models Atlas uses (matching lib/models/openrouter.ts chain)
     const models = [
-      { id: "google/gemini-2.0-flash-lite-001", label: "Gemini Flash Lite" },
-      { id: "meta-llama/llama-3.3-70b-instruct:free", label: "Llama 3.3 70B" },
-      { id: "qwen/qwen3-next-80b:free", label: "Qwen3 80B" },
+      { id: "qwen/qwen-2.5-72b-instruct:free", label: "Qwen 2.5 72B (mistral-free)" },
+      { id: "meta-llama/llama-3.3-70b-instruct:free", label: "Llama 3.3 70B (llama-free)" },
+      { id: "mistralai/mistral-small-3.2-24b-instruct:free", label: "Mistral Small 3.2" },
     ];
     const results: Record<string, { ok: boolean; latencyMs: number; error?: string }> = {};
     
