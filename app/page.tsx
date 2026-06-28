@@ -627,7 +627,7 @@ export default function HomePage() {
 
                 {/* Command bar */}
                 <div className="rounded-xl border border-atlas-border bg-atlas-surface shadow-lg shadow-black/20 transition-colors focus-within:border-atlas-accent">
-                  <div className="flex items-center gap-2 px-3 py-2">
+                  <div className="flex items-end gap-2 px-3 py-2">
                     <textarea
                       ref={inputRef}
                       value={question}
@@ -640,7 +640,7 @@ export default function HomePage() {
                       }}
                       placeholder={placeholder}
                       rows={1}
-                      className="min-w-0 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-atlas-text placeholder:text-atlas-muted focus:outline-none"
+                      className="min-w-0 flex-1 resize-none overflow-hidden bg-transparent px-2 py-1.5 text-sm text-atlas-text placeholder:text-atlas-muted focus:outline-none"
                       required
                       disabled={loading}
                       onKeyDown={(e) => {
