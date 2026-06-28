@@ -13,9 +13,9 @@ import { buildPlan } from "@/lib/plan/planner";
 import type { Plan } from "@/lib/plan/types";
 import { classifyIntent } from "@/lib/intent/classify";
 import { enrichSitesWithCatalog } from "@/lib/stub/enrich-sites";
-import { supplementMissingCatalogSites } from "@/lib/stub/enrich-sites";
+import { detectCity } from "@/lib/stub/detect";
 import { fetchLiveListings, type LiveListing } from "@/lib/connectors/tavily-listings";
-import { fetchNearbyCompetitors } from "@/lib/connectors/google-places";
+import { runBrowserUseTask, buildAtlasResearchTask, type BrowserUseResult } from "@/lib/connectors/browser-use";
 import { withTimeout } from "@/lib/util/timeout";
 import { sanitizeForJson } from "@/lib/util/json-sanitize";
 
@@ -107,9 +107,7 @@ const MODEL_TIMEOUT_MS = 8_000;
 // not per-attempt. So we need 60s budget for the full
 // 3-attempt cascade.
 const MODEL_TIMEOUT_OVERRIDES: Record<string, number> = {
-  'gemini-search': 5_000,
-  'llama-free': 22_000,
-  'mistral-free': 22_000,
+  'gemini-search': 60_000,
   'tavily': 45_000,
 };
 
@@ -215,6 +213,11 @@ type AskResponse = {
   /** Day 22 — when live listings are unavailable (no TAVILY key, or
    * Tavily failed). UI surfaces "live listings unavailable" badge. */
   liveListingsError?: string;
+  /** LCP-62 — browser-use research agent output. Multi-site research
+   * sprint: zoning, competitor analysis, traffic data. */
+  researchNotes?: string;
+  /** LCP-62 — when browser-use fails or is not configured. */
+  researchError?: string;
   /** Day 5 — the plan we actually executed. */
   plan?: Plan;
   /** Day 5 — per-connector status. */
@@ -664,72 +667,18 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
             m.isAvailable()
         );
 
-        // Day 28: race OpenRouter fallback models in parallel instead of
-        // sequential. On Vercel cold starts, DNS+TLS for the first HTTP
-        // call can eat 5-8s, making 18s per-model timeout tight. Racing
-        // them lets whichever responds first win, cutting worst-case
-        // from ~36s (two 18s timeouts stacked) to ~22s (one 18s + overhead).
-        // Gemini and perplexity are excluded — Gemini is the broken
-        // primary, perplexity needs PERPLEXITY_API_KEY (not set).
-        const openRouterChain = fallbackChain.filter(
-          (m) => m.info.provider === "openrouter"
-        );
-        const nonOpenRouter = fallbackChain.filter(
-          (m) => m.info.provider !== "openrouter"
-        );
-
         let cascaded = false;
-
-        // Race all OpenRouter models: first to respond wins.
-        if (openRouterChain.length > 0) {
-          openRouterChain.forEach((m) => pushAttempted(m.info.id));
-          const race = Promise.race(
-            openRouterChain.map((m) =>
-              callModel(m).then((r) => ({ model: m, result: r }))
-            )
-          );
-          const winner = await race;
-          if (winner.result.ok && winner.result.sites.length > 0) {
-            rankedSites = enrichSitesWithCatalog(winner.result.sites);
-            raw = winner.result.raw;
-            if (winner.result.answer) modelAnswer = winner.result.answer;
-            if (winner.result.sources && winner.result.sources.length > 0)
-              modelSources = winner.result.sources;
-            activeInfo = winner.model.info;
-            activeModel = winner.model;
-            fallbackUsed = true;
-            cascaded = true;
-            if (winner.result.__stub) {
-              stubMeta = winner.result.__stub;
-              responseStatus = "stub_demo";
-            }
-            console.log(
-              `[/api/ask] raced fallback served by ${winner.model.info.id}`
-            );
-            return;
-          }
-          if (winner.result.ok && winner.result.sites.length === 0) {
-            console.warn(
-              `[/api/ask] raced fallback ${winner.model.info.id} returned 0 sites — trying remaining chain`
-            );
-          }
-          errorChain.push(
-            winner.result.ok
-              ? `${winner.model.info.id} returned 0 sites`
-              : `${winner.model.info.id} call failed: ${winner.result.error ?? "unknown error"}`
-          );
-        }
-
-        // Sequential fallback for any remaining non-OpenRouter models.
-        for (const fallback of nonOpenRouter) {
+        for (const fallback of fallbackChain) {
           pushAttempted(fallback.info.id);
           const fbResult = await callModel(fallback);
           if (fbResult.ok && fbResult.sites.length > 0) {
+            // Day 21 v2: enrich with REAL_SITE_CATALOG property data.
             rankedSites = enrichSitesWithCatalog(fbResult.sites);
             raw = fbResult.raw;
+            // v16: propagate research answer + citations from
+            // any model that returned them.
             if (fbResult.answer) modelAnswer = fbResult.answer;
-            if (fbResult.sources && fbResult.sources.length > 0)
-              modelSources = fbResult.sources;
+            if (fbResult.sources && fbResult.sources.length > 0) modelSources = fbResult.sources;
             activeInfo = fallback.info;
             activeModel = fallback;
             fallbackUsed = true;
@@ -739,20 +688,26 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
               responseStatus = "stub_demo";
             }
             console.log(
-              `[/api/ask] sequential fallback served by ${fallback.info.id}`
+              `[/api/ask] fallback chain served by ${fallback.info.id} after ${activeInfo.id} failed`
             );
             return;
           }
+          // Day 22 v25: same site-count guard for fallbacks. If
+          // OpenRouter returns ok:true with 0 sites, keep cascading.
           if (fbResult.ok && fbResult.sites.length === 0) {
             console.warn(
-              `[/api/ask] fallback ${fallback.info.id} returned 0 sites with ok:true — continuing to next fallback`
+              `[/api/ask] fallback ${fallback.info.id} returned 0 sites with ok:true — continuing to next fallback`,
             );
           }
           errorChain.push(
             fbResult.ok
               ? `${fallback.info.id} returned 0 sites`
-              : `${fallback.info.id} call failed: ${fbResult.error ?? "unknown error"}`
+              : `${fallback.info.id} call failed: ${fbResult.error ?? "unknown error"}`,
           );
+          console.error(
+            `[/api/ask] fallback model ${fallback.info.id} also failed: ${fbResult.ok ? "0 sites" : (fbResult.error ?? "unknown error")}`,
+          );
+          // continue to next fallback — never throw
         }
 
         if (!cascaded) {
@@ -887,6 +842,8 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   let allLiveListings: LiveListing[] = [];
   /** Day 22 — when Tavily fails for any reason; UI surfaces a non-fatal badge. */
   let liveListingsError: string | undefined;
+  let researchNotes: string | undefined;
+  let researchError: string | undefined;
 
   try {
     await withTimeout((async () => {
@@ -976,37 +933,6 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
         site.scoreBreakdown = breakdown;
       }
 
-      // LCP-64: Google Places competitor search for each ranked site
-      try {
-        const results = await Promise.allSettled(
-          rankedSites.map((site) =>
-            fetchNearbyCompetitors({
-              lat: site.lat ?? location.lat,
-              lng: site.lng ?? location.lng,
-              vertical: effectiveVertical,
-            }),
-          ),
-        );
-        rankedSites.forEach((site, i) => {
-          const r = results[i];
-          if (r.status === "fulfilled") {
-            (site as any).competitors = {
-              ok: true,
-              places: r.value.places ?? [],
-              noCompetition: r.value.places && r.value.places.length === 0,
-            };
-            // Override stub competition data with real Places results
-            if (r.value.places && r.value.places.length > 0) {
-              (site as any).competition = r.value.places.map((p: any) =>
-                `${p.name} (${Math.round(p.distanceM)}m)`
-              );
-            } else {
-              (site as any).competition = ["No direct competitors within 3km"];
-            }
-          }
-        });
-      } catch { /* non-fatal */ }
-
       allConnectorsFailed =
         connectorsRun.length > 0 &&
         connectorsRun.every((c) => c.status !== "ok" || c.signalCount === 0);
@@ -1042,28 +968,29 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   //   2. site.name — split on "," and take the first segment
   //      (e.g. "Sandton CBD, Johannesburg" → "Sandton CBD")
   //   3. detectCity(question).name — city-only fallback
+  let location: any = null;
+  let cityName: string | null = null;
+  let hints: Array<{
+    suburb: string | null;
+    cityName: string;
+    priceBand: string | null;
+    plotSizeHectares: number | null;
+  }> = [];
   try {
-    const location = deriveLocation(rankedSites);
-    // deriveLocation returns {lat, lng, label} — use label, not name
-    const cityName = (location?.label ?? null)?.replace(/\s*\(fallback\)\s*$/i, '') ?? null;
-
-    // Day 28 — fill out AI-ranked sites with any hand-curated catalog
-    // entries the model missed. The AI models know 1-3 sites from
-    // training data; the catalog has 5-7 per city×vertical. This
-    // ensures the user always sees the full candidate set.
-    if (cityName && rankedSites.length > 0) {
-      rankedSites = supplementMissingCatalogSites(
-        rankedSites,
-        cityName,
-        effectiveVertical,
-      );
+    location = deriveLocation(rankedSites);
+    // deriveLocation returns {lat, lng, label} — NOT {name}.
+    // Use label first, then fall back to detecting the city from the user's question text.
+    cityName = location?.label ?? null;
+    if (!cityName || cityName.length < 2) {
+      cityName = detectCity(question).name;
     }
     // Build per-site price/erf hints from enriched sites (so the query
     // matches what the developer asked for, not generic suburb terms).
-    let hints = rankedSites
+    hints = rankedSites
       .map((s) => {
         const explicitSuburb = ((s as any).suburb as string | undefined) ?? null;
         const nameField = (s.name ?? "").trim();
+        // Extract suburb from name like "Constantia, Cape Town" → "Constantia"
         const nameSuburb =
           nameField.includes(",") ? nameField.split(",")[0].trim() : nameField || null;
         const suburb = explicitSuburb || nameSuburb || null;
@@ -1082,8 +1009,11 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
       .filter((h): h is NonNullable<typeof h> => h !== null)
       .slice(0, 3);
 
-    // Fallback for non-SA cities: if no sites produced hints, fire a
-    // single city-level Tavily search with the detected city name.
+    // Fallback: if no sites yielded hints (common for non-SA cities
+    // where Gemini doesn't return geographically-identifiable suburbs),
+    // fire a single city-level search with the detected city name.
+    // Without this, Lusaka/Nairobi/Kitwe queries burn zero Tavily calls
+    // while looking like they tried.
     if (hints.length === 0 && cityName) {
       hints = [{
         suburb: null,
@@ -1098,11 +1028,15 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
     // not STEP_B_TIMEOUT_MS (5s) — the listings pipeline takes 6-10s
     // minimum for 7 portal searches + extracts. creditBudget=14
     // covers all 7 portals.
+    // Detect actual country for Tavily queries (before LCP-60 this was
+    // hardcoded to "" which made every query use the broad web fallback).
+    const detectedCity = detectCity(question);
+    const countryName = detectedCity?.country ?? "";
     const perSuburbResults = await Promise.allSettled(
       hints.map((h) =>
         withTimeout(
           fetchLiveListings({
-            city: { id: "", name: h.cityName, country: "" },
+            city: { id: "", name: h.cityName, country: countryName },
             suburb: h.suburb,
             vertical: effectiveVertical,
             priceBand: h.priceBand,
@@ -1135,6 +1069,47 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   } catch (tavilyErr) {
     console.warn("[/api/ask] tavily-listings failed (non-fatal):", tavilyErr);
     liveListingsError = String(tavilyErr instanceof Error ? tavilyErr.message : tavilyErr);
+  }
+
+  // LCP-62 — browser-use multi-site research sprint.
+  // Fires in parallel with Tavily listings (above). Uses the first
+  // hint's city/suburb to build a research task. Browser-use spins
+  // up a real browser with stealth + residential proxy, navigates
+  // Property24 + municipal zoning + Google Maps, and returns a
+  // structured research summary.
+  //
+  // Timeboxed at 4 minutes. If it times out or fails, the response
+  // still ships — researchNotes is non-blocking.
+  try {
+    const primaryHint = hints.length > 0 ? hints[0] : null;
+    if (primaryHint) {
+      const researchTask = buildAtlasResearchTask({
+        city: primaryHint.cityName,
+        country: "South Africa", // default; city detection picks this up
+        suburb: primaryHint.suburb,
+        vertical: effectiveVertical,
+        plotSizeHectares: primaryHint.plotSizeHectares ?? undefined,
+      });
+      const proxyCountry = primaryHint.cityName === "Lusaka" || primaryHint.cityName === "Kitwe" || primaryHint.cityName === "Ndola" || primaryHint.cityName === "Livingstone" ? "zm"
+        : primaryHint.cityName === "Nairobi" || primaryHint.cityName === "Mombasa" ? "ke"
+        : primaryHint.cityName === "Harare" ? "zw"
+        : "za";
+
+      const researchResult = await runBrowserUseTask({
+        task: researchTask,
+        model: "gpt-5.4-mini",
+        proxyCountryCode: proxyCountry,
+      });
+
+      if (researchResult.ok) {
+        researchNotes = researchResult.output;
+      } else {
+        researchError = researchResult.error ?? "browser-use returned no data";
+      }
+    }
+  } catch (researchErr) {
+    console.warn("[/api/ask] browser-use research failed (non-fatal):", researchErr);
+    researchError = String(researchErr instanceof Error ? researchErr.message : researchErr);
   }
 
   // Attach live listings to ranked sites.
@@ -1218,6 +1193,8 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
     // all listings regardless of site.
     liveListings: allLiveListings.length > 0 ? allLiveListings : undefined,
     liveListingsError: allLiveListings.length === 0 ? liveListingsError : undefined,
+    researchNotes,
+    researchError,
     connectorsRun,
     // Day 17 v6: routing + chat surface. primaryEngine tells the UI
     // which engine answered. matchedPatterns shows the user why we

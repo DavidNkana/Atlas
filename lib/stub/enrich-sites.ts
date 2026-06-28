@@ -28,7 +28,68 @@
  */
 
 import type { Vertical } from "@/lib/models/types";
-import { REAL_SITE_CATALOG } from "./real-sites";
+import { REAL_SITE_CATALOG, type RealSite } from "./real-sites";
+
+/**
+ * Day 28 — supplement AI-ranked sites with catalog entries the AI
+ * missed. The AI models (OpenRouter, Gemini) typically return 1-3
+ * sites from their training data + reasoning. The curated stub has
+ * 5-7 hand-curated sites per city×vertical. This function adds the
+ * catalog sites the AI didn't mention, ranked below the AI results,
+ * so the user always sees the full candidate set.
+ */
+export function supplementMissingCatalogSites<T extends { name: string }>(
+  sites: T[],
+  cityName: string,
+  vertical: string,
+): T[] {
+  // Normalise city display name → catalog key
+  const catalogKey = cityName.toLowerCase().replace(/\s+/g, "_");
+  const candidates = REAL_SITE_CATALOG[catalogKey]?.[vertical];
+  if (!candidates || candidates.length === 0) return sites;
+
+  // Which catalog names are already in the AI results?
+  const mentioned = new Set(
+    sites.map((s) => s.name.toLowerCase().trim())
+  );
+
+  const missing = candidates.filter((c) => {
+    const key = c.name.toLowerCase().trim();
+    // Also check if the AI mentioned this site by suburb
+    const bySuburb = sites.some(
+      (s) => c.suburb && s.name.toLowerCase().includes(c.suburb.toLowerCase())
+    );
+    return !mentioned.has(key) && !bySuburb;
+  });
+
+  if (missing.length === 0) return sites;
+
+  // Build stub-ranked-site objects for missing catalog entries.
+  // Score them below the lowest AI score (or 0.5 if no AI sites).
+  const lowestAiScore = sites.length > 0
+    ? Math.min(...sites.map((s: any) => s.score ?? 0.8))
+    : 0.8;
+  const stubScore = Math.max(0.1, lowestAiScore - 0.15);
+
+  const supplement = missing.map((rs: RealSite, i: number) => ({
+    ...rs,
+    rank: sites.length + i + 1,
+    score: stubScore - i * 0.02,
+    confidence: 0.5,
+    signals: [],
+    scoreBreakdown: {
+      siteId: String(sites.length + i + 1),
+      baseScore: stubScore - i * 0.02,
+      signalScore: 0,
+      confidence: 0.5,
+      factors: [],
+    },
+    // Tag so the UI can show "From our catalog" badge
+    _catalogSupplement: true,
+  })) as unknown as T[];
+
+  return [...sites, ...supplement];
+}
 
 interface EnrichedFields {
   cornerStand?: boolean;
