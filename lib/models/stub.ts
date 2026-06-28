@@ -115,7 +115,7 @@ export const curatedStub: Model = {
     const vertical = req.vertical as Vertical;
 
     // Map custom verticals to closest built-in vertical using keyword matching
-    let effectiveVertical = vertical;
+    let effectiveVertical: string = vertical;
     if (vertical.startsWith('custom:')) {
       const customLabel = vertical.slice('custom:'.length).toLowerCase().trim();
       const keywordMap: Record<string, string> = {
@@ -153,7 +153,7 @@ export const curatedStub: Model = {
     const parsed = parseQuestion(req.question ?? '');
 
     // Day 12 v12: prefer the REAL site catalog.
-    const realSites = getRealSiteCandidates(city.id, effectiveVertical);
+    const realSites = getRealSiteCandidates(city.id, effectiveVertical as Vertical);
     let sites: RankedSite[];
     let usingRealCatalog = false;
     if (realSites && realSites.length > 0) {
@@ -169,7 +169,7 @@ export const curatedStub: Model = {
       }));
       usingRealCatalog = true;
     } else {
-      const fallback = generateStubSites(city, effectiveVertical);
+      const fallback = generateStubSites(city, effectiveVertical as Vertical);
       sites = fallback.map((s, i) => ({
         ...s,
         rank: i + 1,
