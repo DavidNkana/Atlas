@@ -15,49 +15,39 @@ import { useEffect, useState } from "react";
 
 const STORAGE_KEY = "atlas:pinned";
 
-function read(): string[] {
+interface PinnedItem {
+  id: string;
+  questionText: string;
+  vertical: string;
+}
+
+function read(): PinnedItem[] {
   if (typeof window === "undefined") return [];
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((s) => typeof s === "string") : [];
+    return Array.isArray(parsed) ? parsed.filter((s: any) => typeof s?.id === "string") : [];
   } catch {
     return [];
   }
 }
 
-function write(ids: string[]) {
+function write(items: PinnedItem[]) {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(ids));
-    // Cross-component sync
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
     window.dispatchEvent(new CustomEvent("atlas:pins-changed"));
-  } catch {
-    // localStorage may be disabled — silently no-op.
-  }
+  } catch {}
 }
 
-export function usePins(): {
-  pinnedIds: string[];
-  isPinned: (id: string) => boolean;
-  pin: (id: string) => void;
-  unpin: (id: string) => void;
-  toggle: (id: string) => void;
-} {
-  const [pinnedIds, setPinnedIds] = useState<string[]>([]);
+export function usePins() {
+  const [pinned, setPinned] = useState<PinnedItem[]>([]);
 
-  // Hydrate from localStorage on mount
-  useEffect(() => {
-    setPinnedIds(read());
-  }, []);
+  useEffect(() => { setPinned(read()); }, []);
 
-  // Listen for cross-component changes (so two Sidebar instances stay
-  // in sync if they ever exist).
   useEffect(() => {
-    function onChange() {
-      setPinnedIds(read());
-    }
+    function onChange() { setPinned(read()); }
     if (typeof window !== "undefined") {
       window.addEventListener("atlas:pins-changed", onChange);
     }
@@ -69,26 +59,26 @@ export function usePins(): {
   }, []);
 
   function isPinned(id: string): boolean {
-    return pinnedIds.includes(id);
+    return pinned.some((p) => p.id === id);
   }
 
-  function pin(id: string) {
-    if (pinnedIds.includes(id)) return;
-    const next = [id, ...pinnedIds];
-    setPinnedIds(next);
+  function pin(id: string, questionText: string = "", vertical: string = "") {
+    if (pinned.some((p) => p.id === id)) return;
+    const next = [{ id, questionText, vertical }, ...pinned];
+    setPinned(next);
     write(next);
   }
 
   function unpin(id: string) {
-    const next = pinnedIds.filter((x) => x !== id);
-    setPinnedIds(next);
+    const next = pinned.filter((p) => p.id !== id);
+    setPinned(next);
     write(next);
   }
 
-  function toggle(id: string) {
+  function toggle(id: string, questionText?: string, vertical?: string) {
     if (isPinned(id)) unpin(id);
-    else pin(id);
+    else pin(id, questionText, vertical);
   }
 
-  return { pinnedIds, isPinned, pin, unpin, toggle };
+  return { pinned, isPinned, pin, unpin, toggle };
 }

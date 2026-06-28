@@ -252,41 +252,48 @@ export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boole
                   Pinned
                 </span>
                 <span className="text-[10px] text-atlas-muted">
-                  {pins.pinnedIds.length} / {MAX_PINNED}
+                  {pins.pinned.length} / {MAX_PINNED}
                 </span>
               </div>
             )}
             <div className="space-y-1">
               {(() => {
-                const pinnedItems = pins.pinnedIds
-                  .slice(0, MAX_PINNED)
-                  .map((id) => history.find((h) => h.id === id))
-                  .filter((h): h is HistoryItem => Boolean(h));
-                if (pinnedItems.length === 0 && !collapsed) {
+                const displayPinned = pins.pinned.slice(0, MAX_PINNED);
+                if (displayPinned.length === 0 && !collapsed) {
                   return (
                     <p className="px-2 py-1 text-[10px] italic text-atlas-muted">
                       Pin a result to keep it here.
                     </p>
                   );
                 }
-                return pinnedItems.map((h) => (
-                  <HistoryRow
-                    key={h.id}
-                    item={h}
-                    collapsed={collapsed}
-                    isPinned
-                    isActive={h.id === activeId}
-                    onNavigate={() => router.push(`/result/${h.id}`)}
-                    onTogglePin={() => pins.unpin(h.id)}
-                    onRequestDelete={() => setDeleteTarget(h)}
-                  />
-                ));
+                return displayPinned.map((p) => {
+                  // Merge with history for full data (createdAt, etc.)
+                  const historyItem = history.find((h) => h.id === p.id);
+                  const item: HistoryItem = historyItem ?? {
+                    id: p.id,
+                    questionText: p.questionText || p.id,
+                    vertical: p.vertical || '',
+                    createdAt: '',
+                  };
+                  return (
+                    <HistoryRow
+                      key={item.id}
+                      item={item}
+                      collapsed={collapsed}
+                      isPinned
+                      isActive={item.id === activeId}
+                      onNavigate={() => router.push(`/result/${item.id}`)}
+                      onTogglePin={() => pins.unpin(item.id)}
+                      onRequestDelete={() => setDeleteTarget(item)}
+                    />
+                  );
+                });
               })()}
             </div>
           </div>
 
           {/* Divider between Pinned and History */}
-          {!collapsed && pins.pinnedIds.length > 0 && (
+          {!collapsed && pins.pinned.length > 0 && (
             <div className="my-3 border-t border-atlas-border" />
           )}
 
@@ -308,7 +315,7 @@ export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boole
             <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
               {(() => {
                 const unpinned = history
-                  .filter((h) => !pins.pinnedIds.includes(h.id))
+                  .filter((h) => !pins.pinned.some((p) => p.id === h.id))
                   .slice(0, MAX_HISTORY);
                 if (unpinned.length === 0 && !collapsed) {
                   return (
@@ -320,7 +327,7 @@ export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boole
                 return unpinned.map((h) => {
                   // Disable the pin button when 4 items are already
                   // pinned so the user can never exceed MAX_PINNED.
-                  const pinDisabled = pins.pinnedIds.length >= MAX_PINNED;
+                  const pinDisabled = pins.pinned.length >= MAX_PINNED;
                   return (
                     <HistoryRow
                       key={h.id}
@@ -331,7 +338,7 @@ export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boole
                       onNavigate={() => router.push(`/result/${h.id}`)}
                       onTogglePin={() => {
                         if (pinDisabled) return;
-                        pins.pin(h.id);
+                        pins.pin(h.id, h.questionText, h.vertical);
                       }}
                       onRequestDelete={() => setDeleteTarget(h)}
                     />
