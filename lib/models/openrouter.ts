@@ -73,12 +73,17 @@ function makeOpenRouterModel(
 
         const discoveredIds = await fetchOpenRouterFreeModelIds();
         const chain: string[] = [];
-        if (discoveredIds.includes(upstreamModelId)) chain.push(upstreamModelId);
-        for (const dId of discoveredIds) {
-          if (!chain.includes(dId)) chain.push(dId);
-        }
+        // Curated slugs first — these are confirmed working (health check).
+        // Discovered IDs come after since OpenRouter's free model list
+        // often includes stale/unavailable models.
         for (const stub of CURATED_STUB_SLUGS) {
           if (!chain.includes(stub)) chain.push(stub);
+        }
+        if (!chain.includes(upstreamModelId) && discoveredIds.includes(upstreamModelId)) {
+          chain.push(upstreamModelId);
+        }
+        for (const dId of discoveredIds) {
+          if (!chain.includes(dId)) chain.push(dId);
         }
 
         let lastError: string | null = null;
