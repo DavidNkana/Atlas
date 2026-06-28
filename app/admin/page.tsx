@@ -1,28 +1,27 @@
 import { redirect } from "next/navigation";
-import { auth } from "@clerk/nextjs/server";
+import { auth, currentUser } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/db";
-import { Sidebar } from "@/components/Sidebar";
 import { AppShell } from "@/components/AppShell";
 import { AtlasLogo } from "@/components/AtlasLogo";
 
 /**
- * Day 9 — Admin dashboard.
+ * Admin dashboard.
  *
- * Chris's internal view of Atlas traction. Shows:
- *   - Signups: total + recent
- *   - Waitlist: total, by plan, by vertical, latest 20 signups
- *   - Questions: total asked, last 7 days, top verticals
- *
- * Auth: requires sign-in. We accept ANY signed-in user as admin
- * for v1 — Chris is the only one with access in practice. Day 30+
- * we'll add a proper role check via Clerk publicMetadata.
+ * Access restricted to nkanadavid74@gmail.com.
+ * Shows KPIs, waitlist, demo requests, paying users, questions.
  */
 export const dynamic = "force-dynamic";
 
+const ADMIN_EMAIL = "nkanadavid74@gmail.com";
+
 export default async function AdminPage() {
   const { userId } = await auth();
-  if (!userId) {
-    redirect("/sign-in");
+  if (!userId) redirect("/sign-in");
+
+  const user = await currentUser();
+  const email = user?.emailAddresses?.[0]?.emailAddress;
+  if (email !== ADMIN_EMAIL) {
+    redirect("/");
   }
 
   const now = new Date();
