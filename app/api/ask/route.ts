@@ -166,8 +166,7 @@ type AskRequest = {
   question: string;
   model?: string;
   previousContext?: string;
-  imageBase64?: string;
-  imageMime?: string;
+  images?: { base64: string; mime: string }[];
 };
 
 type RankedSite = {
@@ -401,7 +400,9 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  const { vertical, question, model, previousContext, imageBase64, imageMime } = body;
+  const { vertical, question, model, previousContext, images } = body;
+  const imageBase64 = images?.[0]?.base64;
+  const imageMime = images?.[0]?.mime;
 
   if (!vertical || typeof vertical !== "string") {
     return NextResponse.json(
