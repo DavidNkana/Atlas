@@ -1,4 +1,3 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import type { Model, ModelRequest, ModelResponse, RankedSite } from './types';
 import { detectCity } from '../stub/detect';
 import { getRealSiteCandidates } from '../stub/real-sites';
@@ -73,17 +72,33 @@ export const geminiSearch: Model = {
       const key = process.env.GEMINI_API_KEY;
       if (!key) return { ok: false, error: 'GEMINI_API_KEY not set' } as any;
 
-      const genAI = new GoogleGenerativeAI(key);
       let text: string | undefined;
       let groundingSources: Array<{ title?: string; url: string }> = [];
-      const errorLog: string[] = [];
+      let errorLog: string[] = [];
 
-      // Try model IDs in parallel — don't let one slow model eat the budget
+      // Use raw fetch in parallel (SDK has network issues on Vercel)
       const results = await Promise.allSettled(
         ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.5-flash'].map(async (modelId) => {
-          const m = genAI.getGenerativeModel({ model: modelId });
-          const r = await m.generateContent(buildPrompt(req));
-          return { modelId, text: r.response.text(), response: r };
+          const res = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${key}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [{ role: 'user', parts: [{ text: buildPrompt(req) }] }],
+                generationConfig: { temperature: 0.7, topP: 0.95, maxOutputTokens: 2048 },
+              }),
+            }
+          );
+          if (!res.ok) {
+            const errText = await res.text().catch(() => '');
+            throw new Error(`${res.status}: ${errText.slice(0, 100)}`);
+          }
+          const data = await res.json();
+          const cand = data?.candidates?.[0];
+          const t = cand?.content?.parts?.[0]?.text;
+          if (!t) throw new Error('empty response');
+          return { text: t, grounding: (cand?.groundingMetadata?.groundingChunks || []).filter((c: any) => c?.web?.uri).map((c: any) => ({ title: c.web.title ?? c.web.uri, url: c.web.uri })) };
         })
       );
 
@@ -92,16 +107,10 @@ export const geminiSearch: Model = {
           errorLog.push(`rejected: ${(settled as any).reason?.message?.slice(0, 100) ?? 'unknown'}`);
           continue;
         }
-        const { modelId, text: t, response: r } = settled.value;
-        if (!t) { errorLog.push(`${modelId}: empty response`); continue; }
+        const { text: t, grounding } = settled.value;
+        if (!t) { errorLog.push('empty response'); continue; }
         text = t;
-        try {
-          for (const cand of r.response.candidates ?? []) {
-            for (const ch of (cand?.groundingMetadata as any)?.groundingChunks ?? []) {
-              if (ch?.web?.uri) groundingSources.push({ title: ch.web.title ?? ch.web.uri, url: ch.web.uri });
-            }
-          }
-        } catch {}
+        groundingSources = grounding;
         break;
       }
 
