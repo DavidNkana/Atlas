@@ -1,3 +1,4 @@
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import type { Model, ModelRequest, ModelResponse, RankedSite } from './types';
 import { detectCity } from '../stub/detect';
 import { getRealSiteCandidates } from '../stub/real-sites';
@@ -72,39 +73,26 @@ export const geminiSearch: Model = {
       const key = process.env.GEMINI_API_KEY;
       if (!key) return { ok: false, error: 'GEMINI_API_KEY not set' } as any;
 
-      // Use raw REST API (same as health check) instead of SDK.
-      // The SDK's googleSearch tool may consume quota differently.
+      const genAI = new GoogleGenerativeAI(key);
       let text: string | undefined;
       let groundingSources: Array<{ title?: string; url: string }> = [];
       const errorLog: string[] = [];
 
+      // Try model IDs via SDK (handles both AIzaSy and AQ. key formats)
       for (const modelId of ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.5-flash']) {
         try {
-          const res = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${key}`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                contents: [{ role: 'user', parts: [{ text: buildPrompt(req) }] }],
-                generationConfig: { temperature: 0.7, topP: 0.95, maxOutputTokens: 2048 },
-              }),
+          const m = genAI.getGenerativeModel({ model: modelId });
+          const r = await m.generateContent(buildPrompt(req));
+          text = r.response.text();
+          // Extract grounding
+          try {
+            const candidates = r.response.candidates ?? [];
+            for (const cand of candidates) {
+              for (const ch of cand?.groundingMetadata?.groundingChunks ?? []) {
+                if (ch?.web?.uri) groundingSources.push({ title: ch.web.title ?? ch.web.uri, url: ch.web.uri });
+              }
             }
-          );
-          if (!res.ok) {
-            const errText = await res.text().catch(() => '');
-            errorLog.push(`${modelId}: ${res.status} ${errText.slice(0, 100)}`);
-            continue;
-          }
-          const data = await res.json();
-          const candidate = data?.candidates?.[0];
-          text = candidate?.content?.parts?.[0]?.text;
-          if (!text) { errorLog.push(`${modelId}: empty response`); continue; }
-          if (candidate?.groundingMetadata?.groundingChunks) {
-            for (const ch of candidate.groundingMetadata.groundingChunks) {
-              if (ch?.web?.uri) groundingSources.push({ title: ch.web.title ?? ch.web.uri, url: ch.web.uri });
-            }
-          }
+          } catch {}
           break;
         } catch (modelErr) {
           errorLog.push(`${modelId}: ${(modelErr as Error).message?.slice(0, 150)}`);
