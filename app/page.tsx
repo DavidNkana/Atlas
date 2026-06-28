@@ -421,6 +421,9 @@ export default function HomePage() {
   // unambiguous what's a suggestion vs what's user-typed text.
   const placeholder = "Describe a site you need, in any city…";
 
+  // Prevent Clerk hydration flicker — don't render until auth is loaded
+  if (!isLoaded) return null;
+
   return (
     <AppShell>
       <outOfScope.Modal />
