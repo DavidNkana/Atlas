@@ -51,7 +51,9 @@ const VERTICAL_LABEL: Record<string, string> = {
 };
 
 function relativeTime(iso: string): string {
+  if (!iso) return "";
   const then = new Date(iso).getTime();
+  if (isNaN(then)) return "";
   const diff = Date.now() - then;
   const sec = Math.floor(diff / 1000);
   if (sec < 60) return "now";
@@ -273,7 +275,7 @@ export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boole
                     id: p.id,
                     questionText: p.questionText || p.id,
                     vertical: p.vertical || '',
-                    createdAt: '',
+                    createdAt: new Date().toISOString(), // fallback so relativeTime works
                   };
                   return (
                     <HistoryRow
