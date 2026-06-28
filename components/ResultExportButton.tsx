@@ -75,6 +75,12 @@ function toMarkdown(d: ExportData): string {
     if (s.competition && Array.isArray(s.competition) && s.competition.length > 0) {
       lines.push(`**Nearby competitors:** ${s.competition.slice(0, 5).join(", ")}`);
     }
+    if (s.signals && Array.isArray(s.signals) && s.signals.length > 0) {
+      lines.push(`**Signals (${s.signals.length}):**`);
+      for (const sig of s.signals.slice(0, 8)) {
+        lines.push(`- [${sig.source}] ${sig.label ?? sig.type}`);
+      }
+    }
     lines.push("");
   }
   if (d.sources && d.sources.length > 0) {
@@ -101,10 +107,33 @@ export function ResultExportButton({ data }: { data: ExportData }) {
     } else if (format === "markdown") {
       downloadFile(`${baseName}.md`, toMarkdown(data), "text/markdown");
     } else if (format === "pdf") {
-      // Use browser print-to-PDF for instant PDF
+      // Build a clean print-ready HTML doc — NO sidebar, NO buttons, NO chrome
+      const mdHtml = toMarkdown(data)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/^# (.+)$/gm, "<h1>$1</h1>")
+        .replace(/^## (.+)$/gm, "<h2>$1</h2>")
+        .replace(/^### (.+)$/gm, "<h3>$1</h3>")
+        .replace(/^\*\*([^*]+)\*\*:/gm, "<strong>$1:</strong>")
+        .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+        .replace(/^- /gm, "• ")
+        .replace(/\n/g, "<br>");
+
       const w = window.open("", "_blank");
       if (w) {
-        w.document.write(`<!DOCTYPE html><html><head><title>Atlas — ${data.vertical}</title><style>body{font-family:-apple-system,system-ui,sans-serif;max-width:720px;margin:32px auto;padding:0 24px;color:#18181b;line-height:1.5}h1{color:#4F46E5}table{border-collapse:collapse;width:100%;margin:16px 0}th,td{text-align:left;padding:8px;border-bottom:1px solid #e4e4e7}th{background:#f4f4f5;font-size:11px;text-transform:uppercase}.meta{color:#71717a;font-size:12px}@media print{body{margin:0}}</style></head><body>${document.body.innerHTML}</body></html>`);
+        w.document.write(`<!DOCTYPE html><html><head><title>Atlas — ${data.vertical}</title><style>
+          body { font-family: -apple-system, system-ui, sans-serif; max-width: 720px; margin: 32px auto; padding: 0 24px; color: #18181b; line-height: 1.5; }
+          h1 { color: #4F46E5; font-size: 22px; margin-bottom: 8px; }
+          h2 { color: #4F46E5; font-size: 18px; border-bottom: 1px solid #e4e4e7; padding-bottom: 4px; margin-top: 28px; }
+          h3 { font-size: 14px; margin-top: 20px; margin-bottom: 4px; }
+          .meta { color: #71717a; font-size: 12px; margin-bottom: 4px; }
+          .score { color: #4F46E5; font-weight: 600; }
+          .competitors { font-size: 11px; color: #71717a; }
+          hr { border: none; border-top: 1px solid #e4e4e7; margin: 24px 0; }
+          a { color: #4F46E5; }
+          @media print { body { margin: 0; padding: 16px; } }
+        </style></head><body>${mdHtml}</body></html>`);
         w.document.close();
         setTimeout(() => w.print(), 500);
       }
