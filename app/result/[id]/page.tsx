@@ -12,6 +12,7 @@ import { RankingChart } from "@/components/RankingChart";
 import { ListingsOverlay } from "@/components/ListingsOverlay";
 import { ResultChatPanel } from "@/components/ResultChatPanel";
 import { ResultChatButton } from "@/components/ResultChatButton";
+import { ResultExportButton } from "@/components/ResultExportButton";
 import { detectCity } from "@/lib/stub/detect";
 import { REAL_SITE_CATALOG } from "@/lib/stub/real-sites";
 import { SUBURB_PROFILES } from "@/lib/demographics/suburbs";
@@ -369,16 +370,42 @@ export default async function ResultPage({
 
   return (
     <AppShell>
-      <header className="flex items-center justify-between border-b border-atlas-border px-6 py-4">
-          <div className="min-w-0">
-            <h1 className="text-lg font-semibold tracking-tight text-atlas-text">
-              Result
-            </h1>
+      <header className="flex items-center justify-between gap-3 border-b border-atlas-border px-6 py-4">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <h1 className="text-lg font-semibold tracking-tight text-atlas-text">
+                Result
+              </h1>
+              {question.vertical && (
+                <span className="rounded-full bg-atlas-accent/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-atlas-accent">
+                  {question.vertical.replace(/_/g, " ").replace("custom:", "")}
+                </span>
+              )}
+              {stubCity && (
+                <span className="rounded-full bg-atlas-surface2 px-2 py-0.5 text-[10px] font-medium text-atlas-muted">
+                  {stubCity}{stubCountry ? `, ${stubCountry}` : ""}
+                </span>
+              )}
+            </div>
             <p className="mt-0.5 truncate text-sm text-atlas-muted">
               {question.questionText}
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
+            <ResultExportButton
+              data={{
+                question: question.questionText,
+                vertical: question.vertical,
+                city: stubCity,
+                country: stubCountry,
+                model: responseBody?.model?.displayName,
+                echo: responseBody?.echo,
+                rankedSites,
+                plan,
+                answer: responseBody?.answer,
+                sources: responseBody?.sources,
+              }}
+            />
             {/* Day 30 + LCP-34 — Chat button is a client component
                 because server components can't carry onClick
                 handlers or window references. ResultChatButton
