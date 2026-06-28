@@ -27,7 +27,7 @@ import { Resend } from "resend";
 
 // Day 13: every email Atlas sends goes to David's personal inbox.
 // One inbox, zero chance of missing a lead.
-const NOTIFY_TO = "davindnkana74@gmail.com";
+const NOTIFY_TO = "davidnkana74@gmail.com";
 const FROM = "Atlas <onboarding@resend.dev>";
 
 function escapeHtml(s: string): string {

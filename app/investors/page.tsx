@@ -133,7 +133,7 @@ export default function InvestorsPage() {
             </div>
             <div className="mt-5 text-center">
               <a
-                href="mailto:davindnkana74@gmail.com"
+                href="mailto:davidnkana74@gmail.com"
                 className="inline-flex items-center gap-2 rounded-md bg-atlas-accent px-6 py-2.5 text-sm font-semibold text-white hover:bg-atlas-accent2 transition-colors"
               >
                 Contact David Nkana
