@@ -107,8 +107,8 @@ const MODEL_TIMEOUT_MS = 8_000;
 // 3-attempt cascade.
 const MODEL_TIMEOUT_OVERRIDES: Record<string, number> = {
   'gemini-search': 5_000,
-  'llama-free': 18_000,
-  'mistral-free': 18_000,
+  'llama-free': 22_000,
+  'mistral-free': 22_000,
   'tavily': 45_000,
 };
 
@@ -663,18 +663,72 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
             m.isAvailable()
         );
 
+        // Day 28: race OpenRouter fallback models in parallel instead of
+        // sequential. On Vercel cold starts, DNS+TLS for the first HTTP
+        // call can eat 5-8s, making 18s per-model timeout tight. Racing
+        // them lets whichever responds first win, cutting worst-case
+        // from ~36s (two 18s timeouts stacked) to ~22s (one 18s + overhead).
+        // Gemini and perplexity are excluded — Gemini is the broken
+        // primary, perplexity needs PERPLEXITY_API_KEY (not set).
+        const openRouterChain = fallbackChain.filter(
+          (m) => m.info.provider === "openrouter"
+        );
+        const nonOpenRouter = fallbackChain.filter(
+          (m) => m.info.provider !== "openrouter"
+        );
+
         let cascaded = false;
-        for (const fallback of fallbackChain) {
+
+        // Race all OpenRouter models: first to respond wins.
+        if (openRouterChain.length > 0) {
+          openRouterChain.forEach((m) => pushAttempted(m.info.id));
+          const race = Promise.race(
+            openRouterChain.map((m) =>
+              callModel(m).then((r) => ({ model: m, result: r }))
+            )
+          );
+          const winner = await race;
+          if (winner.result.ok && winner.result.sites.length > 0) {
+            rankedSites = enrichSitesWithCatalog(winner.result.sites);
+            raw = winner.result.raw;
+            if (winner.result.answer) modelAnswer = winner.result.answer;
+            if (winner.result.sources && winner.result.sources.length > 0)
+              modelSources = winner.result.sources;
+            activeInfo = winner.model.info;
+            activeModel = winner.model;
+            fallbackUsed = true;
+            cascaded = true;
+            if (winner.result.__stub) {
+              stubMeta = winner.result.__stub;
+              responseStatus = "stub_demo";
+            }
+            console.log(
+              `[/api/ask] raced fallback served by ${winner.model.info.id}`
+            );
+            return;
+          }
+          if (winner.result.ok && winner.result.sites.length === 0) {
+            console.warn(
+              `[/api/ask] raced fallback ${winner.model.info.id} returned 0 sites — trying remaining chain`
+            );
+          }
+          errorChain.push(
+            winner.result.ok
+              ? `${winner.model.info.id} returned 0 sites`
+              : `${winner.model.info.id} call failed: ${winner.result.error ?? "unknown error"}`
+          );
+        }
+
+        // Sequential fallback for any remaining non-OpenRouter models.
+        for (const fallback of nonOpenRouter) {
           pushAttempted(fallback.info.id);
           const fbResult = await callModel(fallback);
           if (fbResult.ok && fbResult.sites.length > 0) {
-            // Day 21 v2: enrich with REAL_SITE_CATALOG property data.
             rankedSites = enrichSitesWithCatalog(fbResult.sites);
             raw = fbResult.raw;
-            // v16: propagate research answer + citations from
-            // any model that returned them.
             if (fbResult.answer) modelAnswer = fbResult.answer;
-            if (fbResult.sources && fbResult.sources.length > 0) modelSources = fbResult.sources;
+            if (fbResult.sources && fbResult.sources.length > 0)
+              modelSources = fbResult.sources;
             activeInfo = fallback.info;
             activeModel = fallback;
             fallbackUsed = true;
@@ -684,26 +738,20 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
               responseStatus = "stub_demo";
             }
             console.log(
-              `[/api/ask] fallback chain served by ${fallback.info.id} after ${activeInfo.id} failed`
+              `[/api/ask] sequential fallback served by ${fallback.info.id}`
             );
             return;
           }
-          // Day 22 v25: same site-count guard for fallbacks. If
-          // OpenRouter returns ok:true with 0 sites, keep cascading.
           if (fbResult.ok && fbResult.sites.length === 0) {
             console.warn(
-              `[/api/ask] fallback ${fallback.info.id} returned 0 sites with ok:true — continuing to next fallback`,
+              `[/api/ask] fallback ${fallback.info.id} returned 0 sites with ok:true — continuing to next fallback`
             );
           }
           errorChain.push(
             fbResult.ok
               ? `${fallback.info.id} returned 0 sites`
-              : `${fallback.info.id} call failed: ${fbResult.error ?? "unknown error"}`,
+              : `${fallback.info.id} call failed: ${fbResult.error ?? "unknown error"}`
           );
-          console.error(
-            `[/api/ask] fallback model ${fallback.info.id} also failed: ${fbResult.ok ? "0 sites" : (fbResult.error ?? "unknown error")}`,
-          );
-          // continue to next fallback — never throw
         }
 
         if (!cascaded) {
