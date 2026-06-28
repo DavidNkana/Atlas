@@ -909,6 +909,20 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
     }
   }
 
+
+  // Day 28 — supplement AI-ranked sites with catalog entries before
+  // building the connector plan. This ensures ALL sites (AI + catalog)
+  // get signal data from connectors, not just the AI's top picks.
+  if (rankedSites.length > 0) {
+    rankedSites = supplementMissingCatalogSites(
+      rankedSites,
+      detectCity(question).id,
+      effectiveVertical,
+    );
+    // Re-enrich so catalog-supplement sites get property data too
+    rankedSites = enrichSitesWithCatalog(rankedSites);
+  }
+
   // 5. Step B — connectors + scoring (12s budget).
   // Build the plan, fan-out to connectors in parallel, collect signals per
   // site, then run the scoring engine. Track per-connector status so the
@@ -1087,17 +1101,6 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
     // deriveLocation returns {lat, lng, label} — use label, not name
     const cityName = (location?.label ?? null)?.replace(/\s*\(fallback\)\s*$/i, '') ?? null;
 
-    // Day 28 — fill out AI-ranked sites with any hand-curated catalog
-    // entries the model missed. location.label is often a suburb
-    // (e.g. "Brooklyn") not a city. detectCity(question) reliably
-    // extracts the city from the user's query text.
-    if (rankedSites.length > 0) {
-      rankedSites = supplementMissingCatalogSites(
-        rankedSites,
-        detectCity(question).id,
-        effectiveVertical,
-      );
-    }
     // Build per-site price/erf hints from enriched sites (so the query
     // matches what the developer asked for, not generic suburb terms).
     let hints = rankedSites
