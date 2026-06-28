@@ -60,6 +60,8 @@ export interface RankedSite {
 export interface ModelRequest {
   vertical: Vertical;
   question: string;
+  imageBase64?: string;
+  imageMime?: string;
 }
 
 /**

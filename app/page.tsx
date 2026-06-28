@@ -107,6 +107,19 @@ export default function HomePage() {
     MODEL_INFO[0]?.id ?? "tavily"
   );
   const [question, setQuestion] = useState<string>("");
+  const [attachment, setAttachment] = useState<{ base64: string; mime: string; name: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 4 * 1024 * 1024) return; // 4MB limit
+    const reader = new FileReader();
+    reader.onload = () => {
+      setAttachment({ base64: reader.result as string, mime: file.type, name: file.name });
+    };
+    reader.readAsDataURL(file);
+  };
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [showThinkingLoader, setShowThinkingLoader] = useState<boolean>(
@@ -346,6 +359,7 @@ export default function HomePage() {
           vertical: v,
           question: q,
           model: modelId,
+          ...(attachment ? { imageBase64: attachment.base64, imageMime: attachment.mime } : {}),
         }),
       });
 
@@ -673,6 +687,29 @@ export default function HomePage() {
                         }
                       }}
                     />
+
+                    {/* Attachment button */}
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*,.pdf"
+                      className="hidden"
+                      onChange={handleFile}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={loading}
+                      className={`flex-shrink-0 rounded-md p-1.5 transition-colors ${
+                        attachment ? 'bg-atlas-accent/20 text-atlas-accent' : 'text-atlas-muted hover:bg-atlas-surface2 hover:text-atlas-text'
+                      }`}
+                      title={attachment ? `Attached: ${attachment.name}` : 'Attach image or file'}
+                      aria-label="Attach file"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                      </svg>
+                    </button>
 
                     {/* Mic button — speech to text */}
                     <button

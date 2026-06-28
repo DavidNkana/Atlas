@@ -85,7 +85,15 @@ export const geminiSearch: Model = {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                contents: [{ role: 'user', parts: [{ text: buildPrompt(req) }] }],
+                contents: [{
+                  role: 'user',
+                  parts: [
+                    { text: buildPrompt(req) },
+                    ...(req.imageBase64 && req.imageMime ? [{
+                      inlineData: { mimeType: req.imageMime, data: req.imageBase64.split(',')[1] || req.imageBase64 }
+                    }] : []),
+                  ]
+                }],
                 generationConfig: { temperature: 0.7, topP: 0.95, maxOutputTokens: 2048 },
               }),
             }

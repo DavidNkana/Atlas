@@ -402,7 +402,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  const { vertical, question, model, previousContext } = body;
+  const { vertical, question, model, previousContext, imageBase64, imageMime } = body;
 
   if (!vertical || typeof vertical !== "string") {
     return NextResponse.json(
@@ -550,6 +550,8 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
         m.call({
           vertical: effectiveVertical,
           question: trimmedQuestion,
+          imageBase64,
+          imageMime,
         }),
         modelTimeoutMs,
         "model:" + m.info.id,

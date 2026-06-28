@@ -8,7 +8,7 @@ function humanVertical(v: string): string {
 }
 
 function buildPrompt(req: ModelRequest): string {
-  return (
+  const base = (
     'You are Atlas, a site-selection engine for African builders.\n' +
     'Find the best ' + humanVertical(req.vertical) + ' for: "' + req.question + '".\n' +
     'Return JSON with this shape:\n' +
@@ -18,6 +18,10 @@ function buildPrompt(req: ModelRequest): string {
     '"disadvantages":"1 paragraph: honest drawbacks","lat":0,"lng":0}]}\n' +
     'Use real suburbs. Write full paragraphs. Be specific.'
   );
+  if (req.imageBase64) {
+    return base + '\n\nThe user attached an image (' + (req.imageMime || 'file') + '). Use it as context for your recommendations.';
+  }
+  return base;
 }
 
 /**
