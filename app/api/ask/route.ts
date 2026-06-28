@@ -109,8 +109,8 @@ const MODEL_TIMEOUT_MS = 8_000;
 // 3-attempt cascade.
 const MODEL_TIMEOUT_OVERRIDES: Record<string, number> = {
   'gemini-search': 5_000,
-  'llama-free': 22_000,
-  'mistral-free': 22_000,
+  'llama-free': 35_000,    // Nemotron 120B — free model, needs time for long prompts
+  'mistral-free': 35_000,  // Gemma 4 31B — same
   'tavily': 45_000,
 };
 
