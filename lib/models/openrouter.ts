@@ -1,4 +1,3 @@
-import OpenAI from 'openai';
 import type { Model, ModelRequest, ModelResponse } from './types';
 import { fetchOpenRouterFreeModelIds } from './openrouter-discovery';
 import { parseModelOutput } from './lenient-parser';
@@ -69,7 +68,6 @@ function makeOpenRouterModel(
         if (!key) {
           return { ok: false, error: 'OPENROUTER_API_KEY not set' } as any;
         }
-        const client = new OpenAI({ apiKey: key, baseURL: 'https://openrouter.ai/api/v1' });
 
         const discoveredIds = await fetchOpenRouterFreeModelIds();
         const chain: string[] = [];
@@ -89,12 +87,20 @@ function makeOpenRouterModel(
         let lastError: string | null = null;
         for (const modelId of chain) {
           try {
-            const completion: any = await client.chat.completions.create({
-              model: modelId,
-              messages: [{ role: 'user', content: buildPrompt(req) }],
-              // Day 17 v1: no response_format — let the model emit
-              // prose OR JSON. The lenient parser handles both.
+            const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+              body: JSON.stringify({
+                model: modelId,
+                messages: [{ role: 'user', content: buildPrompt(req) }],
+              }),
             });
+            if (!res.ok) {
+              const errText = await res.text().catch(() => '');
+              lastError = `OpenRouter (${modelId}): ${res.status} ${errText.slice(0, 150)}`;
+              continue;
+            }
+            const completion: any = await res.json();
             // Defensive: completion.choices may be missing or empty.
             const choice = completion?.choices?.[0];
             const text = (choice?.message?.content ?? '') as string;
