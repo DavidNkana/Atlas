@@ -74,16 +74,16 @@ interface TavilyExtractResult {
 
 /** Map Atlas verticals → search keywords for property portals. */
 const VERTICAL_KEYWORDS: Record<string, string[]> = {
-  gas_station: ["gas station", "petrol station", "filling station", "fuel station"],
-  restaurant: ["restaurant", "food", "hospitality"],
-  warehouse: ["warehouse", "logistics", "distribution", "industrial"],
-  retail_shop: ["retail", "shop", "store", "commercial"],
-  residential_land: ["residential", "house", "home", "erf", "vacant land"],
-  commercial_land: ["commercial", "office", "mixed use"],
-  industrial_land: ["industrial", "factory", "warehouse", "erf"],
-  agricultural_land: ["farm", "agricultural", "smallholding", "erf"],
-  mixed_use_land: ["mixed use", "commercial residential"],
-  civic_land: ["school", "clinic", "civic", "institutional", "place of worship"],
+  gas_station: ["gas station", "petrol station", "filling station", "fuel station", "service station", "forecourt"],
+  restaurant: ["restaurant", "food", "hospitality", "cafe", "lodge", "hotel", "guesthouse"],
+  warehouse: ["warehouse", "logistics", "distribution", "industrial space", "storage facility"],
+  retail_shop: ["retail", "shop", "store", "commercial space", "mall", "shopping centre"],
+  residential_land: ["residential", "house", "home", "erf", "vacant land", "mansion", "estate living"],
+  commercial_land: ["commercial", "office", "mixed use", "business park", "hotel development", "lodge development"],
+  industrial_land: ["industrial", "factory", "warehouse", "erf", "manufacturing", "workshop"],
+  agricultural_land: ["farm", "agricultural", "smallholding", "erf", "game farm", "plantation", "forestry"],
+  mixed_use_land: ["mixed use", "commercial residential", "live work", "town centre"],
+  civic_land: ["school", "clinic", "civic", "institutional", "place of worship", "park", "playground", "stadium", "church", "mosque", "library", "museum"],
 };
 
 /**

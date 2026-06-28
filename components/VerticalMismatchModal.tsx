@@ -54,9 +54,12 @@ const VERTICAL_KEYWORDS: Record<string, string[]> = {
     "service station", "forecourt", "fuel pump", "pump",
     // short forms
     "petrol", "diesel", "fuel", "fueling", "refuel",
+    "car wash", "truck stop", "charging station", "ev station",
+    "electric charging", "electric vehicle",
     // common phrasings
     "build a gas station", "open a gas station", "build a petrol station",
     "build a fuel station", "set up a gas station", "put up a gas station",
+    "open a petrol station", "open a fuel station", "open a filling station",
   ],
   restaurant: [
     // nouns
@@ -64,10 +67,13 @@ const VERTICAL_KEYWORDS: Record<string, string[]> = {
     "kitchen", "menu", "chef", "table", "bistro", "eateries", "diner",
     "dinners", "food court", "fast food", "coffee shop", "bakery", "deli",
     "pizzeria", "steakhouse", "food truck", "tavern", "pub", "bar",
+    "lodge", "lodges", "hotel", "hotels", "motel", "guesthouse", "guest house",
+    "bed and breakfast", "bnb", "airbnb", "resort", "resorts",
     // common phrasings
     "open a restaurant", "open a cafe", "build a restaurant", "set up a restaurant",
     "start a restaurant", "open a bar", "open a pub", "open a fast food",
     "start a cafe", "open a coffee shop",
+    "open a lodge", "build a lodge", "open a hotel", "build a hotel",
   ],
   warehouse: [
     // nouns
@@ -98,9 +104,11 @@ const VERTICAL_KEYWORDS: Record<string, string[]> = {
     "cottage", "cottages", "bungalow", "bungalows", "duplex",
     "subdivision", "housing development", "residential development",
     "residential plot", "residential plots", "residential land",
+    "mansion", "mansions", "manor", "manor house", "luxury home", "luxury estate",
+    "penthouse", "condo", "condominium", "townhouse complex",
     // common phrasings
     "build a home", "build a house", "build homes", "build houses",
-    "build a villa", "build a bungalow", "build a duplex",
+    "build a villa", "build a bungalow", "build a duplex", "build a mansion",
     "build a residence", "construct a home", "construct a house",
     "develop a home", "develop a house", "develop a residential",
     "looking to build a home", "looking to build a house",
@@ -115,12 +123,16 @@ const VERTICAL_KEYWORDS: Record<string, string[]> = {
     "retail space", "office block", "office park", "corporate",
     "co-working", "coworking", "showroom", "anchor store",
     "commercial plot", "commercial plots", "commercial land",
+    "hotel", "hotels", "lodge", "lodges", "resort", "resorts",
+    "guesthouse", "guest house", "motel", "inn",
     // common phrasings
     "build an office", "build offices", "build a mall", "build a shopping centre",
     "build a business park", "set up an office", "open an office",
     "develop a commercial", "develop commercial", "construct an office",
     "looking to build an office", "looking for office space",
     "open a coworking", "start a coworking",
+    "build a hotel", "build a lodge", "open a hotel", "open a lodge",
+    "build a resort", "develop a resort",
   ],
   agricultural_land: [
     // nouns
@@ -131,9 +143,13 @@ const VERTICAL_KEYWORDS: Record<string, string[]> = {
     "vineyard", "vineyards", "winery", "dairy", "dairy farm", "poultry farm",
     "agricultural land", "agricultural plot", "agricultural plots",
     "smallholder", "smallholder farm", "commercial farm",
+    "game farm", "game ranch", "safari", "hunting farm",
+    "plantation", "plantations", "timber", "forestry",
+    "fish farm", "aquaculture", "fish farming",
     // common phrasings
     "buy a farm", "start a farm", "set up a farm", "build a farm",
     "develop a farm", "farm land", "farming land",
+    "buy agricultural land", "buy farming land",
   ],
   industrial_land: [
     // nouns
@@ -142,10 +158,14 @@ const VERTICAL_KEYWORDS: Record<string, string[]> = {
     "industrial estate", "industrial plot", "industrial plots", "industrial land",
     "manufacturing plant", "assembly plant", "processing plant",
     "smelter", "mill", "brewery", "tannery", "industrial zone",
+    "abattoir", "slaughterhouse", "refinery", "foundry",
+    "workshop", "fabrication", "machine shop", "engineering works",
+    "power plant", "power station", "solar farm", "solar plant",
     // common phrasings
     "build a factory", "build a plant", "set up a factory", "open a factory",
     "develop an industrial", "develop industrial", "construct a factory",
     "looking for industrial land", "looking for industrial plot",
+    "build a brewery", "build a workshop", "set up a workshop",
   ],
   mixed_use_land: [
     // nouns
@@ -164,11 +184,19 @@ const VERTICAL_KEYWORDS: Record<string, string[]> = {
     "community centre", "community center", "police station",
     "fire station", "firehouse", "town hall", "courthouse",
     "place of worship", "synagogue", "shrine",
+    "park", "parks", "play park", "playground", "playgrounds",
+    "recreation", "sports field", "sports fields", "stadium",
+    "sports complex", "sports centre", "sports center",
+    "swimming pool", "tennis court", "basketball court",
+    "college", "colleges", "boarding school", "academy",
+    "museum", "museums", "gallery", "galleries", "theatre", "theater",
     // common phrasings
     "build a school", "build a hospital", "build a church", "build a clinic",
     "build a mosque", "build a temple", "build a university", "build a library",
+    "build a park", "build a playground", "build a stadium",
     "set up a school", "set up a hospital", "set up a clinic", "set up a church",
     "open a school", "open a clinic", "open a hospital", "open a church",
+    "open a park", "open a playground", "open a museum",
     "construct a school", "construct a hospital", "construct a clinic",
     "develop a school", "develop a hospital", "develop a clinic",
     "looking to build a school", "looking to build a hospital",

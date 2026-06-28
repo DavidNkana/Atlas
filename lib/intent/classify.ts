@@ -47,7 +47,7 @@ const SPATIAL_PATTERNS: RegExp[] = [
   // action verbs that imply a site is needed
   /\b(build|open|locate|find me|set up|start|establish)\b/i,
   // "for a school in Y" / "for a restaurant near Z"
-  /\bfor\s+(a|an|the)?\s*(school|restaurant|warehouse|hospital|gas station|cafe|shop|hotel|office|home|house|apartment|clinic|bank|gym|store|factory|plant)\b/i,
+  /\bfor\s+(a|an|the)?\s*(school|restaurant|warehouse|hospital|gas station|cafe|shop|hotel|office|home|house|apartment|clinic|bank|gym|store|factory|plant|lodge|park|playground|stadium|resort|mansion|farm|church|mosque|university|college|library|museum|brewery|workshop|car wash)\b/i,
   // "in Cape Town" / "near Sandton" — explicit place anchor
   /\b(in|near|around|at)\s+(cape town|sandton|johannesburg|pretoria|durban|bloemfontein|port elizabeth|lusaka|kitwe|ndola|nairobi|mombasa|lagos|abuja|maputo|kigali|kampala|dar es salaam|harare|windhoek|gaborone)\b/i,
 ];
