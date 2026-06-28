@@ -1,5 +1,4 @@
 import type { Model, ModelRequest, ModelResponse } from './types';
-import { fetchOpenRouterFreeModelIds } from './openrouter-discovery';
 import { parseModelOutput } from './lenient-parser';
 
 function humanVertical(v: string): string {
@@ -69,20 +68,14 @@ function makeOpenRouterModel(
           return { ok: false, error: 'OPENROUTER_API_KEY not set' } as any;
         }
 
-        const discoveredIds = await fetchOpenRouterFreeModelIds();
+        // Curated slugs only — these are confirmed working via /api/health.
+        // Dynamic discovery removed: fetchOpenRouterFreeModelIds() was adding
+        // latency and stale model IDs to the chain.
         const chain: string[] = [];
-        // Curated slugs first — these are confirmed working (health check).
-        // Discovered IDs come after since OpenRouter's free model list
-        // often includes stale/unavailable models.
         for (const stub of CURATED_STUB_SLUGS) {
           if (!chain.includes(stub)) chain.push(stub);
         }
-        if (!chain.includes(upstreamModelId) && discoveredIds.includes(upstreamModelId)) {
-          chain.push(upstreamModelId);
-        }
-        for (const dId of discoveredIds) {
-          if (!chain.includes(dId)) chain.push(dId);
-        }
+        if (!chain.includes(upstreamModelId)) chain.push(upstreamModelId);
 
         let lastError: string | null = null;
         for (const modelId of chain) {
