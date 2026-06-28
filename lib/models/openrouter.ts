@@ -158,4 +158,3 @@ export const mistralFree: Model = makeOpenRouterModel(
   'M10 2a8 8 0 015.3 14L17 18H7l1.7-2A8 8 0 0110 2z'
 );
 
-);
