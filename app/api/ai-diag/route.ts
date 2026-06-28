@@ -34,9 +34,9 @@ export async function GET() {
   // Test 2: OpenRouter — test 3 different models
   if (orKey) {
     const models = [
-      "meta-llama/llama-3.3-70b-instruct",
-      "qwen/qwen3-next-80b-a3b-instruct",
-      "meta-llama/llama-3.2-3b-instruct",
+      "nvidia/nemotron-3-super-120b-a12b:free",
+      "google/gemma-4-31b-it:free",
+      "qwen/qwen3-next-80b-a3b-instruct:free",
     ];
     results.openrouter = [];
     for (const m of models) {
