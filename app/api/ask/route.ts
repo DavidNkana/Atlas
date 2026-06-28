@@ -596,276 +596,56 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
     return { ok: false, error: `model:${m.info.id} returned malformed response` };
   };
 
+  // Day 28 v3 — race ALL available AI models from the start.
+  const liveModels = ALL_MODELS.filter(
+    (m) => m.info.id !== "curated-stub" && m.isAvailable()
+  );
+  
+
   try {
     await withTimeout((async () => {
-      try {
-        const result = await callModel(activeModel);
-        if (result.ok && result.sites.length > 0) {
-          // Day 21 v2: enrich AI-returned sites with REAL_SITE_CATALOG
-          // property data (corner stand, facing, price range, etc).
-          // The catalog has 25 SA sites with hand-curated data; the
-          // AI returns site names from its general knowledge. Matching
-          // by name/suburb bridges the two so the user always sees
-          // the property data on the result card.
-          rankedSites = enrichSitesWithCatalog(result.sites);
-          raw = result.raw;
-          // Day 12 v16: capture research answer + citations from
-          // Gemini Search. Most models omit these.
-          if (result.answer) modelAnswer = result.answer;
-          if (result.sources && result.sources.length > 0) modelSources = result.sources;
-          // Day 6 — the stub tags its result with __stub. We capture it
-          // so the response can surface status:"stub_demo" + city +
-          // country + stubReason. Real models never set __stub.
-          if (result.__stub) {
-            stubMeta = result.__stub;
-            responseStatus = "stub_demo";
-          }
+      if (liveModels.length === 0) { modelError = "No live models"; return; }
+      liveModels.forEach((m: Model) => pushAttempted(m.info.id));
+
+      const wrapped = liveModels.map(async (m: Model) => {
+        try { const r = await callModel(m); return { model: m, result: r }; }
+        catch { return { model: m, result: { ok: false as const, error: `${m.info.id} timed out` } }; }
+      });
+
+      const winner = await Promise.race(wrapped);
+      if (winner.result.ok && winner.result.sites.length > 0) {
+        rankedSites = enrichSitesWithCatalog(winner.result.sites);
+        raw = winner.result.raw;
+        if (winner.result.answer) modelAnswer = winner.result.answer;
+        if (winner.result.sources && winner.result.sources.length > 0) modelSources = winner.result.sources;
+        activeInfo = winner.model.info; activeModel = winner.model;
+        if (winner.result.__stub) { stubMeta = winner.result.__stub; responseStatus = "stub_demo"; }
+        console.log(`[/api/ask] raced model served by ${winner.model.info.id}`);
+        return;
+      }
+
+      // Winner failed — check late successes
+      const all = await Promise.allSettled(wrapped);
+      for (const s of all) {
+        if (s.status !== "fulfilled") continue;
+        const { model: m, result: r } = s.value;
+        if (r.ok && r.sites.length > 0 && m.info.id !== winner.model.info.id) {
+          rankedSites = enrichSitesWithCatalog(r.sites);
+          raw = r.raw;
+          if (r.answer) modelAnswer = r.answer;
+          if (r.sources && r.sources.length > 0) modelSources = r.sources;
+          activeInfo = m.info; activeModel = m;
+          if (!requestedIsStub) fallbackUsed = true;
+          console.log(`[/api/ask] raced model served by ${m.info.id} (late)`);
           return;
         }
-        // Day 22 v25 fix: a model returning ok:true with 0 sites is
-        // not actually success — the user will see an empty result
-        // page. Treat 0-site responses as a fallback trigger too.
-        // This is a defence-in-depth check on top of the callModel
-        // ok:false fix; if any future model returns ranked_sites:[]
-        // with ok:true, the cascade still fires.
-        if (result.ok && result.sites.length === 0) {
-          console.warn(
-            `[/api/ask] model ${activeInfo.id} returned 0 sites with ok:true — falling through to fallback chain`,
-          );
-        }
-        // Primary model returned { ok: false, error } OR returned 0
-        // sites — no usable answer. Treat as failure and fall through.
-        const primaryErrMsg = result.ok
-          ? `${activeInfo.id} returned 0 sites`
-          : (result.error ?? `${activeInfo.id} returned no result`);
-        console.error(
-          `[/api/ask] model ${activeInfo.id} call returned error, trying fallback chain (max ${MAX_FALLBACK_ATTEMPTS} attempts): ${primaryErrMsg}`,
-        );
-
-        const errorChain: string[] = [
-          `${activeInfo.id} call failed: ${primaryErrMsg}`,
-        ];
-
-        // Build fallback chain: every model in the registry except the one
-        // that just failed and except the curated-stub. Only live (isAvailable)
-        // ones.
-        //
-        // Day 22 v24 fix: removed the `.slice(0, MAX_FALLBACK_ATTEMPTS - 2)`
-        // cap. With MAX_FALLBACK_ATTEMPTS=3 that was leaving only 1 fallback
-        // slot, which meant OpenRouter's llama-free and mistral-free rarely
-        // got a chance to fire. The cap was tuned for the era when ALL
-        // models timed out individually; with the current per-model
-        // timeouts, longer chains are fine as long as each one returns
-        // quickly (8s default per model). We still call curatedStub as
-        // the last-resort path below.
-        const fallbackChain = ALL_MODELS.filter(
-          (m) =>
-            m.info.id !== activeInfo.id &&
-            m.info.id !== "curated-stub" &&
-            m.isAvailable()
-        );
-
-        // Day 28: race OpenRouter fallback models in parallel instead of
-        // sequential. On Vercel cold starts, DNS+TLS for the first HTTP
-        // call can eat 5-8s, making 18s per-model timeout tight. Racing
-        // them lets whichever responds first win, cutting worst-case
-        // from ~36s (two 18s timeouts stacked) to ~22s (one 18s + overhead).
-        // Gemini and perplexity are excluded — Gemini is the broken
-        // primary, perplexity needs PERPLEXITY_API_KEY (not set).
-        const openRouterChain = fallbackChain.filter(
-          (m) => m.info.provider === "openrouter"
-        );
-        const nonOpenRouter = fallbackChain.filter(
-          (m) => m.info.provider !== "openrouter"
-        );
-
-        let cascaded = false;
-
-        // Race all OpenRouter models: first to respond wins.
-        // Day 28 hotfix: Promise.race rejects on first rejection, which
-        // kills the other model before it can respond. Use allSettled-style
-        // wrapping so timeouts don't kill the race.
-        if (openRouterChain.length > 0) {
-          openRouterChain.forEach((m) => pushAttempted(m.info.id));
-
-          // Wrap each model call so it always resolves (never rejects).
-          // Timed-out models resolve with ok:false instead of throwing.
-          const wrapped = openRouterChain.map(async (m) => {
-            try {
-              const r = await callModel(m);
-              return { model: m, result: r };
-            } catch (_err) {
-              return {
-                model: m,
-                result: { ok: false as const, error: `${m.info.id} timed out` },
-              };
-            }
-          });
-
-          // Resolves as soon as ANY model returns (success or failure).
-          const winner = await Promise.race(wrapped);
-
-          if (winner.result.ok && winner.result.sites.length > 0) {
-            rankedSites = enrichSitesWithCatalog(winner.result.sites);
-            raw = winner.result.raw;
-            if (winner.result.answer) modelAnswer = winner.result.answer;
-            if (winner.result.sources && winner.result.sources.length > 0)
-              modelSources = winner.result.sources;
-            activeInfo = winner.model.info;
-            activeModel = winner.model;
-            fallbackUsed = true;
-            cascaded = true;
-            if (winner.result.__stub) {
-              stubMeta = winner.result.__stub;
-              responseStatus = "stub_demo";
-            }
-            console.log(
-              `[/api/ask] raced fallback served by ${winner.model.info.id}`
-            );
-            return;
-          }
-
-          // Winner failed or had 0 sites. Wait for remaining models
-          // (settled) to see if any other succeeded.
-          const all = await Promise.allSettled(wrapped);
-          for (const settled of all) {
-            if (settled.status !== "fulfilled") continue;
-            const { model: m, result: r } = settled.value;
-            if (r.ok && r.sites.length > 0 && m.info.id !== winner.model.info.id) {
-              rankedSites = enrichSitesWithCatalog(r.sites);
-              raw = r.raw;
-              if (r.answer) modelAnswer = r.answer;
-              if (r.sources && r.sources.length > 0) modelSources = r.sources;
-              activeInfo = m.info;
-              activeModel = m;
-              fallbackUsed = true;
-              cascaded = true;
-              console.log(
-                `[/api/ask] raced fallback served by ${m.info.id} (after winner failed)`
-              );
-              return;
-            }
-          }
-
-          // Record the winner's failure
-          if (winner.result.ok && winner.result.sites.length === 0) {
-            console.warn(
-              `[/api/ask] raced winner ${winner.model.info.id} returned 0 sites — no other model succeeded`
-            );
-          }
-          errorChain.push(
-            winner.result.ok
-              ? `${winner.model.info.id} returned 0 sites`
-              : `${winner.model.info.id} call failed: ${winner.result.error ?? "unknown error"}`
-          );
-        }
-
-        // Sequential fallback for any remaining non-OpenRouter models.
-        for (const fallback of nonOpenRouter) {
-          pushAttempted(fallback.info.id);
-          const fbResult = await callModel(fallback);
-          if (fbResult.ok && fbResult.sites.length > 0) {
-            rankedSites = enrichSitesWithCatalog(fbResult.sites);
-            raw = fbResult.raw;
-            if (fbResult.answer) modelAnswer = fbResult.answer;
-            if (fbResult.sources && fbResult.sources.length > 0)
-              modelSources = fbResult.sources;
-            activeInfo = fallback.info;
-            activeModel = fallback;
-            fallbackUsed = true;
-            cascaded = true;
-            if (fbResult.__stub) {
-              stubMeta = fbResult.__stub;
-              responseStatus = "stub_demo";
-            }
-            console.log(
-              `[/api/ask] sequential fallback served by ${fallback.info.id}`
-            );
-            return;
-          }
-          if (fbResult.ok && fbResult.sites.length === 0) {
-            console.warn(
-              `[/api/ask] fallback ${fallback.info.id} returned 0 sites with ok:true — continuing to next fallback`
-            );
-          }
-          errorChain.push(
-            fbResult.ok
-              ? `${fallback.info.id} returned 0 sites`
-              : `${fallback.info.id} call failed: ${fbResult.error ?? "unknown error"}`
-          );
-        }
-
-        if (!cascaded) {
-          // All fallbacks failed (or there were none available). Use curated
-          // stub so the user never sees a 500. modelError captures every
-          // failure in the chain so we can see why the stub fired.
-          pushAttempted("curated-stub");
-          // curatedStub.call() can never fail (it's a pure function), but
-          // wrap defensively anyway.
-          const stubResult = await callModel(curatedStub);
-          if (stubResult.ok) {
-            rankedSites = stubResult.sites;
-            raw = stubResult.raw;
-            // v16: stub doesn't produce research answer / sources.
-            // If a fallback model did, those are already captured
-            // above; we don't overwrite them here.
-            // Day 6 — promote status to "stub_demo" and capture city
-            // metadata. This is the path that fires when every real
-            // model is unavailable (Gemini 500, OpenRouter rate limit).
-            if (stubResult.__stub) {
-              stubMeta = stubResult.__stub;
-              responseStatus = "stub_demo";
-            }
-          } else {
-            // Should never happen — stub is pure. Defensive fallback.
-            console.error("[/api/ask] curated-stub failed (should never happen):", stubResult.error);
-            rankedSites = [];
-            raw = "stub_failed";
-          }
-          activeInfo = curatedStub.info;
-          activeModel = curatedStub;
-          fallbackUsed = true;
-          if (responseStatus !== "stub_demo") {
-            responseStatus = "stub_fallback";
-          }
-        }
-
-        // Surface every error in the chain (newline-separated) for debugging.
-        // If we successfully cascaded to another live model, the primary error
-        // alone is enough — the user got a real answer, just not from their pick.
-        modelError = cascaded
-          ? errorChain[0]
-          : errorChain.join("\n");
-        // Mirror to the module-level var so the outer POST's
-        // partial_timeout stub can include the full error chain.
-        partialModelError = modelError;
-      } catch (modelErr) {
-        // Last-resort catch — should be impossible since callModel() never
-        // throws and the loop never throws. But just in case.
-        const msg = modelErr instanceof Error ? modelErr.message : String(modelErr);
-        console.error(`[/api/ask] Step A inner threw unexpectedly:`, modelErr);
-        // Force stub so we still return something.
-        pushAttempted("curated-stub");
-        const stubResult = await callModel(curatedStub);
-        if (stubResult.ok) {
-          rankedSites = stubResult.sites;
-          raw = stubResult.raw;
-          // v16: stub doesn't produce research answer / sources.
-          if (stubResult.__stub) {
-            stubMeta = stubResult.__stub;
-            responseStatus = "stub_demo";
-          }
-        }
-        activeInfo = curatedStub.info;
-        activeModel = curatedStub;
-        fallbackUsed = true;
-        if (responseStatus !== "stub_demo") {
-          responseStatus = "stub_fallback";
-        }
-        modelError = `unexpected_step_a_error: ${msg}`;
-        partialModelError = modelError;
       }
+
+      const winnerErr = winner.result.ok ? "returned 0 sites" : (winner.result as any).error || "timeout";
+      modelError = `All models failed: ${winner.model.info.id} - ${winnerErr}`;
+      console.error(`[/api/ask] all models failed: ${modelError}`);
     })(), STEP_A_TIMEOUT_MS, "step_a");
+
   } catch (stepAErr) {
     // Step A exhausted its 35s budget (or threw). Let the outer POST
     // catch it and return 200 + partial_timeout.
