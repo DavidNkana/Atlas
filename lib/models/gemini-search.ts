@@ -88,7 +88,7 @@ export const geminiSearch: Model = {
           try {
             const candidates = r.response.candidates ?? [];
             for (const cand of candidates) {
-              for (const ch of cand?.groundingMetadata?.groundingChunks ?? []) {
+              for (const ch of (cand?.groundingMetadata as any)?.groundingChunks ?? []) {
                 if (ch?.web?.uri) groundingSources.push({ title: ch.web.title ?? ch.web.uri, url: ch.web.uri });
               }
             }
