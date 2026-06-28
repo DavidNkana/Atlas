@@ -46,6 +46,10 @@ function toMarkdown(d: ExportData): string {
   const lines: string[] = [];
   lines.push(`# Atlas — ${d.vertical.replace(/_/g, " ")}`);
   lines.push("");
+  if ((d as any).resultUrl) {
+    lines.push(`**View online:** ${(d as any).resultUrl}`);
+    lines.push("");
+  }
   lines.push(`**Question:** ${d.question}`);
   if (d.city) lines.push(`**City:** ${d.city}${d.country ? `, ${d.country}` : ""}`);
   lines.push(`**Model:** ${d.model ?? "Atlas Stub"}`);
@@ -95,17 +99,21 @@ function toMarkdown(d: ExportData): string {
   return lines.join("\n");
 }
 
-export function ResultExportButton({ data }: { data: ExportData }) {
+export function ResultExportButton({ data, resultId }: { data: ExportData; resultId?: string }) {
   const [open, setOpen] = useState(false);
 
   const handleExport = (format: "json" | "csv" | "markdown" | "pdf") => {
     const baseName = `atlas-${data.vertical}-${(data.city ?? "result").toLowerCase().replace(/\s+/g, "-")}-${Date.now()}`;
+    const resultUrl = typeof window !== "undefined" && resultId
+      ? `${window.location.origin}/result/${resultId}`
+      : undefined;
+    const dataWithUrl = { ...data, resultUrl };
     if (format === "json") {
-      downloadFile(`${baseName}.json`, JSON.stringify(data, null, 2), "application/json");
+      downloadFile(`${baseName}.json`, JSON.stringify(dataWithUrl, null, 2), "application/json");
     } else if (format === "csv") {
       downloadFile(`${baseName}.csv`, toCSV(data.rankedSites), "text/csv");
     } else if (format === "markdown") {
-      downloadFile(`${baseName}.md`, toMarkdown(data), "text/markdown");
+      downloadFile(`${baseName}.md`, toMarkdown(dataWithUrl), "text/markdown");
     } else if (format === "pdf") {
       // Build a clean print-ready HTML doc — NO sidebar, NO buttons, NO chrome
       const mdHtml = toMarkdown(data)

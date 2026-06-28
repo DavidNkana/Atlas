@@ -393,6 +393,7 @@ export default async function ResultPage({
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <ResultExportButton
+              resultId={id}
               data={{
                 question: question.questionText,
                 vertical: question.vertical,
