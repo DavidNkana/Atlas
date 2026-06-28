@@ -78,25 +78,31 @@ export const geminiSearch: Model = {
       let groundingSources: Array<{ title?: string; url: string }> = [];
       const errorLog: string[] = [];
 
-      // Try model IDs via SDK (handles both AIzaSy and AQ. key formats)
-      for (const modelId of ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.5-flash']) {
-        try {
+      // Try model IDs in parallel — don't let one slow model eat the budget
+      const results = await Promise.allSettled(
+        ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.5-flash'].map(async (modelId) => {
           const m = genAI.getGenerativeModel({ model: modelId });
           const r = await m.generateContent(buildPrompt(req));
-          text = r.response.text();
-          // Extract grounding
-          try {
-            const candidates = r.response.candidates ?? [];
-            for (const cand of candidates) {
-              for (const ch of (cand?.groundingMetadata as any)?.groundingChunks ?? []) {
-                if (ch?.web?.uri) groundingSources.push({ title: ch.web.title ?? ch.web.uri, url: ch.web.uri });
-              }
-            }
-          } catch {}
-          break;
-        } catch (modelErr) {
-          errorLog.push(`${modelId}: ${(modelErr as Error).message?.slice(0, 150)}`);
+          return { modelId, text: r.response.text(), response: r };
+        })
+      );
+
+      for (const settled of results) {
+        if (settled.status !== 'fulfilled') {
+          errorLog.push(`rejected: ${(settled as any).reason?.message?.slice(0, 100) ?? 'unknown'}`);
+          continue;
         }
+        const { modelId, text: t, response: r } = settled.value;
+        if (!t) { errorLog.push(`${modelId}: empty response`); continue; }
+        text = t;
+        try {
+          for (const cand of r.candidates ?? []) {
+            for (const ch of (cand?.groundingMetadata as any)?.groundingChunks ?? []) {
+              if (ch?.web?.uri) groundingSources.push({ title: ch.web.title ?? ch.web.uri, url: ch.web.uri });
+            }
+          }
+        } catch {}
+        break;
       }
 
       if (!text) return { ok: false, error: `All Gemini models failed: ${errorLog.join(' | ')}` } as any;
@@ -128,11 +134,7 @@ export const geminiSearch: Model = {
       if (!parsed || typeof parsed !== 'object') {
         return {
           ok: false,
-          error: 'gemini-search: model returned no parseable JSON and no usable prose structure',
-          ranked_sites: [],
-          raw: text,
-          answer: cleaned,
-          sources: groundingSources,
+          error: 'gemini-search: model returned no parseable JSON',
         } as any;
       }
 
@@ -175,11 +177,7 @@ export const geminiSearch: Model = {
       if (sites.length === 0) {
         return {
           ok: false,
-          error: `gemini-search: returned 0 sites for "${req.question?.slice(0, 60)}"`,
-          ranked_sites: [],
-          raw: text,
-          answer: typeof parsed.answer === 'string' ? parsed.answer : cleaned,
-          sources: groundingSources,
+          error: `gemini-search: returned 0 sites`,
         } as any;
       }
 

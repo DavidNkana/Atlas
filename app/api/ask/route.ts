@@ -75,7 +75,7 @@ let partialUserId: string = "";
 // Day 12 v28: Vercel Pro hard-limits the function at 60s.
 // We need to fit: model call + Step B connectors + persist
 // + response. Budget:
-//   - gemini-search: 50s (3 model id attempts, each up to ~15s)
+//   - gemini-search: 30s (long site-selection response needs time)
 //   - Step B: 5s (just city-aware validation now, no slow connectors)
 //   - Persist + respond: 3s
 //   - Total: 58s (under the 60s Vercel ceiling)
@@ -108,9 +108,9 @@ const MODEL_TIMEOUT_MS = 8_000;
 // not per-attempt. So we need 60s budget for the full
 // 3-attempt cascade.
 const MODEL_TIMEOUT_OVERRIDES: Record<string, number> = {
-  'gemini-search': 5_000,
-  'llama-free': 35_000,    // Nemotron 120B — free model, needs time for long prompts
-  'mistral-free': 35_000,  // Gemma 4 31B — same
+  'gemini-search': 30_000,   // Large site-selection responses need time
+  'llama-free': 35_000,
+  'mistral-free': 35_000,
   'tavily': 45_000,
 };
 
