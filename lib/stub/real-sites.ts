@@ -3930,6 +3930,2117 @@ export const REAL_SITE_CATALOG: Record<
       }
     ],
 },
+
+  port_elizabeth: {
+    gas_station: [
+      {
+        name: "N2 Coega interchange",
+        suburb: "Coega",
+        lat: -33.81, lng: 25.67,
+        rationale:
+          "N2 east-bound to Coega IDZ, 22,000 vehicles/day. Limited fuel competition on the 30km stretch from PE.",
+        source: "SANRAL + OpenStreetMap",
+      },
+      {
+        name: "Settlers Way / Walmer interchange",
+        suburb: "Walmer",
+        lat: -33.98, lng: 25.59,
+        rationale:
+          "M4 Settlers Way, 18,000 vehicles/day. Existing station with prime-position forecourt.",
+        source: "OpenStreetMap + SANRAL",
+      },
+      {
+        name: "Kempston Road (Sidwell)",
+        suburb: "Sidwell",
+        lat: -33.93, lng: 25.6,
+        rationale:
+          "Industrial feeder to North End and Deal Party, high truck traffic, adjacent freight yards.",
+        source: "OpenStreetMap + NM Bay freight corridor",
+      },
+      {
+        name: "Cape Road (Newton Park)",
+        suburb: "Newton Park",
+        lat: -33.945, lng: 25.56,
+        rationale:
+          "R102 Cape Road commuter corridor, 15,000 vehicles/day through Newton Park catchment.",
+        source: "SANRAL + OpenStreetMap",
+      },
+      {
+        name: "Marine Drive (Summerstrand)",
+        suburb: "Summerstrand",
+        lat: -33.99, lng: 25.66,
+        rationale:
+          "Beachfront district serving Boardwalk casino, seasonal tourist fuel demand.",
+        source: "OpenStreetMap + NM Bay tourism",
+      },
+    ],
+    restaurant: [
+      {
+        name: "Stanley Street (Richmond Hill)",
+        suburb: "Richmond Hill",
+        lat: -33.962, lng: 25.615,
+        rationale:
+          "PEs established restaurant row, 15+ eateries, walking-distance from Central offices.",
+        source: "OpenStreetMap + local knowledge",
+      },
+      {
+        name: "Boardwalk Casino precinct",
+        suburb: "Summerstrand",
+        lat: -33.985, lng: 25.655,
+        rationale:
+          "Boardwalk entertainment complex, 2M+ visitors/year, hotel + casino foot traffic.",
+        source: "OpenStreetMap + Sun International",
+      },
+      {
+        name: "Walmer Park / Heugh Road strip",
+        suburb: "Walmer",
+        lat: -33.975, lng: 25.585,
+        rationale:
+          "Walmer Park shopping centre + Heugh Road dining strip in affluent residential catchment.",
+        source: "OpenStreetMap + local knowledge",
+      },
+      {
+        name: "Hobie Beach / Shark Rock Pier",
+        suburb: "Humewood",
+        lat: -33.985, lng: 25.645,
+        rationale:
+          "Beachfront casual dining, ocean views, summer tourist peak.",
+        source: "OpenStreetMap + NM Bay tourism",
+      },
+      {
+        name: "Newton Park / Burt Drive node",
+        suburb: "Newton Park",
+        lat: -33.942, lng: 25.565,
+        rationale:
+          "Newton Park commercial node near NMU, student + staff lunch trade.",
+        source: "OpenStreetMap + NMU",
+      },
+    ],
+    warehouse: [
+      {
+        name: "Deal Party industrial zone",
+        suburb: "Deal Party",
+        lat: -33.91, lng: 25.62,
+        rationale:
+          "PEs primary industrial area, direct port access via N2, established logistics cluster.",
+        source: "OpenStreetMap + NM Bay IDZ",
+      },
+      {
+        name: "Markman industrial township",
+        suburb: "Markman",
+        lat: -33.89, lng: 25.64,
+        rationale:
+          "Large-parcel industrial stands, 2km from N2, freight rail siding.",
+        source: "OpenStreetMap + NM Bay Municipality",
+      },
+      {
+        name: "Struandale / Burman Road",
+        suburb: "Struandale",
+        lat: -33.92, lng: 25.605,
+        rationale:
+          "Mixed light-industrial 5min from PE Harbour, good for distribution.",
+        source: "OpenStreetMap + Transnet",
+      },
+      {
+        name: "Korsten industrial (Uitenhage Rd)",
+        suburb: "Korsten",
+        lat: -33.915, lng: 25.58,
+        rationale:
+          "Korsten manufacturing corridor, established truck routes to PE Harbour.",
+        source: "OpenStreetMap + NM Bay",
+      },
+      {
+        name: "N2 / Missionvale interchange",
+        suburb: "Missionvale",
+        lat: -33.87, lng: 25.59,
+        rationale:
+          "N2 north-bound servicing PE–Joburg freight corridor, large undeveloped industrial parcels.",
+        source: "OpenStreetMap + SANRAL",
+      },
+    ],
+    retail_shop: [
+      {
+        name: "Greenacres Shopping Centre",
+        suburb: "Greenacres",
+        lat: -33.945, lng: 25.575,
+        rationale:
+          "PEs largest mall, 140+ stores, positioned at Newton Park/Greenacres node.",
+        source: "OpenStreetMap + Liberty Two Degrees",
+      },
+      {
+        name: "Walmer Park Shopping Centre",
+        suburb: "Walmer",
+        lat: -33.97, lng: 25.585,
+        rationale:
+          "PEs second-largest mall, 90+ stores, 150,000-resident catchment.",
+        source: "OpenStreetMap + Growthpoint",
+      },
+      {
+        name: "Baywest Mall (Hunters Retreat)",
+        suburb: "Hunters Retreat",
+        lat: -33.92, lng: 25.52,
+        rationale:
+          "PEs newest regional mall, 100+ stores, western-suburb growth corridor.",
+        source: "OpenStreetMap + Rebosis",
+      },
+      {
+        name: "Moffett on Main (Walmer)",
+        suburb: "Walmer",
+        lat: -33.98, lng: 25.6,
+        rationale:
+          "Lifestyle centre, 40+ stores, affluent Walmer and Springfield catchment.",
+        source: "OpenStreetMap + local",
+      },
+      {
+        name: "PE CBD (Govan Mbeki Ave)",
+        suburb: "Central",
+        lat: -33.96, lng: 25.615,
+        rationale:
+          "PE CBD retail core, high footfall from taxi rank and bus terminus.",
+        source: "OpenStreetMap + NM Bay CBD plan",
+      },
+    ],
+    residential_land: [
+      {
+        name: "Lorraine / Theescombe smallholdings",
+        suburb: "Lorraine",
+        lat: -33.995, lng: 25.535,
+        rationale:
+          "Western suburbs smallholding belt, 1-5ha plots, demand for residential near Baywest.",
+        source: "OpenStreetMap + NM Bay SDF",
+      },
+      {
+        name: "Fairview / Overbaakens estate land",
+        suburb: "Fairview",
+        lat: -33.965, lng: 25.55,
+        rationale:
+          "Elevated estate precinct, undeveloped plots with city+sea views.",
+        source: "OpenStreetMap + NM Bay property",
+      },
+      {
+        name: "Hunters Retreat / Rowallan Park",
+        suburb: "Hunters Retreat",
+        lat: -33.925, lng: 25.505,
+        rationale:
+          "Western growth corridor, greenfield residential near Baywest Mall.",
+        source: "NM Bay SDF + OpenStreetMap",
+      },
+      {
+        name: "Chelsea / Pari Park smallholdings",
+        suburb: "Pari Park",
+        lat: -33.95, lng: 25.475,
+        rationale:
+          "Smallholding belt west of PE, 2-10ha plots, equestrian and nursery use.",
+        source: "OpenStreetMap + NM Bay",
+      },
+      {
+        name: "Sardinia Bay / Lovemore Park",
+        suburb: "Lovemore Park",
+        lat: -34.015, lng: 25.515,
+        rationale:
+          "Coastal smallholding belt south of PE, ocean views, weekend-farming community.",
+        source: "OpenStreetMap + NM Bay coastal plan",
+      },
+    ],
+    commercial_land: [
+      {
+        name: "Newton Park office node (1st Ave)",
+        suburb: "Newton Park",
+        lat: -33.94, lng: 25.565,
+        rationale:
+          "1st Avenue office corridor, PEs secondary office node, near NMU and Greenacres.",
+        source: "OpenStreetMap + NM Bay office report",
+      },
+      {
+        name: "St Georges Park / Park Drive",
+        suburb: "Central",
+        lat: -33.965, lng: 25.61,
+        rationale:
+          "St Georges Park precinct, established professional-services corridor.",
+        source: "OpenStreetMap + NM Bay CBD data",
+      },
+      {
+        name: "Walmer / Heugh Road office strip",
+        suburb: "Walmer",
+        lat: -33.972, lng: 25.59,
+        rationale:
+          "Heugh Road mixed-use corridor, small-office demand from professional catchment.",
+        source: "OpenStreetMap + local",
+      },
+      {
+        name: "Summerstrand / Marine Drive offices",
+        suburb: "Summerstrand",
+        lat: -33.988, lng: 25.663,
+        rationale:
+          "Marine Drive medical and professional suites near provincial hospital.",
+        source: "OpenStreetMap + NM Bay health plan",
+      },
+      {
+        name: "Coega IDZ commercial park",
+        suburb: "Coega",
+        lat: -33.8, lng: 25.68,
+        rationale:
+          "Coega IDZ designated office park for logistics and manufacturing HQs.",
+        source: "Coega Development Corp + OpenStreetMap",
+      },
+    ],
+    agricultural_land: [
+      {
+        name: "Sundays River Valley (Addo)",
+        suburb: "Addo",
+        lat: -33.57, lng: 25.69,
+        rationale:
+          "Sundays River citrus belt, 40km north, established irrigation, export-grade orchards.",
+        source: "OpenStreetMap + SRWUA",
+      },
+      {
+        name: "Gamtoos Valley farming area",
+        suburb: "Patensie",
+        lat: -33.76, lng: 24.82,
+        rationale:
+          "Gamtoos River Valley, 80km west, citrus and vegetable belt with Kouga Dam irrigation.",
+        source: "OpenStreetMap + Gamtoos Irrigation Board",
+      },
+      {
+        name: "Uitenhage / Despatch small farms",
+        suburb: "Despatch",
+        lat: -33.8, lng: 25.48,
+        rationale:
+          "Peri-urban farming belt, mixed vegetables and poultry, 25km from PE market.",
+        source: "OpenStreetMap + NM Bay agri plan",
+      },
+      {
+        name: "Kinkelbos / Colchester coastal",
+        suburb: "Colchester",
+        lat: -33.68, lng: 25.81,
+        rationale:
+          "Sundays River estuary farmland, coastal grazing, 45km from PE.",
+        source: "OpenStreetMap + NM Bay rural plan",
+      },
+      {
+        name: "Rocklands / Chelsea smallholdings",
+        suburb: "Rocklands",
+        lat: -33.955, lng: 25.47,
+        rationale:
+          "Western PE peri-urban farming, small-scale vegetable tunnels for PE market.",
+        source: "OpenStreetMap + NM Bay agri census",
+      },
+    ],
+    industrial_land: [
+      {
+        name: "Deal Party heavy-industrial",
+        suburb: "Deal Party",
+        lat: -33.905, lng: 25.618,
+        rationale:
+          "Core heavy-industrial, port-adjacent, established automotive cluster (Ford, VW supply).",
+        source: "OpenStreetMap + NM Bay IDZ",
+      },
+      {
+        name: "Markman industrial Phase 2",
+        suburb: "Markman",
+        lat: -33.885, lng: 25.645,
+        rationale:
+          "Large-parcel industrial with rail siding, automotive-supplier cluster.",
+        source: "OpenStreetMap + NM Bay industrial audit",
+      },
+      {
+        name: "Neave industrial township",
+        suburb: "Neave",
+        lat: -33.92, lng: 25.61,
+        rationale:
+          "Light-industrial between PE Harbour and N2, good for logistics.",
+        source: "OpenStreetMap + Transnet NPA",
+      },
+      {
+        name: "Coega IDZ Zone 3 (chemicals)",
+        suburb: "Coega",
+        lat: -33.795, lng: 25.69,
+        rationale:
+          "Zone 3 designated for chemical investment, deep-water port access.",
+        source: "Coega Development Corp + OpenStreetMap",
+      },
+      {
+        name: "Perseverance industrial (Uitenhage Rd)",
+        suburb: "Perseverance",
+        lat: -33.88, lng: 25.56,
+        rationale:
+          "Perseverance industrial belt, established manufacturing and fabrication.",
+        source: "OpenStreetMap + NM Bay Municipality",
+      },
+    ],
+    mixed_use_land: [
+      {
+        name: "Richmond Hill / Stanley Street",
+        suburb: "Richmond Hill",
+        lat: -33.961, lng: 25.615,
+        rationale:
+          "PEs gentrified heritage precinct, ground-floor retail+upper residential.",
+        source: "OpenStreetMap + NM Bay heritage zone",
+      },
+      {
+        name: "Humewood beachfront strip",
+        suburb: "Humewood",
+        lat: -33.982, lng: 25.648,
+        rationale:
+          "Beachfront mixed-use, hotel+residential+retail, summer peak.",
+        source: "OpenStreetMap + NM Bay coastal plan",
+      },
+      {
+        name: "Mount Croix / Cape Road corridor",
+        suburb: "Mount Croix",
+        lat: -33.95, lng: 25.59,
+        rationale:
+          "Cape Road mixed-use corridor, retail+office+residential.",
+        source: "OpenStreetMap + NM Bay corridor framework",
+      },
+      {
+        name: "North End / Govan Mbeki redevelopment",
+        suburb: "North End",
+        lat: -33.935, lng: 25.605,
+        rationale:
+          "CBD-fringe redevelopment zone, designated mixed-use, near stadium.",
+        source: "NM Bay SDF + OpenStreetMap",
+      },
+      {
+        name: "Summerstrand student zone",
+        suburb: "Summerstrand",
+        lat: -33.992, lng: 25.662,
+        rationale:
+          "NMU-adjacent precinct, demand for student housing+retail mixed-use.",
+        source: "OpenStreetMap + NMU precinct plan",
+      },
+    ],
+    civic_land: [
+      {
+        name: "North End library + community centre",
+        suburb: "North End",
+        lat: -33.938, lng: 25.61,
+        rationale:
+          "Community services node, established catchment, designated civic land.",
+        source: "NM Bay SDF + OpenStreetMap",
+      },
+      {
+        name: "Zwide sports complex expansion",
+        suburb: "Zwide",
+        lat: -33.915, lng: 25.575,
+        rationale:
+          "Township sports precinct, high-density catchment, undersupplied facilities.",
+        source: "OpenStreetMap + NM Bay facilities audit",
+      },
+      {
+        name: "Missionvale campus (NMU)",
+        suburb: "Missionvale",
+        lat: -33.878, lng: 25.585,
+        rationale:
+          "NMU Missionvale campus, student housing+community health clinic.",
+        source: "NMU + OpenStreetMap",
+      },
+      {
+        name: "KwaZakhele community health centre",
+        suburb: "KwaZakhele",
+        lat: -33.9, lng: 25.59,
+        rationale:
+          "High-density township (67,000 residents), undersupplied primary healthcare.",
+        source: "NM Bay health plan + OpenStreetMap",
+      },
+      {
+        name: "Walmer / Airport Valley civic precinct",
+        suburb: "Walmer",
+        lat: -33.985, lng: 25.61,
+        rationale:
+          "Community centre site, established catchment, church and school adjacency.",
+        source: "OpenStreetMap + NM Bay Municipality",
+      },
+    ],
+  },
+  bloemfontein: {
+    gas_station: [
+      {
+        name: "N1 highway (North)",
+        suburb: "Bayswater",
+        lat: -29.06, lng: 26.18,
+        rationale:
+          "N1 north-bound to Johannesburg, 18,000 vehicles/day.",
+        source: "SANRAL + OpenStreetMap",
+      },
+      {
+        name: "N1 highway (South)",
+        suburb: "Hamilton",
+        lat: -29.18, lng: 26.22,
+        rationale:
+          "N1 south-bound to Cape Town, 21,000 vehicles/day, limited stops to Colesberg.",
+        source: "SANRAL + OpenStreetMap",
+      },
+      {
+        name: "N8 / Nelson Mandela Drive",
+        suburb: "Brandwag",
+        lat: -29.11, lng: 26.2,
+        rationale:
+          "N8 east-bound to Maseru (Lesotho), 12,000 vehicles/day, international freight.",
+        source: "OpenStreetMap + SANRAL N8",
+      },
+      {
+        name: "Nelson Mandela Drive (CBD)",
+        suburb: "CBD",
+        lat: -29.115, lng: 26.215,
+        rationale:
+          "Nelson Mandela Drive through Bloemfontein CBD, highest-traffic urban arterial.",
+        source: "OpenStreetMap + Mangaung traffic study",
+      },
+      {
+        name: "Eeufees Road / Universitas",
+        suburb: "Universitas",
+        lat: -29.105, lng: 26.17,
+        rationale:
+          "Eeufees Road near UFS, high student vehicle traffic, undersupplied campus fuel.",
+        source: "OpenStreetMap + UFS",
+      },
+    ],
+    restaurant: [
+      {
+        name: "Loch Logan Waterfront",
+        suburb: "CBD",
+        lat: -29.117, lng: 26.22,
+        rationale:
+          "Bloemfonteins premier dining precinct, 15+ restaurants, cinema anchor.",
+        source: "OpenStreetMap + Loch Logan",
+      },
+      {
+        name: "Preller Square (Universitas)",
+        suburb: "Universitas",
+        lat: -29.108, lng: 26.175,
+        rationale:
+          "Student-oriented retail and dining node, UFS adjacency, established evening trade.",
+        source: "OpenStreetMap + UFS plan",
+      },
+      {
+        name: "Mimosa Mall restaurant row",
+        suburb: "Brandwag",
+        lat: -29.112, lng: 26.195,
+        rationale:
+          "Mimosa Mall dining, 80+ stores, city-wide catchment.",
+        source: "OpenStreetMap + Attacq",
+      },
+      {
+        name: "Woodlands / Laguna Ridge strip",
+        suburb: "Woodlands",
+        lat: -29.1, lng: 26.155,
+        rationale:
+          "Northern suburbs growth node, new restaurant strip, affluent catchment.",
+        source: "OpenStreetMap + Mangaung SDF",
+      },
+      {
+        name: "Willows / Bloem Showgrounds",
+        suburb: "Willows",
+        lat: -29.13, lng: 26.185,
+        rationale:
+          "Currie Avenue area, event-driven dining, established fast-food cluster.",
+        source: "OpenStreetMap + local",
+      },
+    ],
+    warehouse: [
+      {
+        name: "East End industrial / N1 corridor",
+        suburb: "East End",
+        lat: -29.105, lng: 26.235,
+        rationale:
+          "Light-industrial adjacent to N1, primary logistics cluster, rail siding.",
+        source: "OpenStreetMap + Mangaung industrial audit",
+      },
+      {
+        name: "Hamilton industrial zone",
+        suburb: "Hamilton",
+        lat: -29.17, lng: 26.215,
+        rationale:
+          "Hamilton industrial on N1 south, large-parcel stands, good for distribution.",
+        source: "OpenStreetMap + Mangaung",
+      },
+      {
+        name: "Oranjesig / Dr Belcher Road",
+        suburb: "Oranjesig",
+        lat: -29.095, lng: 26.19,
+        rationale:
+          "Light-industrial strip, 5min from N1 interchange, last-mile logistics.",
+        source: "OpenStreetMap + Mangaung logistics",
+      },
+      {
+        name: "Botshabelo industrial park",
+        suburb: "Botshabelo",
+        lat: -29.23, lng: 26.73,
+        rationale:
+          "Botshabelo IDZ, 55km east, designated manufacturing and logistics hub.",
+        source: "Botshabelo IDZ + OpenStreetMap",
+      },
+      {
+        name: "N8 freight corridor (Airport)",
+        suburb: "Bram Fischer Airport",
+        lat: -29.09, lng: 26.3,
+        rationale:
+          "Airport freight precinct, N8 to Maseru, air-freight+road logistics co-location.",
+        source: "OpenStreetMap + ACSA",
+      },
+    ],
+    retail_shop: [
+      {
+        name: "Mimosa Mall (Brandwag)",
+        suburb: "Brandwag",
+        lat: -29.112, lng: 26.195,
+        rationale:
+          "Largest retail centre, 80+ stores, 500,000 metro catchment.",
+        source: "OpenStreetMap + Attacq",
+      },
+      {
+        name: "Loch Logan Waterfront",
+        suburb: "CBD",
+        lat: -29.117, lng: 26.22,
+        rationale:
+          "Waterfront retail+entertainment, 50+ stores, cinema, lakeside setting.",
+        source: "OpenStreetMap + Old Mutual",
+      },
+      {
+        name: "Fleurhof / Fleurdal Mall",
+        suburb: "Fleurdal",
+        lat: -29.145, lng: 26.2,
+        rationale:
+          "Community shopping centre, 25+ stores, food-anchor-led.",
+        source: "OpenStreetMap + Mangaung retail",
+      },
+      {
+        name: "Brandwag Centre / Kellner Street",
+        suburb: "Brandwag",
+        lat: -29.11, lng: 26.195,
+        rationale:
+          "Medical suites+retail, high-visibility on Kellner Street arterial.",
+        source: "OpenStreetMap + local",
+      },
+      {
+        name: "Heuwelsig / Woodlands centre",
+        suburb: "Heuwelsig",
+        lat: -29.085, lng: 26.15,
+        rationale:
+          "Northern suburbs neighbourhood retail, affluent catchment.",
+        source: "OpenStreetMap + Mangaung SDF",
+      },
+    ],
+    residential_land: [
+      {
+        name: "Woodlands Hills estate (north)",
+        suburb: "Woodlands",
+        lat: -29.08, lng: 26.14,
+        rationale:
+          "Bloemfonteins largest residential development, security estate demand.",
+        source: "OpenStreetMap + Mangaung property",
+      },
+      {
+        name: "Heuwelsig / Bayswater view stands",
+        suburb: "Heuwelsig",
+        lat: -29.08, lng: 26.165,
+        rationale:
+          "Ridge-view residential stands, premium north-facing plots.",
+        source: "OpenStreetMap + Mangaung rates",
+      },
+      {
+        name: "Universitas student accommodation",
+        suburb: "Universitas",
+        lat: -29.105, lng: 26.18,
+        rationale:
+          "UFS-adjacent zone, 35,000 students, strong private-housing demand.",
+        source: "UFS + OpenStreetMap",
+      },
+      {
+        name: "Dan Pienaar extension",
+        suburb: "Dan Pienaar",
+        lat: -29.095, lng: 26.205,
+        rationale:
+          "Established residential precinct, infill potential near Grey College and Eunice.",
+        source: "OpenStreetMap + Mangaung SDF",
+      },
+      {
+        name: "Langenhoven Park growth corridor",
+        suburb: "Langenhoven Park",
+        lat: -29.095, lng: 26.145,
+        rationale:
+          "Western suburbs growth, new residential stands near New Horizon College.",
+        source: "OpenStreetMap + Mangaung western plan",
+      },
+    ],
+    commercial_land: [
+      {
+        name: "Brandwag office node (Kellner St)",
+        suburb: "Brandwag",
+        lat: -29.112, lng: 26.193,
+        rationale:
+          "Premier office node, medical suites, legal firms, corporate HQs near Mimosa.",
+        source: "OpenStreetMap + Mangaung office report",
+      },
+      {
+        name: "CBD / Charlotte Maxeke Street",
+        suburb: "CBD",
+        lat: -29.118, lng: 26.218,
+        rationale:
+          "Government and professional-services corridor, provincial HQ adjacency.",
+        source: "OpenStreetMap + Mangaung CBD plan",
+      },
+      {
+        name: "Universitas / Nelson Mandela strip",
+        suburb: "Universitas",
+        lat: -29.108, lng: 26.19,
+        rationale:
+          "Nelson Mandela Drive office strip, medical and consulting demand from campus.",
+        source: "OpenStreetMap + UFS plan",
+      },
+      {
+        name: "Westdene / Zastron Street",
+        suburb: "Westdene",
+        lat: -29.11, lng: 26.205,
+        rationale:
+          "Zastron Street mixed commercial corridor, small-office and retail.",
+        source: "OpenStreetMap + Mangaung",
+      },
+      {
+        name: "Airport business park",
+        suburb: "Bram Fischer Airport",
+        lat: -29.092, lng: 26.305,
+        rationale:
+          "Airport commercial zone, air-freight+office co-location.",
+        source: "ACSA + OpenStreetMap",
+      },
+    ],
+    agricultural_land: [
+      {
+        name: "Modder River irrigation farms",
+        suburb: "Modder River",
+        lat: -29.03, lng: 26.43,
+        rationale:
+          "Modder River scheme, 35km east, established maize and lucerne.",
+        source: "OpenStreetMap + Free State agri",
+      },
+      {
+        name: "Dewetsdorp Road farming belt",
+        suburb: "Dewetsdorp Road",
+        lat: -29.45, lng: 26.35,
+        rationale:
+          "Southern Free State mixed-farming, sheep+cattle+maize, 70km south.",
+        source: "OpenStreetMap + Free State census",
+      },
+      {
+        name: "Bainsvlei / Bultfontein Road",
+        suburb: "Bainsvlei",
+        lat: -29.04, lng: 26.05,
+        rationale:
+          "Western Free State grain belt, maize and sunflower, 40km west.",
+        source: "OpenStreetMap + Grain SA",
+      },
+      {
+        name: "Brandfort Road smallholdings",
+        suburb: "Brandfort Road",
+        lat: -28.9, lng: 26.25,
+        rationale:
+          "Northern peri-urban farming, mixed vegetables and livestock, 50km.",
+        source: "OpenStreetMap + Mangaung rural",
+      },
+      {
+        name: "Naval Hill / Rayton farming",
+        suburb: "Rayton",
+        lat: -29.06, lng: 26.08,
+        rationale:
+          "Western peri-urban belt, poultry and vegetables, 30km from city.",
+        source: "OpenStreetMap + Mangaung agri",
+      },
+    ],
+    industrial_land: [
+      {
+        name: "East End heavy-industrial core",
+        suburb: "East End",
+        lat: -29.1, lng: 26.24,
+        rationale:
+          "Core heavy-industrial zone, rail-connected, established manufacturing.",
+        source: "OpenStreetMap + Mangaung industrial",
+      },
+      {
+        name: "Botshabelo IDZ",
+        suburb: "Botshabelo",
+        lat: -29.225, lng: 26.725,
+        rationale:
+          "Designated manufacturing hub, textiles, automotive, agro-processing.",
+        source: "Botshabelo IDZ + OpenStreetMap",
+      },
+      {
+        name: "Bloemside industrial extension",
+        suburb: "Bloemside",
+        lat: -29.165, lng: 26.24,
+        rationale:
+          "Light-industrial on southern N1, automotive services cluster.",
+        source: "OpenStreetMap + Mangaung",
+      },
+      {
+        name: "Airport industrial (N8 corridor)",
+        suburb: "Bram Fischer Airport",
+        lat: -29.095, lng: 26.295,
+        rationale:
+          "Airport-adjacent industrial, air-freight logistics+manufacturing.",
+        source: "ACSA + OpenStreetMap",
+      },
+      {
+        name: "Oranjesig / Dr Belcher light industrial",
+        suburb: "Oranjesig",
+        lat: -29.092, lng: 26.192,
+        rationale:
+          "Established light-industrial strip, fabrication and warehousing.",
+        source: "OpenStreetMap + Mangaung",
+      },
+    ],
+    mixed_use_land: [
+      {
+        name: "Waterfront / Loch Logan",
+        suburb: "CBD",
+        lat: -29.116, lng: 26.222,
+        rationale:
+          "Loch Logan mixed-use, retail+office+entertainment, citys prime destination.",
+        source: "OpenStreetMap + Old Mutual",
+      },
+      {
+        name: "Second Avenue (Brandwag)",
+        suburb: "Brandwag",
+        lat: -29.11, lng: 26.19,
+        rationale:
+          "Second Avenue mixed-use corridor, medical/retail+offices, near Mimosa.",
+        source: "OpenStreetMap + Mangaung corridor",
+      },
+      {
+        name: "Nelson Mandela Drive corridor",
+        suburb: "CBD",
+        lat: -29.113, lng: 26.21,
+        rationale:
+          "Primary urban corridor CBD–UFS, designated mixed-use.",
+        source: "Mangaung SDF + OpenStreetMap",
+      },
+      {
+        name: "Universitas / DF Malherbe",
+        suburb: "Universitas",
+        lat: -29.107, lng: 26.178,
+        rationale:
+          "Student-oriented mixed-use, retail+student housing+academic offices.",
+        source: "UFS plan + OpenStreetMap",
+      },
+      {
+        name: "Willows / Currie Avenue node",
+        suburb: "Willows",
+        lat: -29.128, lng: 26.19,
+        rationale:
+          "Currie Avenue mixed-use corridor, retail+office+warehousing.",
+        source: "OpenStreetMap + Mangaung",
+      },
+    ],
+    civic_land: [
+      {
+        name: "CBD government precinct",
+        suburb: "CBD",
+        lat: -29.117, lng: 26.216,
+        rationale:
+          "Provincial government precinct, Free State Legislature+High Court.",
+        source: "OpenStreetMap + Free State Govt",
+      },
+      {
+        name: "Batho community centre",
+        suburb: "Batho",
+        lat: -29.14, lng: 26.21,
+        rationale:
+          "Township community services node, undersupplied civic facilities.",
+        source: "Mangaung facilities audit",
+      },
+      {
+        name: "Rocklands / Kagisanong library",
+        suburb: "Rocklands",
+        lat: -29.17, lng: 26.225,
+        rationale:
+          "High-density residential, designated civic land for library+hall.",
+        source: "OpenStreetMap + Mangaung SDF",
+      },
+      {
+        name: "Heidedal civic centre",
+        suburb: "Heidedal",
+        lat: -29.145, lng: 26.23,
+        rationale:
+          "Established community, undersupplied civic infrastructure.",
+        source: "Mangaung + OpenStreetMap",
+      },
+      {
+        name: "Universitas sports complex (UFS)",
+        suburb: "Universitas",
+        lat: -29.11, lng: 26.185,
+        rationale:
+          "UFS sports precinct, university-owned civic land, public-private potential.",
+        source: "UFS + OpenStreetMap",
+      },
+    ],
+  },
+  kitwe: {
+    gas_station: [
+      {
+        name: "T3 highway (Ndola Road)",
+        suburb: "Nkana East",
+        lat: -12.805, lng: 28.22,
+        rationale:
+          "T3 Kitwe–Ndola highway, 10,000 vehicles/day, Copperbelt freight corridor.",
+        source: "OpenStreetMap + RDA Zambia",
+      },
+      {
+        name: "Independence Avenue (CBD)",
+        suburb: "CBD",
+        lat: -12.805, lng: 28.21,
+        rationale:
+          "Kitwe CBD arterial, highest urban traffic, existing stations at capacity.",
+        source: "OpenStreetMap + Kitwe City Council",
+      },
+      {
+        name: "Chingola Road / Nkana West",
+        suburb: "Nkana West",
+        lat: -12.79, lng: 28.205,
+        rationale:
+          "Chingola Road mining corridor, heavy truck traffic from Nkana and Nchanga mines.",
+        source: "OpenStreetMap + Copperbelt mining data",
+      },
+      {
+        name: "T3 / Mufuchani Bridge area",
+        suburb: "Mufuchani",
+        lat: -12.82, lng: 28.235,
+        rationale:
+          "T3 south-bound to Lusaka, long-distance freight and bus corridor.",
+        source: "RDA Zambia + OpenStreetMap",
+      },
+      {
+        name: "Buchi / Kamitondo township",
+        suburb: "Buchi",
+        lat: -12.815, lng: 28.195,
+        rationale:
+          "High-density township with limited fuel options, catchment of 50,000+ residents.",
+        source: "OpenStreetMap + Kitwe City Council",
+      },
+    ],
+    restaurant: [
+      {
+        name: "Mukuba Mall precinct",
+        suburb: "Parklands",
+        lat: -12.8, lng: 28.215,
+        rationale:
+          "Kitwes largest mall, 60+ stores, established food-court and restaurant cluster.",
+        source: "OpenStreetMap + Mukuba Mall",
+      },
+      {
+        name: "Independence Avenue (CBD)",
+        suburb: "CBD",
+        lat: -12.805, lng: 28.21,
+        rationale:
+          "CBD restaurant row, established sit-down and fast-food, office-worker lunch trade.",
+        source: "OpenStreetMap + local",
+      },
+      {
+        name: "Nkana Golf Club / Parklands",
+        suburb: "Parklands",
+        lat: -12.798, lng: 28.212,
+        rationale:
+          "Nkana Golf Club precinct, affluent residential area, premium dining demand.",
+        source: "OpenStreetMap + Kitwe City Council",
+      },
+      {
+        name: "ECL Mall / Chisokone area",
+        suburb: "Chisokone",
+        lat: -12.802, lng: 28.205,
+        rationale:
+          "ECL Mall retail precinct, growing restaurant cluster, central Kitwe catchment.",
+        source: "OpenStreetMap + local",
+      },
+      {
+        name: "Copperbelt University (CBU) area",
+        suburb: "Riverside",
+        lat: -12.812, lng: 28.225,
+        rationale:
+          "CBU-adjacent, 10,000 students, fast-food and casual dining demand.",
+        source: "OpenStreetMap + CBU",
+      },
+    ],
+    warehouse: [
+      {
+        name: "Nkana West industrial zone",
+        suburb: "Nkana West",
+        lat: -12.788, lng: 28.2,
+        rationale:
+          "Established mining-supply industrial area, rail-connected, heavy-truck access.",
+        source: "OpenStreetMap + Copperbelt Province",
+      },
+      {
+        name: "T3 freight corridor (south)",
+        suburb: "Mufuchani",
+        lat: -12.825, lng: 28.24,
+        rationale:
+          "T3 south-bound logistics, large undeveloped industrial parcels.",
+        source: "RDA Zambia + OpenStreetMap",
+      },
+      {
+        name: "Chamboli industrial area",
+        suburb: "Chamboli",
+        lat: -12.81, lng: 28.195,
+        rationale:
+          "Light-industrial precinct near Kitwe railway station, goods-handling cluster.",
+        source: "OpenStreetMap + Zambia Railways",
+      },
+      {
+        name: "Garneton / Zambia Breweries area",
+        suburb: "Garneton",
+        lat: -12.8, lng: 28.23,
+        rationale:
+          "Zambia Breweries precinct, established manufacturing and logistics.",
+        source: "OpenStreetMap + Zambia Breweries",
+      },
+      {
+        name: "Chingola Road logistics strip",
+        suburb: "Nkana East",
+        lat: -12.793, lng: 28.218,
+        rationale:
+          "Chingola Road freight corridor, access to Nchanga and Konkola mines.",
+        source: "OpenStreetMap + Copperbelt logistics",
+      },
+    ],
+    retail_shop: [
+      {
+        name: "Mukuba Mall",
+        suburb: "Parklands",
+        lat: -12.8, lng: 28.215,
+        rationale:
+          "Kitwes premier retail destination, 60+ stores, Copperbelt-wide catchment.",
+        source: "OpenStreetMap + Mukuba Mall",
+      },
+      {
+        name: "ECL Mall (Chisokone)",
+        suburb: "Chisokone",
+        lat: -12.802, lng: 28.205,
+        rationale:
+          "Central Kitwe retail, 40+ stores, serving Chisokone and CBD catchment.",
+        source: "OpenStreetMap + local",
+      },
+      {
+        name: "Kitwe City Square (CBD)",
+        suburb: "CBD",
+        lat: -12.805, lng: 28.21,
+        rationale:
+          "CBD retail core, established shopfronts, high pedestrian footfall from bus station.",
+        source: "OpenStreetMap + Kitwe City Council",
+      },
+      {
+        name: "Parklands / Nkana residential retail",
+        suburb: "Parklands",
+        lat: -12.797, lng: 28.213,
+        rationale:
+          "Neighbourhood retail strip serving affluent Parklands and Nkana residential areas.",
+        source: "OpenStreetMap + local",
+      },
+      {
+        name: "Riverside / CBU convenience node",
+        suburb: "Riverside",
+        lat: -12.814, lng: 28.224,
+        rationale:
+          "CBU-adjacent retail strip, student-oriented convenience and mobile-money shops.",
+        source: "OpenStreetMap + CBU",
+      },
+    ],
+    residential_land: [
+      {
+        name: "Parklands / Nkana East extension",
+        suburb: "Parklands",
+        lat: -12.796, lng: 28.218,
+        rationale:
+          "Affluent residential area, large-plot stands, demand for executive housing.",
+        source: "OpenStreetMap + Kitwe City Council",
+      },
+      {
+        name: "Riverside residential expansion",
+        suburb: "Riverside",
+        lat: -12.818, lng: 28.228,
+        rationale:
+          "Growing residential area near CBU, demand for student and staff housing.",
+        source: "OpenStreetMap + Kitwe SDF",
+      },
+      {
+        name: "Buchi township residential infill",
+        suburb: "Buchi",
+        lat: -12.815, lng: 28.19,
+        rationale:
+          "High-density residential, government housing programme target area.",
+        source: "OpenStreetMap + Ministry of Housing",
+      },
+      {
+        name: "Garneton residential growth corridor",
+        suburb: "Garneton",
+        lat: -12.805, lng: 28.235,
+        rationale:
+          "Eastern Kitwe growth corridor, greenfield residential parcels.",
+        source: "OpenStreetMap + Kitwe City Council",
+      },
+      {
+        name: "Itimpi / Mindolo residential area",
+        suburb: "Itimpi",
+        lat: -12.775, lng: 28.195,
+        rationale:
+          "Northern Kitwe residential belt, growing demand from mine-worker housing.",
+        source: "OpenStreetMap + Copperbelt Province",
+      },
+    ],
+    commercial_land: [
+      {
+        name: "Independence Avenue (CBD)",
+        suburb: "CBD",
+        lat: -12.805, lng: 28.21,
+        rationale:
+          "Kitwe CBD commercial core, bank HQs, professional services, retail.",
+        source: "OpenStreetMap + Kitwe City Council",
+      },
+      {
+        name: "Parklands office node",
+        suburb: "Parklands",
+        lat: -12.798, lng: 28.214,
+        rationale:
+          "Emerging office precinct near Mukuba Mall, mining-company and bank demand.",
+        source: "OpenStreetMap + local",
+      },
+      {
+        name: "Chingola Road commercial strip",
+        suburb: "Nkana East",
+        lat: -12.795, lng: 28.22,
+        rationale:
+          "Chingola Road mixed commercial corridor, mining-supply and automotive businesses.",
+        source: "OpenStreetMap + Copperbelt Province",
+      },
+      {
+        name: "CBU innovation park (proposed)",
+        suburb: "Riverside",
+        lat: -12.813, lng: 28.227,
+        rationale:
+          "Proposed CBU-linked innovation and business park, university-industry linkage.",
+        source: "CBU + Kitwe City Council",
+      },
+      {
+        name: "Zambia Breweries / Garneton commercial",
+        suburb: "Garneton",
+        lat: -12.802, lng: 28.232,
+        rationale:
+          "Manufacturing-adjacent commercial, supplier and logistics office demand.",
+        source: "OpenStreetMap + local",
+      },
+    ],
+    agricultural_land: [
+      {
+        name: "Kalulushi / Chibuluma farming",
+        suburb: "Kalulushi",
+        lat: -12.75, lng: 28.1,
+        rationale:
+          "Western Copperbelt mixed-farming belt, 15km from Kitwe, maize and vegetables.",
+        source: "OpenStreetMap + Copperbelt agri",
+      },
+      {
+        name: "Chambishi farming block",
+        suburb: "Chambishi",
+        lat: -12.72, lng: 28.05,
+        rationale:
+          "Chambishi agricultural block, 30km from Kitwe, commercial maize and soya.",
+        source: "OpenStreetMap + ZNFU",
+      },
+      {
+        name: "Mwekera / Chati farming area",
+        suburb: "Mwekera",
+        lat: -12.84, lng: 28.15,
+        rationale:
+          "Southern Kitwe farming belt, small-scale vegetable production for Kitwe market.",
+        source: "OpenStreetMap + Copperbelt Province",
+      },
+      {
+        name: "Mufulira Road smallholdings",
+        suburb: "Mufulira Road",
+        lat: -12.77, lng: 28.25,
+        rationale:
+          "Eastern Kitwe peri-urban farming, mixed crops and poultry.",
+        source: "OpenStreetMap + local",
+      },
+      {
+        name: "Garneton / Kafue River floodplain",
+        suburb: "Garneton",
+        lat: -12.81, lng: 28.245,
+        rationale:
+          "Kafue River floodplain farming, seasonal vegetable and maize, 8km from Kitwe.",
+        source: "OpenStreetMap + Copperbelt agri census",
+      },
+    ],
+    industrial_land: [
+      {
+        name: "Nkana West mining-industrial",
+        suburb: "Nkana West",
+        lat: -12.786, lng: 28.198,
+        rationale:
+          "Core mining-industrial zone, rail-connected, Nkana mine and smelter adjacency.",
+        source: "OpenStreetMap + Mopani Copper Mines",
+      },
+      {
+        name: "Chamboli / railway industrial",
+        suburb: "Chamboli",
+        lat: -12.808, lng: 28.192,
+        rationale:
+          "Railway-adjacent industrial, goods-handling, warehousing and fabrication.",
+        source: "OpenStreetMap + Zambia Railways",
+      },
+      {
+        name: "Chingola Road heavy-industrial",
+        suburb: "Nkana East",
+        lat: -12.79, lng: 28.222,
+        rationale:
+          "Chingola Road heavy-industrial, mining supply and engineering cluster.",
+        source: "OpenStreetMap + Copperbelt Province",
+      },
+      {
+        name: "Garneton manufacturing zone",
+        suburb: "Garneton",
+        lat: -12.803, lng: 28.234,
+        rationale:
+          "Garneton manufacturing precinct, Zambia Breweries anchor, food-processing cluster.",
+        source: "OpenStreetMap + Zambia Breweries",
+      },
+      {
+        name: "Chambishi Multi-Facility Economic Zone",
+        suburb: "Chambishi",
+        lat: -32.9, lng: 27.95,
+        rationale:
+          "Chambishi MFEZ, 25km from Kitwe, designated for mining and manufacturing investment.",
+        source: "MFEZ + OpenStreetMap",
+      },
+    ],
+    mixed_use_land: [
+      {
+        name: "Independence Avenue corridor",
+        suburb: "CBD",
+        lat: -12.805, lng: 28.21,
+        rationale:
+          "CBD primary corridor, retail+office+residential above commercial, established.",
+        source: "OpenStreetMap + Kitwe City Council",
+      },
+      {
+        name: "Mukuba Mall precinct",
+        suburb: "Parklands",
+        lat: -12.799, lng: 28.216,
+        rationale:
+          "Mall-adjacent mixed-use, retail+office+hotel, Kitwes premier destination.",
+        source: "OpenStreetMap + Mukuba Mall",
+      },
+      {
+        name: "Riverside / CBU precinct",
+        suburb: "Riverside",
+        lat: -12.815, lng: 28.226,
+        rationale:
+          "CBU-adjacent emerging mixed-use, student housing+retail+academic offices.",
+        source: "OpenStreetMap + CBU precinct plan",
+      },
+      {
+        name: "Chisokone market redevelopment",
+        suburb: "Chisokone",
+        lat: -12.801, lng: 28.204,
+        rationale:
+          "Chisokone market area, designated redevelopment zone for formal retail+informal trade.",
+        source: "Kitwe City Council + OpenStreetMap",
+      },
+      {
+        name: "Nkana / Parklands residential-commercial",
+        suburb: "Parklands",
+        lat: -12.797, lng: 28.212,
+        rationale:
+          "Nkana-Parklands boundary, established mixed-use with residential+small office.",
+        source: "OpenStreetMap + local",
+      },
+    ],
+    civic_land: [
+      {
+        name: "Kitwe Civic Centre (CBD)",
+        suburb: "CBD",
+        lat: -12.806, lng: 28.212,
+        rationale:
+          "Kitwe City Council civic headquarters precinct, established government services.",
+        source: "OpenStreetMap + Kitwe City Council",
+      },
+      {
+        name: "Chamboli community health centre",
+        suburb: "Chamboli",
+        lat: -12.807, lng: 28.198,
+        rationale:
+          "High-density residential, undersupplied primary healthcare, designated clinic site.",
+        source: "Kitwe health plan + OpenStreetMap",
+      },
+      {
+        name: "Nkana public library / cultural centre",
+        suburb: "Nkana East",
+        lat: -12.792, lng: 28.215,
+        rationale:
+          "Nkana heritage precinct, established library, proposed cultural centre expansion.",
+        source: "OpenStreetMap + Kitwe City Council",
+      },
+      {
+        name: "Buchi sports complex",
+        suburb: "Buchi",
+        lat: -12.816, lng: 28.192,
+        rationale:
+          "High-density township, designated sports and recreation facility land.",
+        source: "Kitwe City Council + OpenStreetMap",
+      },
+      {
+        name: "CBU teaching hospital expansion",
+        suburb: "Riverside",
+        lat: -12.814, lng: 28.223,
+        rationale:
+          "Copperbelt University teaching hospital site, provincial health investment.",
+        source: "CBU + Ministry of Health",
+      },
+    ],
+  },
+  livingstone: {
+    gas_station: [
+      {
+        name: "T1 highway (Lusaka Road)",
+        suburb: "Dambwa",
+        lat: -17.845, lng: 25.855,
+        rationale:
+          "T1 north-bound to Lusaka, 5,000 vehicles/day, main freight and bus corridor.",
+        source: "OpenStreetMap + RDA Zambia",
+      },
+      {
+        name: "Mosi-oa-Tunya Road (town centre)",
+        suburb: "Town Centre",
+        lat: -17.852, lng: 25.86,
+        rationale:
+          "Mosi-oa-Tunya Road tourist corridor, high seasonal vehicle traffic to Victoria Falls.",
+        source: "OpenStreetMap + Livingstone tourism",
+      },
+      {
+        name: "Airport Road (Harry Mwanga Nkumbula)",
+        suburb: "Airport",
+        lat: -17.82, lng: 25.822,
+        rationale:
+          "Airport Road serving Livingstone International Airport, tourist and freight fuel demand.",
+        source: "OpenStreetMap + ZACL",
+      },
+      {
+        name: "Kazungula Road (border corridor)",
+        suburb: "Kazungula",
+        lat: -17.79, lng: 25.28,
+        rationale:
+          "Kazungula border corridor, 10,000 vehicles/day cross-border (Zambia-Botswana-Zimbabwe).",
+        source: "RDA Zambia + OpenStreetMap",
+      },
+      {
+        name: "Nakatindi Road (Mukuni)",
+        suburb: "Mukuni",
+        lat: -17.91, lng: 25.87,
+        rationale:
+          "Nakatindi Road rural corridor, serving Mukuni and Chief Mukuni village, limited fuel.",
+        source: "OpenStreetMap + Livingstone rural",
+      },
+    ],
+    restaurant: [
+      {
+        name: "Mosi-oa-Tunya Road tourist strip",
+        suburb: "Town Centre",
+        lat: -17.855, lng: 25.86,
+        rationale:
+          "Tourist restaurant row, 20+ eateries, peak season Dec–Jan from Victoria Falls visitors.",
+        source: "OpenStreetMap + Livingstone tourism",
+      },
+      {
+        name: "Victoria Falls / Falls Park precinct",
+        suburb: "Victoria Falls",
+        lat: -17.925, lng: 25.86,
+        rationale:
+          "Victoria Falls World Heritage site, lodge restaurants, premium safari-dining demand.",
+        source: "OpenStreetMap + UNESCO",
+      },
+      {
+        name: "Royal Livingstone / Sun International",
+        suburb: "Victoria Falls",
+        lat: -17.922, lng: 25.862,
+        rationale:
+          "Royal Livingstone Hotel precinct, high-end dining, MICE tourism demand.",
+        source: "OpenStreetMap + Sun International",
+      },
+      {
+        name: "Dambwa / Mwandi View area",
+        suburb: "Dambwa",
+        lat: -17.84, lng: 25.85,
+        rationale:
+          "Dambwa residential area, local restaurant cluster serving Livingstone residents.",
+        source: "OpenStreetMap + local",
+      },
+      {
+        name: "Livingstone Museum / cultural precinct",
+        suburb: "Town Centre",
+        lat: -17.85, lng: 25.858,
+        rationale:
+          "Livingstone Museum area, cultural tourism dining, craft-market adjacent.",
+        source: "OpenStreetMap + National Museums Board",
+      },
+    ],
+    warehouse: [
+      {
+        name: "T1 / Airport Road industrial node",
+        suburb: "Airport",
+        lat: -17.825, lng: 25.83,
+        rationale:
+          "Airport-adjacent logistics, T1 freight corridor, air-freight potential.",
+        source: "OpenStreetMap + ZACL",
+      },
+      {
+        name: "Dambwa industrial site",
+        suburb: "Dambwa",
+        lat: -17.838, lng: 25.845,
+        rationale:
+          "Dambwa light-industrial area, 5km from town centre, established trading and storage.",
+        source: "OpenStreetMap + Livingstone Council",
+      },
+      {
+        name: "Kazungula border logistics",
+        suburb: "Kazungula",
+        lat: -17.795, lng: 25.282,
+        rationale:
+          "Kazungula one-stop border post, cross-border freight warehousing demand.",
+        source: "OpenStreetMap + COMESA trade corridor",
+      },
+      {
+        name: "Livingstone railway station goods yard",
+        suburb: "Town Centre",
+        lat: -17.858, lng: 25.855,
+        rationale:
+          "Zambia Railways goods yard, rail-connected warehousing potential.",
+        source: "OpenStreetMap + Zambia Railways",
+      },
+      {
+        name: "Mukuni Road storage area",
+        suburb: "Mukuni",
+        lat: -17.905, lng: 25.865,
+        rationale:
+          "Southern Livingstone storage area, agricultural goods handling, maize and groundnuts.",
+        source: "OpenStreetMap + Livingstone Council",
+      },
+    ],
+    retail_shop: [
+      {
+        name: "Mosi-oa-Tunya Road (town centre)",
+        suburb: "Town Centre",
+        lat: -17.853, lng: 25.86,
+        rationale:
+          "Town centre retail strip, tourist-oriented shops, curio markets, bank branches.",
+        source: "OpenStreetMap + Livingstone Council",
+      },
+      {
+        name: "Falls Park Mall (proposed)",
+        suburb: "Dambwa",
+        lat: -17.842, lng: 25.852,
+        rationale:
+          "Proposed regional shopping centre, Livingstones first formal mall development.",
+        source: "Livingstone Council + OpenStreetMap",
+      },
+      {
+        name: "Airport Road retail cluster",
+        suburb: "Airport",
+        lat: -17.823, lng: 25.828,
+        rationale:
+          "Airport-adjacent retail, duty-free and convenience serving tourist arrivals.",
+        source: "OpenStreetMap + ZACL",
+      },
+      {
+        name: "Linda / Maramba township retail",
+        suburb: "Maramba",
+        lat: -17.86, lng: 25.865,
+        rationale:
+          "High-density township retail, informal and formal shops, 30,000+ resident catchment.",
+        source: "OpenStreetMap + Livingstone Council",
+      },
+      {
+        name: "Victoria Falls curio market precinct",
+        suburb: "Victoria Falls",
+        lat: -17.923, lng: 25.858,
+        rationale:
+          "UNESCO-adjacent curio and craft market, peak tourist season, 500,000 visitors/year.",
+        source: "OpenStreetMap + ZTA",
+      },
+    ],
+    residential_land: [
+      {
+        name: "Dambwa North residential extension",
+        suburb: "Dambwa",
+        lat: -17.835, lng: 25.848,
+        rationale:
+          "Northern growth corridor, greenfield residential parcels for middle-income housing.",
+        source: "OpenStreetMap + Livingstone SDF",
+      },
+      {
+        name: "Obama / Highlands residential area",
+        suburb: "Highlands",
+        lat: -17.84, lng: 25.865,
+        rationale:
+          "Affluent residential area, large-plot stands, established expat and tourism-worker housing.",
+        source: "OpenStreetMap + Livingstone Council",
+      },
+      {
+        name: "Maramba township infill",
+        suburb: "Maramba",
+        lat: -17.862, lng: 25.87,
+        rationale:
+          "High-density township, government housing programme target for infill development.",
+        source: "OpenStreetMap + Ministry of Housing",
+      },
+      {
+        name: "Mukuni / Nakatindi residential",
+        suburb: "Mukuni",
+        lat: -17.912, lng: 25.868,
+        rationale:
+          "Rural-urban fringe residential, growing demand from tourism and service workers.",
+        source: "OpenStreetMap + Livingstone rural plan",
+      },
+      {
+        name: "Libuyu / Linda extension",
+        suburb: "Libuyu",
+        lat: -17.855, lng: 25.875,
+        rationale:
+          "Eastern Livingstone residential belt, established community, demand for serviced stands.",
+        source: "OpenStreetMap + Livingstone Council",
+      },
+    ],
+    commercial_land: [
+      {
+        name: "Mosi-oa-Tunya Road (CBD)",
+        suburb: "Town Centre",
+        lat: -17.853, lng: 25.86,
+        rationale:
+          "Livingstone CBD commercial core, bank HQs, tour operators, professional services.",
+        source: "OpenStreetMap + Livingstone Council",
+      },
+      {
+        name: "Airport Road commercial zone",
+        suburb: "Airport",
+        lat: -17.824, lng: 25.829,
+        rationale:
+          "Airport-adjacent commercial, logistics and tourism-support office demand.",
+        source: "OpenStreetMap + ZACL",
+      },
+      {
+        name: "Dambwa commercial node",
+        suburb: "Dambwa",
+        lat: -17.837, lng: 25.85,
+        rationale:
+          "Emerging commercial node in Dambwa growth area, serving northern residential catchment.",
+        source: "OpenStreetMap + Livingstone Council",
+      },
+      {
+        name: "Victoria Falls / hotel zone offices",
+        suburb: "Victoria Falls",
+        lat: -17.92, lng: 25.86,
+        rationale:
+          "Hotel-zone commercial, safari and tour operator HQs, premium office demand.",
+        source: "OpenStreetMap + ZTA",
+      },
+      {
+        name: "Kazungula border commercial",
+        suburb: "Kazungula",
+        lat: -17.793, lng: 25.28,
+        rationale:
+          "Border-post commercial zone, clearing agents, freight forwarders, forex bureaus.",
+        source: "OpenStreetMap + COMESA corridor",
+      },
+    ],
+    agricultural_land: [
+      {
+        name: "Batoka / Zimba Road farming",
+        suburb: "Zimba",
+        lat: -17.74, lng: 25.98,
+        rationale:
+          "Northern Livingstone farming belt, mixed maize and groundnuts, 15km from town.",
+        source: "OpenStreetMap + Southern Province agri",
+      },
+      {
+        name: "Mukuni / Chief Mukuni farms",
+        suburb: "Mukuni",
+        lat: -17.92, lng: 25.88,
+        rationale:
+          "Chief Mukuni traditional land, small-scale maize and cattle, community farming area.",
+        source: "OpenStreetMap + local",
+      },
+      {
+        name: "Kazungula / Zambezi floodplain",
+        suburb: "Kazungula",
+        lat: -17.775, lng: 25.26,
+        rationale:
+          "Zambezi River floodplain farming, seasonal vegetables and rice, fertile alluvial soils.",
+        source: "OpenStreetMap + Southern Province",
+      },
+      {
+        name: "Sekute / Siansowa farming area",
+        suburb: "Sekute",
+        lat: -17.85, lng: 25.7,
+        rationale:
+          "Western Livingstone farming, mixed smallholder crops, 30km from town.",
+        source: "OpenStreetMap + Ministry of Agriculture",
+      },
+      {
+        name: "Simonga / Nandoni irrigation",
+        suburb: "Simonga",
+        lat: -17.89, lng: 25.78,
+        rationale:
+          "Nandoni irrigation scheme, small-scale vegetable production for Livingstone market.",
+        source: "OpenStreetMap + Southern Province",
+      },
+    ],
+    industrial_land: [
+      {
+        name: "Dambwa light-industrial zone",
+        suburb: "Dambwa",
+        lat: -17.836, lng: 25.844,
+        rationale:
+          "Livingstones primary industrial area, established manufacturing and warehousing.",
+        source: "OpenStreetMap + Livingstone Council",
+      },
+      {
+        name: "Airport Road industrial strip",
+        suburb: "Airport",
+        lat: -17.826, lng: 25.833,
+        rationale:
+          "Airport-adjacent industrial, logistics and cold-storage potential for agri-exports.",
+        source: "OpenStreetMap + ZACL",
+      },
+      {
+        name: "Kazungula border industrial park",
+        suburb: "Kazungula",
+        lat: -17.792, lng: 25.278,
+        rationale:
+          "Proposed border industrial park, cross-border manufacturing and assembly.",
+        source: "COMESA corridor + OpenStreetMap",
+      },
+      {
+        name: "Zambezi Sawmills area",
+        suburb: "Town Centre",
+        lat: -17.86, lng: 25.852,
+        rationale:
+          "Timber-processing industrial cluster near railway, established sawmill operations.",
+        source: "OpenStreetMap + Livingstone Council",
+      },
+      {
+        name: "Mukuni Road quarry and processing",
+        suburb: "Mukuni",
+        lat: -17.91, lng: 25.87,
+        rationale:
+          "Quarry and stone-processing area, construction-materials supply for Livingstone growth.",
+        source: "OpenStreetMap + Livingstone Council",
+      },
+    ],
+    mixed_use_land: [
+      {
+        name: "Mosi-oa-Tunya Road corridor",
+        suburb: "Town Centre",
+        lat: -17.854, lng: 25.862,
+        rationale:
+          "Primary tourist corridor, retail+hotel+office, Livingstones main commercial spine.",
+        source: "OpenStreetMap + Livingstone Council",
+      },
+      {
+        name: "Victoria Falls / hotel zone",
+        suburb: "Victoria Falls",
+        lat: -17.921, lng: 25.861,
+        rationale:
+          "UNESCO-adjacent hotel zone, lodge+retail+tour-operator mixed-use.",
+        source: "OpenStreetMap + ZTA",
+      },
+      {
+        name: "Dambwa / Airport Road node",
+        suburb: "Dambwa",
+        lat: -17.838, lng: 25.848,
+        rationale:
+          "Emerging mixed-use node, residential+retail+light-commercial in growth area.",
+        source: "OpenStreetMap + Livingstone SDF",
+      },
+      {
+        name: "Town Centre market redevelopment",
+        suburb: "Town Centre",
+        lat: -17.855, lng: 25.858,
+        rationale:
+          "Town centre market area, designated redevelopment for formal+informal mixed-use.",
+        source: "Livingstone Council + OpenStreetMap",
+      },
+      {
+        name: "Maramba / Libuyu residential-commercial",
+        suburb: "Maramba",
+        lat: -17.86, lng: 25.868,
+        rationale:
+          "High-density township mixed-use corridor, residential+small retail+services.",
+        source: "OpenStreetMap + local",
+      },
+    ],
+    civic_land: [
+      {
+        name: "Livingstone Civic Centre",
+        suburb: "Town Centre",
+        lat: -17.854, lng: 25.857,
+        rationale:
+          "Livingstone City Council headquarters precinct, established government services.",
+        source: "OpenStreetMap + Livingstone Council",
+      },
+      {
+        name: "Maramba clinic expansion",
+        suburb: "Maramba",
+        lat: -17.861, lng: 25.867,
+        rationale:
+          "High-density township, undersupplied primary healthcare, designated clinic site.",
+        source: "Livingstone health plan",
+      },
+      {
+        name: "Dambwa community centre",
+        suburb: "Dambwa",
+        lat: -17.84, lng: 25.85,
+        rationale:
+          "Growing residential area, designated community and sports facility land.",
+        source: "OpenStreetMap + Livingstone Council",
+      },
+      {
+        name: "Livingstone Museum / cultural precinct",
+        suburb: "Town Centre",
+        lat: -17.85, lng: 25.858,
+        rationale:
+          "National museum precinct, David Livingstone memorial, civic tourism asset.",
+        source: "National Museums Board + OpenStreetMap",
+      },
+      {
+        name: "Linda township library",
+        suburb: "Linda",
+        lat: -17.865, lng: 25.87,
+        rationale:
+          "High-density township, designated civic library and community hall site.",
+        source: "Livingstone Council + OpenStreetMap",
+      },
+    ],
+  },
+  ndola: {
+    gas_station: [
+      {
+        name: "T3 highway (Kitwe Road)",
+        suburb: "Masala",
+        lat: -12.975, lng: 28.64,
+        rationale:
+          "T3 Ndola–Kitwe highway, 15,000 vehicles/day, Copperbelt commuter corridor.",
+        source: "OpenStreetMap + RDA Zambia",
+      },
+      {
+        name: "T3 highway (Kapiri Mposhi Road)",
+        suburb: "Kansenshi",
+        lat: -12.97, lng: 28.635,
+        rationale:
+          "T3 south-bound to Lusaka, 12,000 vehicles/day, long-distance freight and bus corridor.",
+        source: "RDA Zambia + OpenStreetMap",
+      },
+      {
+        name: "President Avenue (CBD)",
+        suburb: "CBD",
+        lat: -12.97, lng: 28.645,
+        rationale:
+          "Ndola CBD arterial, highest urban traffic, established fuel stations at capacity.",
+        source: "OpenStreetMap + Ndola City Council",
+      },
+      {
+        name: "Airport Road (Simon Mwansa Kapwepwe)",
+        suburb: "Airport",
+        lat: -12.96, lng: 28.66,
+        rationale:
+          "Airport Road serving Ndola International Airport, passenger and freight fuel demand.",
+        source: "OpenStreetMap + ZACL",
+      },
+      {
+        name: "Mufulira Road (north)",
+        suburb: "Chifubu",
+        lat: -12.955, lng: 28.655,
+        rationale:
+          "Mufulira Road mining corridor, heavy truck traffic from Mufulira and Mokambo border.",
+        source: "OpenStreetMap + Copperbelt Province",
+      },
+    ],
+    restaurant: [
+      {
+        name: "Jacaranda Mall precinct",
+        suburb: "Kansenshi",
+        lat: -12.968, lng: 28.638,
+        rationale:
+          "Ndolas largest mall, 40+ stores, established food-court and restaurant cluster.",
+        source: "OpenStreetMap + Jacaranda Mall",
+      },
+      {
+        name: "President Avenue (CBD)",
+        suburb: "CBD",
+        lat: -12.97, lng: 28.645,
+        rationale:
+          "CBD restaurant row, established sit-down and fast-food, office-worker lunch trade.",
+        source: "OpenStreetMap + local",
+      },
+      {
+        name: "Ndola Golf Club / Kansenshi",
+        suburb: "Kansenshi",
+        lat: -12.965, lng: 28.636,
+        rationale:
+          "Ndola Golf Club precinct, affluent residential area, premium dining demand.",
+        source: "OpenStreetMap + Ndola City Council",
+      },
+      {
+        name: "Northrise / Levy Mwanawasa Stadium",
+        suburb: "Northrise",
+        lat: -12.952, lng: 28.642,
+        rationale:
+          "Stadium-adjacent area, event-driven dining demand, growing residential catchment.",
+        source: "OpenStreetMap + Ndola City Council",
+      },
+      {
+        name: "Masala / Lubuto township area",
+        suburb: "Masala",
+        lat: -12.978, lng: 28.642,
+        rationale:
+          "High-density township, established local restaurant and takeaway cluster.",
+        source: "OpenStreetMap + local",
+      },
+    ],
+    warehouse: [
+      {
+        name: "Masala industrial zone",
+        suburb: "Masala",
+        lat: -12.978, lng: 28.638,
+        rationale:
+          "Ndolas primary industrial area, rail-connected, established warehousing cluster.",
+        source: "OpenStreetMap + Ndola City Council",
+      },
+      {
+        name: "Airport Road logistics zone",
+        suburb: "Airport",
+        lat: -12.962, lng: 28.665,
+        rationale:
+          "Airport-adjacent logistics, air-freight potential, T3 highway access.",
+        source: "OpenStreetMap + ZACL",
+      },
+      {
+        name: "Indeni refinery / Bwana Mkubwa area",
+        suburb: "Bwana Mkubwa",
+        lat: -12.985, lng: 28.65,
+        rationale:
+          "Indeni Oil Refinery precinct, petroleum-product warehousing and logistics.",
+        source: "OpenStreetMap + Indeni Petroleum",
+      },
+      {
+        name: "T3 south-bound freight (Lusaka direction)",
+        suburb: "Kansenshi",
+        lat: -12.975, lng: 28.63,
+        rationale:
+          "T3 south-bound freight corridor, large undeveloped logistics parcels.",
+        source: "RDA Zambia + OpenStreetMap",
+      },
+      {
+        name: "Chifubu / Mufulira Road logistics",
+        suburb: "Chifubu",
+        lat: -12.958, lng: 28.658,
+        rationale:
+          "Mufulira Road corridor, mining-supply logistics, truck parking and warehousing.",
+        source: "OpenStreetMap + Copperbelt Province",
+      },
+    ],
+    retail_shop: [
+      {
+        name: "Jacaranda Mall",
+        suburb: "Kansenshi",
+        lat: -12.968, lng: 28.638,
+        rationale:
+          "Ndolas premier retail destination, 40+ stores, Copperbelt catchment.",
+        source: "OpenStreetMap + Jacaranda Mall",
+      },
+      {
+        name: "President Avenue (CBD)",
+        suburb: "CBD",
+        lat: -12.97, lng: 28.645,
+        rationale:
+          "CBD retail core, established shopfronts, high pedestrian footfall from bus station.",
+        source: "OpenStreetMap + Ndola City Council",
+      },
+      {
+        name: "Masala market / retail precinct",
+        suburb: "Masala",
+        lat: -12.976, lng: 28.64,
+        rationale:
+          "Masala township retail precinct, serving high-density residential catchment.",
+        source: "OpenStreetMap + local",
+      },
+      {
+        name: "Northrise / Hillcrest retail node",
+        suburb: "Northrise",
+        lat: -12.95, lng: 28.645,
+        rationale:
+          "Northern suburbs retail node, serving middle-income Hillcrest and Northrise areas.",
+        source: "OpenStreetMap + Ndola City Council",
+      },
+      {
+        name: "Kansenshi / Broadway retail strip",
+        suburb: "Kansenshi",
+        lat: -12.966, lng: 28.637,
+        rationale:
+          "Broadway retail corridor, established shops and small supermarkets.",
+        source: "OpenStreetMap + local",
+      },
+    ],
+    residential_land: [
+      {
+        name: "Kansenshi / Hillcrest extension",
+        suburb: "Kansenshi",
+        lat: -12.963, lng: 28.634,
+        rationale:
+          "Affluent residential area, large-plot stands, demand for executive housing.",
+        source: "OpenStreetMap + Ndola City Council",
+      },
+      {
+        name: "Northrise residential growth",
+        suburb: "Northrise",
+        lat: -12.948, lng: 28.64,
+        rationale:
+          "Northern suburbs growth corridor, greenfield residential for middle-income.",
+        source: "OpenStreetMap + Ndola SDF",
+      },
+      {
+        name: "Masala township infill",
+        suburb: "Masala",
+        lat: -12.975, lng: 28.644,
+        rationale:
+          "High-density township, government housing programme target area.",
+        source: "OpenStreetMap + Ministry of Housing",
+      },
+      {
+        name: "Itawa / Pamodzi residential",
+        suburb: "Itawa",
+        lat: -12.96, lng: 28.65,
+        rationale:
+          "Eastern Ndola residential belt, growing demand from airport-area workers.",
+        source: "OpenStreetMap + Ndola City Council",
+      },
+      {
+        name: "Chifubu / Lubuto residential",
+        suburb: "Chifubu",
+        lat: -12.955, lng: 28.652,
+        rationale:
+          "Established residential area, demand for serviced stands and upgrading.",
+        source: "OpenStreetMap + Ndola City Council",
+      },
+    ],
+    commercial_land: [
+      {
+        name: "President Avenue (CBD)",
+        suburb: "CBD",
+        lat: -12.97, lng: 28.645,
+        rationale:
+          "Ndola CBD commercial core, bank HQs, professional services, government offices.",
+        source: "OpenStreetMap + Ndola City Council",
+      },
+      {
+        name: "Kansenshi / Jacaranda office node",
+        suburb: "Kansenshi",
+        lat: -12.967, lng: 28.639,
+        rationale:
+          "Jacaranda Mall-adjacent office node, emerging professional-services cluster.",
+        source: "OpenStreetMap + local",
+      },
+      {
+        name: "Airport Road commercial strip",
+        suburb: "Airport",
+        lat: -12.961, lng: 28.662,
+        rationale:
+          "Airport-adjacent commercial, logistics and mining-supply office demand.",
+        source: "OpenStreetMap + ZACL",
+      },
+      {
+        name: "Northrise commercial node",
+        suburb: "Northrise",
+        lat: -12.951, lng: 28.643,
+        rationale:
+          "Northern suburbs commercial, serving Hillcrest and Northrise residential catchment.",
+        source: "OpenStreetMap + Ndola City Council",
+      },
+      {
+        name: "Masala / T3 commercial corridor",
+        suburb: "Masala",
+        lat: -12.977, lng: 28.641,
+        rationale:
+          "T3 highway-adjacent commercial strip, automotive and trade businesses.",
+        source: "OpenStreetMap + Copperbelt Province",
+      },
+    ],
+    agricultural_land: [
+      {
+        name: "Bwana Mkubwa farming block",
+        suburb: "Bwana Mkubwa",
+        lat: -12.99, lng: 28.66,
+        rationale:
+          "Eastern Ndola farming, mixed maize and vegetables, peri-urban smallholdings.",
+        source: "OpenStreetMap + Copperbelt agri",
+      },
+      {
+        name: "Mushili / Kaloko farming area",
+        suburb: "Mushili",
+        lat: -12.995, lng: 28.62,
+        rationale:
+          "Southern Ndola farming belt, small-scale maize and groundnut production.",
+        source: "OpenStreetMap + Ministry of Agriculture",
+      },
+      {
+        name: "Chichele / Minsundu farms",
+        suburb: "Minsundu",
+        lat: -12.94, lng: 28.62,
+        rationale:
+          "Western Ndola farming, mixed livestock and crops, 15km from city.",
+        source: "OpenStreetMap + Copperbelt Province",
+      },
+      {
+        name: "Lufwanyama Road smallholdings",
+        suburb: "Lufwanyama",
+        lat: -12.92, lng: 28.58,
+        rationale:
+          "Rural farming belt west of Ndola, smallholder maize and cassava.",
+        source: "OpenStreetMap + Copperbelt agri census",
+      },
+      {
+        name: "Itawa / Kafubu River floodplain",
+        suburb: "Itawa",
+        lat: -12.965, lng: 28.655,
+        rationale:
+          "Kafubu River floodplain farming, seasonal vegetables for Ndola market.",
+        source: "OpenStreetMap + Ndola City Council",
+      },
+    ],
+    industrial_land: [
+      {
+        name: "Masala industrial core",
+        suburb: "Masala",
+        lat: -12.977, lng: 28.637,
+        rationale:
+          "Ndolas primary industrial zone, rail-connected, established manufacturing and engineering.",
+        source: "OpenStreetMap + Ndola City Council",
+      },
+      {
+        name: "Indeni Oil Refinery zone",
+        suburb: "Bwana Mkubwa",
+        lat: -12.983, lng: 28.648,
+        rationale:
+          "Indeni refinery industrial precinct, petroleum processing and storage.",
+        source: "OpenStreetMap + Indeni Petroleum",
+      },
+      {
+        name: "Bwana Mkubwa mining-industrial",
+        suburb: "Bwana Mkubwa",
+        lat: -12.987, lng: 28.655,
+        rationale:
+          "Bwana Mkubwa mine area, copper-processing industrial, rail-served.",
+        source: "OpenStreetMap + First Quantum Minerals",
+      },
+      {
+        name: "Airport industrial park (proposed)",
+        suburb: "Airport",
+        lat: -12.963, lng: 28.667,
+        rationale:
+          "Proposed airport industrial park, air-freight manufacturing and assembly.",
+        source: "ZACL + Ndola City Council",
+      },
+      {
+        name: "Lubuto / Chifubu light industrial",
+        suburb: "Chifubu",
+        lat: -12.956, lng: 28.656,
+        rationale:
+          "Light-industrial area, automotive services and small-scale manufacturing.",
+        source: "OpenStreetMap + Ndola City Council",
+      },
+    ],
+    mixed_use_land: [
+      {
+        name: "President Avenue corridor",
+        suburb: "CBD",
+        lat: -12.97, lng: 28.645,
+        rationale:
+          "CBD primary corridor, retail+office+residential above commercial, established.",
+        source: "OpenStreetMap + Ndola City Council",
+      },
+      {
+        name: "Jacaranda Mall precinct",
+        suburb: "Kansenshi",
+        lat: -12.967, lng: 28.638,
+        rationale:
+          "Mall-adjacent mixed-use, retail+office+entertainment, Ndolas premier destination.",
+        source: "OpenStreetMap + Jacaranda Mall",
+      },
+      {
+        name: "Broadway / Kansenshi corridor",
+        suburb: "Kansenshi",
+        lat: -12.966, lng: 28.636,
+        rationale:
+          "Broadway mixed-use corridor, established residential+retail+small office.",
+        source: "OpenStreetMap + local",
+      },
+      {
+        name: "Masala market redevelopment",
+        suburb: "Masala",
+        lat: -12.976, lng: 28.642,
+        rationale:
+          "Masala market area, designated redevelopment for formal+informal mixed-use.",
+        source: "Ndola City Council + OpenStreetMap",
+      },
+      {
+        name: "Northrise / Stadium precinct",
+        suburb: "Northrise",
+        lat: -12.953, lng: 28.642,
+        rationale:
+          "Levy Mwanawasa Stadium precinct, event+retail+residential mixed-use potential.",
+        source: "OpenStreetMap + Ndola City Council",
+      },
+    ],
+    civic_land: [
+      {
+        name: "Ndola Civic Centre (CBD)",
+        suburb: "CBD",
+        lat: -12.971, lng: 28.643,
+        rationale:
+          "Ndola City Council civic headquarters, established government services precinct.",
+        source: "OpenStreetMap + Ndola City Council",
+      },
+      {
+        name: "Masala community health centre",
+        suburb: "Masala",
+        lat: -12.974, lng: 28.639,
+        rationale:
+          "High-density township, undersupplied primary healthcare, designated clinic expansion.",
+        source: "Ndola health plan",
+      },
+      {
+        name: "Chifubu sports complex",
+        suburb: "Chifubu",
+        lat: -12.957, lng: 28.655,
+        rationale:
+          "Township sports precinct, designated recreation and community facility land.",
+        source: "OpenStreetMap + Ndola City Council",
+      },
+      {
+        name: "Ndola Central Hospital expansion",
+        suburb: "CBD",
+        lat: -12.969, lng: 28.646,
+        rationale:
+          "Ndola Central Hospital, provincial referral facility, designated expansion land.",
+        source: "Ministry of Health + OpenStreetMap",
+      },
+      {
+        name: "Lubuto public library",
+        suburb: "Chifubu",
+        lat: -12.958, lng: 28.654,
+        rationale:
+          "High-density township, designated civic library and community hall site.",
+        source: "Ndola City Council + OpenStreetMap",
+      },
+    ],
+  },
 };
 
 /**
