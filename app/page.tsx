@@ -127,7 +127,7 @@ export default function HomePage() {
   const [customInputOpen, setCustomInputOpen] = useState<boolean>(false);
   const [customInputValue, setCustomInputValue] = useState<string>("");
   const [customError, setCustomError] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const customInputRef = useRef<HTMLInputElement | null>(null);
 
   /**
@@ -471,28 +471,7 @@ export default function HomePage() {
       {/* Top bar: top-right links */}
       <header className="flex items-center justify-between gap-3 px-6 py-3 text-xs text-atlas-muted">
           <div className="flex items-center gap-3">
-            <a
-              href="/crypto"
-              className="inline-flex items-center gap-2 rounded-md border border-atlas-accent/60 bg-atlas-accent/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-atlas-accent transition hover:border-atlas-accent hover:bg-atlas-accent/20"
-            >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <circle cx="12" cy="12" r="10" />
-                <path d="M12 6v12" />
-                <path d="M9 9h4.5a2 2 0 0 1 0 4H9" />
-                <path d="M9 13h5a2 2 0 0 1 0 4H9" />
-              </svg>
-              Explore Crypto
-            </a>
+            {/* Explore Crypto button removed */}
           </div>
           <div className="flex items-center gap-3">
             <a href="/land" className="hover:text-atlas-accent">
@@ -649,15 +628,29 @@ export default function HomePage() {
                 {/* Command bar */}
                 <div className="rounded-xl border border-atlas-border bg-atlas-surface shadow-lg shadow-black/20 transition-colors focus-within:border-atlas-accent">
                   <div className="flex items-center gap-2 px-3 py-2">
-                    <input
+                    <textarea
                       ref={inputRef}
-                      type="text"
                       value={question}
-                      onChange={(e) => setQuestion(e.target.value)}
+                      onChange={(e) => {
+                        setQuestion(e.target.value);
+                        // Auto-resize
+                        const el = e.target;
+                        el.style.height = 'auto';
+                        el.style.height = Math.min(el.scrollHeight, 160) + 'px';
+                      }}
                       placeholder={placeholder}
-                      className="min-w-0 flex-1 bg-transparent px-2 py-1.5 text-sm text-atlas-text placeholder:text-atlas-muted focus:outline-none"
+                      rows={1}
+                      className="min-w-0 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-atlas-text placeholder:text-atlas-muted focus:outline-none"
                       required
                       disabled={loading}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          // Trigger submit
+                          const form = e.currentTarget.closest('form');
+                          if (form) form.requestSubmit();
+                        }
+                      }}
                     />
 
                     {/* Model picker — proper dropdown with icons + full names */}
