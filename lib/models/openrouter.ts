@@ -157,7 +157,5 @@ export const mistralFree: Model = makeOpenRouterModel(
   '#10b981',
   'M10 2a8 8 0 015.3 14L17 18H7l1.7-2A8 8 0 0110 2z'
 );
-  '#7C3AED',
-  // Simplified Qwen / Mistral flame
-  'M12 2C12 2 5 9 5 14C5 17.9 8.1 21 12 21C15.9 21 19 17.9 19 14C19 9 12 2 12 2Z'
+
 );
