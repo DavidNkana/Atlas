@@ -114,8 +114,8 @@ export const geminiSearch: Model = {
       if (!text) return { ok: false, error: `All Gemini models failed: ${errorLog.join(' | ')}` } as any;
 
       // Dedupe grounding sources
-      const seen = new Set<string>();
-      groundingSources = groundingSources.filter(s => seen.has(s.url) ? false : (seen.add(s.url), true));
+      const gsSeen = new Set<string>();
+      groundingSources = groundingSources.filter(s => gsSeen.has(s.url) ? false : (gsSeen.add(s.url), true));
 
       // Parse JSON from the model's text. Gemini may wrap the
       // object in ```json ... ``` fences; strip them.
