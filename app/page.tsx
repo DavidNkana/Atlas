@@ -107,18 +107,20 @@ export default function HomePage() {
     MODEL_INFO[0]?.id ?? "tavily"
   );
   const [question, setQuestion] = useState<string>("");
-  const [attachment, setAttachment] = useState<{ base64: string; mime: string; name: string } | null>(null);
+  const [attachments, setAttachments] = useState<{ base64: string; mime: string; name: string }[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 4 * 1024 * 1024) return; // 4MB limit
+    if (file.size > 4 * 1024 * 1024) return;
+    if (attachments.length >= 3) return;
     const reader = new FileReader();
     reader.onload = () => {
-      setAttachment({ base64: reader.result as string, mime: file.type, name: file.name });
+      setAttachments((prev) => [...prev, { base64: reader.result as string, mime: file.type, name: file.name }]);
     };
     reader.readAsDataURL(file);
+    e.target.value = '';
   };
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -359,7 +361,9 @@ export default function HomePage() {
           vertical: v,
           question: q,
           model: modelId,
-          ...(attachment ? { imageBase64: attachment.base64, imageMime: attachment.mime } : {}),
+          ...(attachments.length > 0 ? { 
+            images: attachments.map(a => ({ base64: a.base64, mime: a.mime })) 
+          } : {}),
         }),
       });
 
@@ -660,6 +664,30 @@ export default function HomePage() {
                   </div>
                 )}
 
+                {/* Attachment previews */}
+                {attachments.length > 0 && (
+                  <div className="mb-2 flex gap-2">
+                    {attachments.map((a, i) => (
+                      <div key={i} className="relative group rounded-lg border border-atlas-border bg-atlas-surface2 overflow-hidden" style={{ width: 80, height: 80 }}>
+                        {a.mime.startsWith('image/') ? (
+                          <img src={a.base64} alt={a.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-atlas-muted text-[10px] p-1 text-center">
+                            {a.name.slice(-4)}
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setAttachments((prev) => prev.filter((_, j) => j !== i))}
+                          className="absolute top-0.5 right-0.5 rounded-full bg-black/60 p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 {/* Command bar */}
                 <div className="rounded-xl border border-atlas-border bg-atlas-surface shadow-lg shadow-black/20 transition-colors focus-within:border-atlas-accent">
                   <div className="flex items-end gap-2 px-3 py-2">
@@ -701,9 +729,9 @@ export default function HomePage() {
                       onClick={() => fileInputRef.current?.click()}
                       disabled={loading}
                       className={`flex-shrink-0 rounded-md p-1.5 transition-colors ${
-                        attachment ? 'bg-atlas-accent/20 text-atlas-accent' : 'text-atlas-muted hover:bg-atlas-surface2 hover:text-atlas-text'
+                        attachments.length > 0 ? 'bg-atlas-accent/20 text-atlas-accent' : 'text-atlas-muted hover:bg-atlas-surface2 hover:text-atlas-text'
                       }`}
-                      title={attachment ? `Attached: ${attachment.name}` : 'Attach image or file'}
+                      title={attachments.length > 0 ? `${attachments.length} file(s) attached` : 'Attach image or file'}
                       aria-label="Attach file"
                     >
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
