@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 import { MODEL_INFO } from "@/lib/models/registry";
@@ -129,6 +129,27 @@ export default function HomePage() {
   const [customError, setCustomError] = useState<string | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const customInputRef = useRef<HTMLInputElement | null>(null);
+  const [listening, setListening] = useState(false);
+
+  /** Speech-to-text via Web Speech API */
+  const startListening = useCallback(() => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = 'en-ZA';
+    setListening(true);
+    recognition.onresult = (e: any) => {
+      const transcript = e.results[0][0].transcript;
+      setQuestion((prev) => prev ? `${prev} ${transcript}` : transcript);
+      setListening(false);
+      inputRef.current?.focus();
+    };
+    recognition.onerror = () => setListening(false);
+    recognition.onend = () => setListening(false);
+    recognition.start();
+  }, []);
 
   /**
    * Commit the custom vertical input. Validates the format (lowercase
@@ -652,6 +673,26 @@ export default function HomePage() {
                         }
                       }}
                     />
+
+                    {/* Mic button — speech to text */}
+                    <button
+                      type="button"
+                      onClick={startListening}
+                      disabled={loading || listening}
+                      className={`flex-shrink-0 rounded-md p-1.5 transition-colors ${
+                        listening
+                          ? 'animate-pulse bg-red-500/20 text-red-400'
+                          : 'text-atlas-muted hover:bg-atlas-surface2 hover:text-atlas-text'
+                      }`}
+                      title={listening ? 'Listening...' : 'Voice input'}
+                      aria-label="Voice input"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                        <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                        <line x1="12" x2="12" y1="19" y2="22" />
+                      </svg>
+                    </button>
 
                     {/* Model picker — proper dropdown with icons + full names */}
                     <div className="relative">
