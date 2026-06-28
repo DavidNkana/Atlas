@@ -28,9 +28,9 @@ function buildPrompt(req: ModelRequest): string {
  * /models endpoint is down.
  */
 const CURATED_STUB_SLUGS: string[] = [
-  'qwen/qwen3-next-80b-a3b-instruct:free',
-  'google/gemma-4-31b-it:free',
   'nvidia/nemotron-3-super-120b-a12b:free',
+  'google/gemma-4-31b-it:free',
+  'qwen/qwen3-next-80b-a3b-instruct:free',
 ];
 
 /**
@@ -140,11 +140,17 @@ function makeOpenRouterModel(
   };
 }
 
+const CURATED_STUB_SLUGS: string[] = [
+  'nvidia/nemotron-3-super-120b-a12b:free',
+  'google/gemma-4-31b-it:free',
+  'qwen/qwen3-next-80b-a3b-instruct:free',
+];
+
 export const llamaFree: Model = makeOpenRouterModel(
   'llama-free',
-  'Qwen3 80B (free)',
-  'Qwen3 Next 80B via OpenRouter free tier. Dynamically discovers currently-free models so slugs do not go stale.',
-  'qwen/qwen3-next-80b-a3b-instruct:free',
+  'Nemotron 120B (free)',
+  'NVIDIA Nemotron 120B via OpenRouter free tier. Confirmed working June 2026.',
+  'nvidia/nemotron-3-super-120b-a12b:free',
   '#6366f1',
   'M5.5 12C5.5 8.4 8.4 5.5 12 5.5C15.6 5.5 18.5 8.4 18.5 12C18.5 15.6 15.6 18.5 12 18.5C8.4 18.5 5.5 15.6 5.5 12ZM2 12C2 17.5 6.5 22 12 22C17.5 22 22 17.5 22 12C22 6.5 17.5 2 12 2C6.5 2 2 6.5 2 12Z'
 );
