@@ -154,6 +154,35 @@ export async function GET(_req: NextRequest) {
     orCheck.detail = anyOk
       ? Object.entries(results).filter(([, r]) => r.ok).map(([n, r]) => `${n}: ${r.latencyMs}ms ✓`).join(", ")
       : `All models failed: ${Object.entries(results).map(([n, r]) => `${n}: ${r.error}`).join(" | ")}`;
+
+    // Test with REAL site-selection prompt (same as actual model call)
+    const realPrompt = `Find the top 3 gas stations in Cape Town, South Africa. Return JSON with ranked_sites array. Each site: name, rationale, lat, lng.`;
+    const realTest = await Promise.all(models.filter(m => results[m.label]?.ok).map(async (m) => {
+      try {
+        const t0 = Date.now();
+        const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${openrouterKey}` },
+          body: JSON.stringify({
+            model: m.id,
+            messages: [{ role: "user", content: realPrompt }],
+          }),
+        });
+        const ms = Date.now() - t0;
+        if (res.ok) {
+          const data = await res.json();
+          const text = data?.choices?.[0]?.message?.content ?? "";
+          return { label: m.label, ok: true, latencyMs: ms, chars: text.length };
+        }
+        return { label: m.label, ok: false, latencyMs: ms };
+      } catch { return { label: m.label, ok: false, latencyMs: 0 }; }
+    }));
+    if (realTest.length > 0) {
+      const realWorking = realTest.filter(r => r.ok);
+      orCheck.detail += realWorking.length > 0
+        ? ` | REAL prompt: ${realWorking.map(r => `${r.label}: ${r.latencyMs}ms (${r.chars} chars)`).join(", ")}`
+        : ` | REAL prompt: ALL FAILED - ${realTest.map(r => `${r.label}: ${r.latencyMs}ms`).join(", ")}`;
+    }
   }
 
   // Test Tavily
