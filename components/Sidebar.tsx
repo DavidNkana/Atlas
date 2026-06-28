@@ -282,7 +282,7 @@ export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boole
                       collapsed={collapsed}
                       isPinned
                       isActive={item.id === activeId}
-                      onNavigate={() => router.push(`/result/${item.id}`)}
+                      onNavigate={() => { router.prefetch(`/result/${item.id}`); router.push(`/result/${item.id}`); }}
                       onTogglePin={() => pins.unpin(item.id)}
                       onRequestDelete={() => setDeleteTarget(item)}
                     />
@@ -335,7 +335,7 @@ export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boole
                       collapsed={collapsed}
                       isPinned={false}
                       isActive={h.id === activeId}
-                      onNavigate={() => router.push(`/result/${h.id}`)}
+                      onNavigate={() => { router.prefetch(`/result/${h.id}`); router.push(`/result/${h.id}`); }}
                       onTogglePin={() => {
                         if (pinDisabled) return;
                         pins.pin(h.id, h.questionText, h.vertical);

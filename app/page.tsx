@@ -525,6 +525,9 @@ export default function HomePage() {
             <a href="/crypto" className="hover:text-atlas-accent">
               Crypto
             </a>
+            <a href="/demo" className="hover:text-atlas-accent">
+              Demo
+            </a>
             <a href="/pricing" className="hover:text-atlas-accent">
               Pricing
             </a>
