@@ -170,43 +170,56 @@ export const statsSAConnector: Connector = {
     const weight = weightFor(profile);
     const incomeStr = formatIncome(profile.medianHouseholdIncome, city.currency);
     const proPct = Math.round(profile.professionalShare * 100);
-
-    // Suburb-level label is much more useful for the developer:
-    // "Sandton CBD: 4,200 residents, R1.7M median income, 88%
-    // professionals" tells them they're looking at the financial
-    // district, not just "Sandton". This is the question they
-    // actually ask.
     const locationName = suburb ? `${suburb.name}, ${city.name}` : city.name;
-    const label = `${locationName}: ${profile.population.toLocaleString()} residents, ${incomeStr} median income, ${proPct}% professionals`;
+    const fetchedAt = new Date().toISOString();
 
-    return [
+    const signals: Signal[] = [
       {
         id: `stats_sa:${site.id}:demographic_profile`,
         source: "stats_sa",
         type: "demographic_profile",
-        lat,
-        lng,
-        label,
+        lat, lng,
+        label: `${locationName}: ${profile.population.toLocaleString()} residents, ${incomeStr} median income, ${proPct}% professionals`,
         value: weight,
         weight,
-        fetchedAt: new Date().toISOString(),
-        // Extra payload so the UI can show the suburb name + economic
-        // zone as a separate badge without re-parsing the label.
+        fetchedAt,
         payload: suburb
-          ? {
-              suburb: suburb.name,
-              city: city.name,
-              economicZone: suburb.economicZone,
-              growthRateYoY: suburb.growthRateYoY,
-              note: suburb.note,
-            }
-          : {
-              suburb: null,
-              city: city.name,
-              economicZone: CITY_DEMOGRAPHIC_PROFILES[city.id].economicZone,
-              growthRateYoY: CITY_DEMOGRAPHIC_PROFILES[city.id].growthRateYoY,
-            },
+          ? { suburb: suburb.name, city: city.name, economicZone: suburb.economicZone, growthRateYoY: suburb.growthRateYoY, note: suburb.note }
+          : { suburb: null, city: city.name, economicZone: CITY_DEMOGRAPHIC_PROFILES[city.id].economicZone, growthRateYoY: CITY_DEMOGRAPHIC_PROFILES[city.id].growthRateYoY },
+      },
+      {
+        id: `stats_sa:${site.id}:income`,
+        source: "stats_sa",
+        type: "median_income",
+        lat, lng,
+        label: `${locationName}: median household income ${incomeStr}`,
+        value: profile.medianHouseholdIncome,
+        weight: Math.min(1, profile.medianHouseholdIncome / 1_000_000),
+        fetchedAt,
+        payload: { suburb: suburb?.name ?? null, city: city.name, currency: city.currency },
+      },
+      {
+        id: `stats_sa:${site.id}:growth`,
+        source: "stats_sa",
+        type: "population_growth",
+        lat, lng,
+        label: `${locationName}: ${(profile.growthRateYoY * 100).toFixed(1)}% annual population growth`,
+        value: profile.growthRateYoY,
+        weight: Math.max(0, Math.min(1, (profile.growthRateYoY + 0.03) / 0.08)),
+        fetchedAt,
+      },
+      {
+        id: `stats_sa:${site.id}:economic_zone`,
+        source: "stats_sa",
+        type: "economic_zone",
+        lat, lng,
+        label: `${locationName}: ${profile.economicZone} economic zone`,
+        value: profile.economicZone === "CBD" ? 0.85 : profile.economicZone === "suburban" ? 0.7 : profile.economicZone === "peri-urban" ? 0.5 : 0.4,
+        weight: profile.economicZone === "CBD" ? 0.85 : profile.economicZone === "suburban" ? 0.7 : profile.economicZone === "peri-urban" ? 0.5 : 0.4,
+        fetchedAt,
       },
     ];
+
+    return signals;
   },
 };

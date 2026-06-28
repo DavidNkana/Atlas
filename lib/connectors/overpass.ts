@@ -53,26 +53,81 @@ export const overpassConnector: Connector = {
     if (typeof lat !== "number" || typeof lng !== "number") return [];
 
     const radius = RADIUS_M[vertical as string] ?? 1500;
-    const count = await overpassBatch(lat, lng, [
+    const counts = await overpassBatch(lat, lng, [
       {
         key: "overpass_amenities",
         ql: `node["amenity"~"restaurant|cafe|bar|fast_food|school|hospital|clinic|park|place_of_worship|supermarket|bank|pharmacy|fuel|warehouse|industrial"](around:${radius},${lat},${lng});`,
       },
-    ]).then((c) => c.overpass_amenities ?? 0);
+      {
+        key: "overpass_retail",
+        ql: `node["shop"~"supermarket|convenience|mall|department_store|bakery|butcher"](around:${radius},${lat},${lng});`,
+      },
+      {
+        key: "overpass_fuel",
+        ql: `node["amenity"="fuel"](around:${radius},${lat},${lng});`,
+      },
+      {
+        key: "overpass_transport",
+        ql: `node["highway"~"bus_stop|traffic_signals|motorway_junction"](around:${radius},${lat},${lng});`,
+      },
+    ]);
+
+    const amenities = counts.overpass_amenities ?? 0;
+    const retail = counts.overpass_retail ?? 0;
+    const fuel = counts.overpass_fuel ?? 0;
+    const transport = counts.overpass_transport ?? 0;
 
     const max = MAX_EXPECTED[vertical as string] ?? 20;
-    const weight = Math.max(0, Math.min(1, count / max));
+    const fetchedAt = new Date().toISOString();
 
-    return [{
+    const signals: Signal[] = [{
       id: `overpass:${site.id}:amenity_density`,
       source: "overpass",
       type: "amenity_density",
-      lat,
-      lng,
-      label: `${count} amenities within ${(radius / 1000).toFixed(1)}km`,
-      value: count,
-      weight,
-      fetchedAt: new Date().toISOString(),
+      lat, lng,
+      label: `${amenities} amenities within ${(radius/1000).toFixed(1)}km`,
+      value: amenities,
+      weight: Math.max(0, Math.min(1, amenities / max)),
+      fetchedAt,
     }];
+
+    if (fuel > 0) {
+      signals.push({
+        id: `overpass:${site.id}:fuel_stations`,
+        source: "overpass",
+        type: "fuel_stations_nearby",
+        lat, lng,
+        label: `${fuel} fuel stations within ${(radius/1000).toFixed(1)}km`,
+        value: fuel,
+        weight: Math.min(1, fuel / 5),
+        fetchedAt,
+      });
+    }
+
+    signals.push({
+      id: `overpass:${site.id}:retail_density`,
+      source: "overpass",
+      type: "retail_density",
+      lat, lng,
+      label: `${retail} retail outlets within ${(radius/1000).toFixed(1)}km`,
+      value: retail,
+      weight: Math.max(0, Math.min(1, retail / 15)),
+      fetchedAt,
+    });
+
+    if (transport > 0) {
+      signals.push({
+        id: `overpass:${site.id}:transport_nodes`,
+        source: "overpass",
+        type: "transport_access",
+        lat, lng,
+        label: `${transport} bus stops/junctions within ${(radius/1000).toFixed(1)}km`,
+        value: transport,
+        weight: Math.min(1, transport / 10),
+        fetchedAt,
+      });
+    }
+
+    return signals;
   },
 };

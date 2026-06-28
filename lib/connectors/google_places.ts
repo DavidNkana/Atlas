@@ -109,23 +109,47 @@ export const googlePlacesConnector: Connector = {
 
       const places = Array.isArray(data.places) ? data.places : [];
       const count = places.length;
-      // Normalise: 15+ places within 500m is a "saturated" area, treat as
-      // weight 1.0. 0 places is weight 0.0.
       const weight = Math.max(0, Math.min(1, count / 15));
+      const fetchedAt = new Date().toISOString();
 
-      return [
+      // Count most common place types for a richer signal
+      const typeCounts: Record<string, number> = {};
+      for (const p of places) {
+        for (const t of (p.types ?? [])) {
+          typeCounts[t] = (typeCounts[t] ?? 0) + 1;
+        }
+      }
+      const topTypes = Object.entries(typeCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([t, n]) => t.replace(/_/g, " "));
+
+      const signals: Signal[] = [
         {
           id: `google_places:${site.id}:poi_density`,
           source: "google_places",
           type: "poi_density",
-          lat,
-          lng,
+          lat, lng,
           label: `${count} amenities within ${RADIUS_M}m`,
-          value: count,
-          weight,
-          fetchedAt: new Date().toISOString(),
+          value: count, weight, fetchedAt,
         },
       ];
+
+      if (topTypes.length > 0) {
+        signals.push({
+          id: `google_places:${site.id}:amenity_types`,
+          source: "google_places",
+          type: "amenity_mix",
+          lat, lng,
+          label: `Top types: ${topTypes.join(", ")}`,
+          value: topTypes.length,
+          weight: Math.min(1, topTypes.length / 5),
+          fetchedAt,
+          payload: { topTypes },
+        });
+      }
+
+      return signals;
     } catch {
       clearTimeout(timer);
       return [];

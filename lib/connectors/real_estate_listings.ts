@@ -33,28 +33,62 @@ export const realEstateListingsConnector: Connector = {
     if (typeof lat !== "number" || typeof lng !== "number") return [];
 
     const targetLanduse = VERTICAL_LANDUSE[vertical as string] ?? "residential";
-    // Wide query: count all residential/commercial/industrial polygons
-    // within 2km. If the site is in a residential precinct the count
-    // is high; if it's in a commercial CBD the residential count is
-    // low. Either way Atlas has a real signal for "what is around".
-    const count = await overpassBatch(lat, lng, [
+    const counts = await overpassBatch(lat, lng, [
       {
         key: "real_estate_landuse",
         ql: `(way["landuse"~"residential|commercial|industrial|retail"](around:${RADIUS_M},${lat},${lng}););`,
       },
-    ]).then((c) => c.real_estate_landuse ?? 0);
+      {
+        key: "real_estate_buildings",
+        ql: `(way["building"~"residential|commercial|industrial|retail|apartments|house|detached"](around:${RADIUS_M},${lat},${lng}););`,
+      },
+      {
+        key: "real_estate_vacant",
+        ql: `(way["landuse"~"brownfield|greenfield|construction"](around:${RADIUS_M},${lat},${lng});way["landuse"="vacant"](around:${RADIUS_M},${lat},${lng}););`,
+      },
+    ]);
 
-    const weight = Math.max(0, Math.min(1, count / 50));
-    return [{
-      id: `real_estate_listings:${site.id}:landuse_count`,
-      source: "real_estate_listings",
-      type: "landuse_count",
-      lat,
-      lng,
-      label: `${count} ${targetLanduse} landuse polygons within ${(RADIUS_M / 1000).toFixed(1)}km`,
-      value: count,
-      weight,
-      fetchedAt: new Date().toISOString(),
-    }];
+    const landuse = counts.real_estate_landuse ?? 0;
+    const buildings = counts.real_estate_buildings ?? 0;
+    const vacant = counts.real_estate_vacant ?? 0;
+    const fetchedAt = new Date().toISOString();
+
+    const signals: Signal[] = [
+      {
+        id: `real_estate_listings:${site.id}:landuse_count`,
+        source: "real_estate_listings",
+        type: "landuse_count",
+        lat, lng,
+        label: `${landuse} ${targetLanduse} landuse polygons within ${(RADIUS_M/1000).toFixed(1)}km`,
+        value: landuse,
+        weight: Math.max(0, Math.min(1, landuse / 50)),
+        fetchedAt,
+      },
+      {
+        id: `real_estate_listings:${site.id}:building_density`,
+        source: "real_estate_listings",
+        type: "building_density",
+        lat, lng,
+        label: `${buildings} buildings within ${(RADIUS_M/1000).toFixed(1)}km`,
+        value: buildings,
+        weight: Math.max(0, Math.min(1, buildings / 100)),
+        fetchedAt,
+      },
+    ];
+
+    if (vacant > 0) {
+      signals.push({
+        id: `real_estate_listings:${site.id}:vacant_land`,
+        source: "real_estate_listings",
+        type: "vacant_land",
+        lat, lng,
+        label: `${vacant} vacant/development land parcels within ${(RADIUS_M/1000).toFixed(1)}km`,
+        value: vacant,
+        weight: Math.max(0, Math.min(1, vacant / 10)),
+        fetchedAt,
+      });
+    }
+
+    return signals;
   },
 };
