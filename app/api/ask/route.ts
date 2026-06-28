@@ -8,7 +8,7 @@ import type { Vertical, ModelInfo } from "@/lib/models/types";
 import { getConnector } from "@/lib/connectors/registry";
 import type { Signal } from "@/lib/connectors/types";
 import { combine } from "@/lib/scoring/engine";
-import type { ScoreBreakdown, ScoreFactor } from "@/lib/scoring/types";
+import type { ScoreBreakdown } from "@/lib/scoring/types";
 import { buildPlan } from "@/lib/plan/planner";
 import type { Plan } from "@/lib/plan/types";
 import { classifyIntent } from "@/lib/intent/classify";

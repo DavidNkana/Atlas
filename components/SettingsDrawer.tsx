@@ -32,7 +32,7 @@ export type AtlasPrefs = {
 
 export const DEFAULT_PREFS: AtlasPrefs = {
   theme: "dark",
-  defaultModel: MODEL_INFO[0]?.id ?? "gemini-flash",
+  defaultModel: MODEL_INFO.find((m) => m.id === "curated-stub")?.id ?? MODEL_INFO[0]?.id ?? "curated-stub",
   defaultVertical: "gas_station",
   showThinkingLoader: true,
 };
