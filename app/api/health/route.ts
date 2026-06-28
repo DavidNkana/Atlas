@@ -110,6 +110,52 @@ export async function GET(_req: NextRequest) {
     }
   }
 
+  // Test OpenRouter with a tiny call using the live models Atlas uses
+  const orCheck = checks[2];
+  if (orCheck.keyFormat === "valid" && openrouterKey) {
+    // Test each live model in parallel
+    const models = [
+      { id: "google/gemini-2.0-flash-lite-001", label: "Gemini Flash Lite" },
+      { id: "meta-llama/llama-3.3-70b-instruct:free", label: "Llama 3.3 70B" },
+      { id: "qwen/qwen3-next-80b:free", label: "Qwen3 80B" },
+    ];
+    const results: Record<string, { ok: boolean; latencyMs: number; error?: string }> = {};
+    
+    await Promise.all(models.map(async (m) => {
+      try {
+        const start = Date.now();
+        const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${openrouterKey}`,
+          },
+          body: JSON.stringify({
+            model: m.id,
+            messages: [{ role: "user", content: "hi" }],
+            max_tokens: 5,
+          }),
+        });
+        const latency = Date.now() - start;
+        if (res.ok) {
+          results[m.label] = { ok: true, latencyMs: latency };
+        } else {
+          const err = await res.text();
+          results[m.label] = { ok: false, latencyMs: latency, error: `${res.status}: ${err.slice(0, 100)}` };
+        }
+      } catch (err) {
+        results[m.label] = { ok: false, latencyMs: 0, error: err instanceof Error ? err.message : String(err) };
+      }
+    }));
+
+    const anyOk = Object.values(results).some((r) => r.ok);
+    orCheck.ok = anyOk;
+    orCheck.latencyMs = anyOk ? Math.min(...Object.values(results).filter(r => r.ok).map(r => r.latencyMs)) : 0;
+    orCheck.detail = anyOk
+      ? Object.entries(results).filter(([, r]) => r.ok).map(([n, r]) => `${n}: ${r.latencyMs}ms ✓`).join(", ")
+      : `All models failed: ${Object.entries(results).map(([n, r]) => `${n}: ${r.error}`).join(" | ")}`;
+  }
+
   // Test Tavily
   const tavilyCheck = checks[1];
   if (tavilyCheck.keyFormat === "valid" && tavilyKey) {
