@@ -9,11 +9,10 @@ export const metadata: Metadata = {
   description:
     "Atlas blends multiple data sources, models, and live signals to help African builders, operators, and investors find the right place to build, operate, or invest.",
   icons: {
-    icon: [
-      { url: "/AI.png", type: "image/png" },
-    ],
+    icon: [{ url: "/AI.png", type: "image/png" }],
     shortcut: "/AI.png",
   },
+  manifest: "/manifest.json",
 };
 
 export default function RootLayout({
@@ -29,6 +28,11 @@ export default function RootLayout({
       signUpFallbackRedirectUrl="/"
     >
       <html lang="en" className="dark">
+        <head>
+          <script dangerouslySetInnerHTML={{
+            __html: `if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js').catch(() => {}); }); }`,
+          }} />
+        </head>
         <body className="min-h-screen bg-atlas-bg text-atlas-text font-sans antialiased">
           <ThemeBootstrapper />
           <NavigationLoader />
