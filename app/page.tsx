@@ -516,9 +516,6 @@ export default function HomePage() {
             {/* Explore Crypto button removed */}
           </div>
           <div className="flex items-center gap-3">
-            <a href="/land" className="hover:text-atlas-accent">
-              Land
-            </a>
             <a href="/news" className="hover:text-atlas-accent">
               News
             </a>
