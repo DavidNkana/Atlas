@@ -682,14 +682,29 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
         let cascaded = false;
 
         // Race all OpenRouter models: first to respond wins.
+        // Day 28 hotfix: Promise.race rejects on first rejection, which
+        // kills the other model before it can respond. Use allSettled-style
+        // wrapping so timeouts don't kill the race.
         if (openRouterChain.length > 0) {
           openRouterChain.forEach((m) => pushAttempted(m.info.id));
-          const race = Promise.race(
-            openRouterChain.map((m) =>
-              callModel(m).then((r) => ({ model: m, result: r }))
-            )
-          );
-          const winner = await race;
+
+          // Wrap each model call so it always resolves (never rejects).
+          // Timed-out models resolve with ok:false instead of throwing.
+          const wrapped = openRouterChain.map(async (m) => {
+            try {
+              const r = await callModel(m);
+              return { model: m, result: r };
+            } catch (_err) {
+              return {
+                model: m,
+                result: { ok: false as const, error: `${m.info.id} timed out` },
+              };
+            }
+          });
+
+          // Resolves as soon as ANY model returns (success or failure).
+          const winner = await Promise.race(wrapped);
+
           if (winner.result.ok && winner.result.sites.length > 0) {
             rankedSites = enrichSitesWithCatalog(winner.result.sites);
             raw = winner.result.raw;
@@ -709,9 +724,33 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
             );
             return;
           }
+
+          // Winner failed or had 0 sites. Wait for remaining models
+          // (settled) to see if any other succeeded.
+          const all = await Promise.allSettled(wrapped);
+          for (const settled of all) {
+            if (settled.status !== "fulfilled") continue;
+            const { model: m, result: r } = settled.value;
+            if (r.ok && r.sites.length > 0 && m.info.id !== winner.model.info.id) {
+              rankedSites = enrichSitesWithCatalog(r.sites);
+              raw = r.raw;
+              if (r.answer) modelAnswer = r.answer;
+              if (r.sources && r.sources.length > 0) modelSources = r.sources;
+              activeInfo = m.info;
+              activeModel = m;
+              fallbackUsed = true;
+              cascaded = true;
+              console.log(
+                `[/api/ask] raced fallback served by ${m.info.id} (after winner failed)`
+              );
+              return;
+            }
+          }
+
+          // Record the winner's failure
           if (winner.result.ok && winner.result.sites.length === 0) {
             console.warn(
-              `[/api/ask] raced fallback ${winner.model.info.id} returned 0 sites — trying remaining chain`
+              `[/api/ask] raced winner ${winner.model.info.id} returned 0 sites — no other model succeeded`
             );
           }
           errorChain.push(
