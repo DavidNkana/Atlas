@@ -140,12 +140,6 @@ function makeOpenRouterModel(
   };
 }
 
-const CURATED_STUB_SLUGS: string[] = [
-  'nvidia/nemotron-3-super-120b-a12b:free',
-  'google/gemma-4-31b-it:free',
-  'qwen/qwen3-next-80b-a3b-instruct:free',
-];
-
 export const llamaFree: Model = makeOpenRouterModel(
   'llama-free',
   'Nemotron 120B (free)',
