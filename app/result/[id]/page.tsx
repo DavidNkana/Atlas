@@ -243,7 +243,7 @@ export default async function ResultPage({
   }
   const streetViewAnchor = pickStreetViewAnchor();
 
-  const ownerWhere: any = { userId };
+  const ownerWhere: any = { userId: userId ?? "" };
   if (cityFilter) {
     ownerWhere.city = { equals: cityFilter, mode: "insensitive" };
   }
