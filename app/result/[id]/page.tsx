@@ -133,13 +133,15 @@ export default async function ResultPage({
   params: Promise<{ id: string }>;
 }) {
   const { userId } = await auth();
-  if (!userId) {
-    redirect("/sign-in");
-  }
+  // Note: result links are shareable. We don't require sign-in to view
+  // (sign-in is needed to ASK a question, not to view one).
 
   const { id } = await params;
   const question = await prisma.question.findUnique({ where: { id } });
-  if (!question || question.userId !== userId) {
+  if (!question) {
+    notFound();
+  }
+  // Anyone can view any result, regardless of who created it.
     notFound();
   }
 
