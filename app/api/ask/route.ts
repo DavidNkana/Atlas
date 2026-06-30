@@ -15,7 +15,7 @@ import { classifyIntent } from "@/lib/intent/classify";
 import { enrichSitesWithCatalog } from "@/lib/stub/enrich-sites";
 import { supplementMissingCatalogSites } from "@/lib/stub/enrich-sites";
 import { fetchLiveListings, type LiveListing } from "@/lib/connectors/tavily-listings";
-import { fetchNearbyCompetitors } from "@/lib/connectors/google-places";
+import { fetchNearbyCompetitors, geocodePlaceName } from "@/lib/connectors/google-places";
 import { withTimeout } from "@/lib/util/timeout";
 import { sanitizeForJson } from "@/lib/util/json-sanitize";
 import { detectCity } from "@/lib/stub/detect";
@@ -694,6 +694,34 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
     );
     // Re-enrich so catalog-supplement sites get property data too
     rankedSites = enrichSitesWithCatalog(rankedSites);
+
+    // Geocode AI-returned site names to get accurate coordinates.
+    // AI models often provide approximate lat/lng (e.g., suburb centroid)
+    // rather than the exact location of the named place. This uses
+    // Google Places Text Search to find the real position.
+    const cityForGeocode = detectCity(question).name;
+    await Promise.all(
+      rankedSites.map(async (s: any) => {
+        if (!s?.name || typeof s.lat !== "number" || typeof s.lng !== "number") return;
+        // Skip if already very precise (e.g., 4+ decimal places)
+        const decimals = (s.lat.toString().split(".")[1] || "").length;
+        if (decimals >= 5) return;
+        const geo = await geocodePlaceName(s.name, cityForGeocode);
+        if (geo) {
+          // Only update if the geocoded result is reasonably close to the original
+          // (within ~50km). Otherwise the AI's region is different from the
+          // geocoded city, so trust the AI.
+          const dist = Math.sqrt(
+            Math.pow((geo.lat - s.lat) * 111, 2) +
+            Math.pow((geo.lng - s.lng) * 111 * Math.cos((s.lat * Math.PI) / 180), 2)
+          );
+          if (dist < 50) {
+            s.lat = geo.lat;
+            s.lng = geo.lng;
+          }
+        }
+      })
+    );
   }
 
   // 5. Step B — connectors + scoring (12s budget).

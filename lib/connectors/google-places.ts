@@ -112,6 +112,27 @@ function parseVertical(raw: string | undefined): string {
   return raw.replace(/^custom:/, "").toLowerCase().trim();
 }
 
+export async function geocodePlaceName(
+  name: string,
+  cityHint: string,
+): Promise<{ lat: number; lng: number } | null> {
+  if (!PLACES_KEY || !name) return null;
+  const query = encodeURIComponent(`${name}, ${cityHint}`);
+  const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${query}&key=${PLACES_KEY}`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data: any = await res.json();
+    const top = data?.results?.[0];
+    if (top?.geometry?.location) {
+      return { lat: top.geometry.location.lat, lng: top.geometry.location.lng };
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 export async function fetchNearbyCompetitors(opts: {
   lat: number;
   lng: number;
