@@ -142,8 +142,6 @@ export default async function ResultPage({
     notFound();
   }
   // Anyone can view any result, regardless of who created it.
-    notFound();
-  }
 
   const responseBody = (question.responseJson ?? {}) as ResponseBody;
   const rankedSites = Array.isArray(responseBody.ranked_sites)
