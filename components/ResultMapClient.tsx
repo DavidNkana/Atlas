@@ -215,7 +215,8 @@ export default function ResultMapClient({
           )}</p>` +
           `<small style=\"font-size:11px;opacity:0.8;color:#a1a1aa;\">Score ${site.score.toFixed(
             2
-          )} &middot; Confidence ${site.confidence.toFixed(2)}</small>`;
+          )} &middot; Confidence ${site.confidence.toFixed(2)}</small>` +
+          `<br><a href=\"https://www.google.com/maps?q=${site.lat},${site.lng}\" target=\"_blank\" rel=\"noopener\" style=\"display:inline-block;margin-top:6px;padding:3px 8px;font-size:11px;font-weight:600;background:#4F46E5;color:#fff;border-radius:4px;text-decoration:none;\">View on Google Maps →</a>`;
         const marker = new mapboxgl.Marker({ color: "#6366f1" })
           .setLngLat(lngLat)
            .setPopup(new mapboxgl.Popup({ offset: 18 }).setHTML(popupHtml))
