@@ -368,24 +368,15 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   const authResult = getAuth(req);
   const userId = authResult.userId;
   partialUserId = userId ?? "";
-  if (!userId) {
+  // Accept the request regardless of userId. Even unauthenticated users
+  // can ask questions — we just track their session via partialUserId
+  // (empty string for anonymous) and they can share results by URL.
+  // If they ARE signed in, results are saved to their history.
+  if (!userId && process.env.NODE_ENV !== "production") {
     console.warn(
-      `[ask-401] cookies=${cookieNames.length} hasSession=${hasSessionCookie} userId=null` +
+      `[ask-anon] cookies=${cookieNames.length} hasSession=${hasSessionCookie} userId=null` +
         ` sessionClaimsKeys=${authResult.sessionClaims ? Object.keys(authResult.sessionClaims).length : 0}` +
         ` url=${req.nextUrl.pathname}`
-    );
-    return NextResponse.json(
-      {
-        error: "Sign in required",
-        debug: {
-          cookieCount: cookieNames.length,
-          hasSessionCookie,
-          sessionClaimsKeys: authResult.sessionClaims
-            ? Object.keys(authResult.sessionClaims).length
-            : 0,
-        },
-      },
-      { status: 401 }
     );
   }
 
