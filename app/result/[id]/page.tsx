@@ -281,7 +281,7 @@ export default async function ResultPage({
       where: {
         publishToMarket: true,
         city: { equals: cityFilter, mode: "insensitive" },
-        userId: { not: userId },
+        userId: { not: userId ?? "" },
       },
       orderBy: { createdAt: "desc" },
       take: 50,
