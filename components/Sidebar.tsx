@@ -154,8 +154,18 @@ export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boole
       }
     }
     if (isLoaded && user) load();
+    // Also listen for new results so history refreshes without a page reload
+    function onHistoryChanged() {
+      if (!cancelled) load();
+    }
+    if (typeof window !== "undefined") {
+      window.addEventListener("atlas:history-changed", onHistoryChanged);
+    }
     return () => {
       cancelled = true;
+      if (typeof window !== "undefined") {
+        window.removeEventListener("atlas:history-changed", onHistoryChanged);
+      }
     };
   }, [isLoaded, user, hiddenIds]);
 

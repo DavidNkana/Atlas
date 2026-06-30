@@ -394,6 +394,10 @@ export default function HomePage() {
 
       const data = await res.json();
       if (data.id) {
+        // Notify sidebar/history to refresh — new result is ready
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("atlas:history-changed"));
+        }
         router.push("/result/" + data.id);
         return;
       }
