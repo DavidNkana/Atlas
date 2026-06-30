@@ -13,6 +13,7 @@ import { ListingsOverlay } from "@/components/ListingsOverlay";
 import { ResultChatPanel } from "@/components/ResultChatPanel";
 import { ResultChatButton } from "@/components/ResultChatButton";
 import { ResultExportButton } from "@/components/ResultExportButton";
+import { ShareButton } from "@/components/ShareButton";
 import { detectCity } from "@/lib/stub/detect";
 import { REAL_SITE_CATALOG } from "@/lib/stub/real-sites";
 import { SUBURB_PROFILES } from "@/lib/demographics/suburbs";
@@ -392,6 +393,11 @@ export default async function ResultPage({
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
+            <ShareButton
+              resultId={id}
+              title={`Atlas — ${question.vertical?.replace(/_/g, " ") ?? "site"} in ${stubCity ?? "your city"}`}
+              text={`Atlas found ${rankedSites.length} site${rankedSites.length === 1 ? "" : "s"} for: ${question.questionText}`}
+            />
             <ResultExportButton
               resultId={id}
               data={{
