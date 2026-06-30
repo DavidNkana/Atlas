@@ -116,7 +116,7 @@ export function ResultExportButton({ data, resultId }: { data: ExportData; resul
       downloadFile(`${baseName}.md`, toMarkdown(dataWithUrl), "text/markdown");
     } else if (format === "pdf") {
       // Build a clean print-ready HTML doc — NO sidebar, NO buttons, NO chrome
-      const mdHtml = toMarkdown(data)
+      const mdHtml = toMarkdown(dataWithUrl)
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
