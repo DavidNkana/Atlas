@@ -1179,7 +1179,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
     const safeResponse = sanitizeForJson(responseBody);
     const questionRow = await prisma.question.create({
       data: {
-        userId,
+        userId: userId ?? "",
         vertical,
         questionText: trimmedQuestion,
         responseJson: safeResponse as any,
