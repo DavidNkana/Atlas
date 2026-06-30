@@ -43,7 +43,6 @@ export default async function AdminPage() {
     payingUsers,
     plotCount,
     recentUsers,
-    feedbackEntries,
   ] = await Promise.all([
     prisma.question.count(),
     prisma.question.count({
@@ -125,12 +124,6 @@ export default async function AdminPage() {
         take: 10,
       })
       .catch(() => [] as any[]),
-    prisma.question.findMany({
-      where: { rating: { not: null } },
-      orderBy: { ratedAt: "desc" },
-      take: 20,
-      select: { id: true, questionText: true, vertical: true, rating: true, ratingNote: true, ratedAt: true, userId: true },
-    }),
   ]);
 
   return (
@@ -422,73 +415,26 @@ export default async function AdminPage() {
                   No questions yet.
                 </p>
               ) : (
-                 recentQuestions.map((q) => (
-                   <div
-                     key={q.id}
-                     className="flex items-center justify-between gap-3 rounded-md border border-atlas-border bg-atlas-surface px-3 py-2 text-sm"
-                   >
-                     <span className="min-w-0 flex-1 truncate text-xs text-atlas-text">
-                       {q.questionText}
-                     </span>
-                     <span className="shrink-0 rounded bg-atlas-surface2 px-1.5 py-0.5 text-[10px] font-medium text-atlas-muted">
-                       {q.vertical}
-                     </span>
-                     <span className="shrink-0 text-[10px] text-atlas-muted">
-                       {relativeTime(q.createdAt)}
-                     </span>
-                   </div>
-                 ))
-               )}
-             </div>
-           </section>
-
-           {/* Feedback from FeedbackWidget */}
-           {feedbackEntries.length > 0 && (
-             <section className="mb-8">
-               <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-atlas-muted">
-                 Recent feedback ({feedbackEntries.filter((f) => f.rating === 1).length} 👍 · {feedbackEntries.filter((f) => f.rating === -1).length} 👎)
-               </h2>
-               <div className="overflow-hidden rounded-xl border border-atlas-border bg-atlas-surface">
-                 <table className="w-full text-sm">
-                   <thead className="border-b border-atlas-border text-[10px] uppercase tracking-wider text-atlas-muted">
-                     <tr>
-                       <th className="px-3 py-2 text-left font-medium">Rating</th>
-                       <th className="px-3 py-2 text-left font-medium">Question</th>
-                       <th className="px-3 py-2 text-left font-medium">Vertical</th>
-                       <th className="px-3 py-2 text-left font-medium">Note</th>
-                       <th className="px-3 py-2 text-left font-medium">When</th>
-                     </tr>
-                   </thead>
-                   <tbody>
-                     {feedbackEntries.map((f) => (
-                       <tr key={f.id} className="border-b border-atlas-border last:border-0">
-                         <td className="px-3 py-2 text-base">
-                           {f.rating === 1 ? (
-                             <span className="text-emerald-400" title="Helpful">👍</span>
-                           ) : (
-                             <span className="text-rose-400" title="Not helpful">👎</span>
-                           )}
-                         </td>
-                         <td className="px-3 py-2 font-mono text-xs text-atlas-text max-w-[260px] truncate" title={f.questionText}>
-                           {f.questionText}
-                         </td>
-                         <td className="px-3 py-2 text-xs text-atlas-muted">
-                           {f.vertical}
-                         </td>
-                         <td className="px-3 py-2 text-xs text-atlas-muted max-w-[300px]">
-                           {f.ratingNote ?? <span className="italic">—</span>}
-                         </td>
-                         <td className="px-3 py-2 text-[10px] text-atlas-muted">
-                           {f.ratedAt ? relativeTime(f.ratedAt) : "—"}
-                         </td>
-                       </tr>
-                     ))}
-                   </tbody>
-                 </table>
-               </div>
-             </section>
-           )}
-         </div>
+                recentQuestions.map((q) => (
+                  <div
+                    key={q.id}
+                    className="flex items-center justify-between gap-3 rounded-md border border-atlas-border bg-atlas-surface px-3 py-2 text-sm"
+                  >
+                    <span className="min-w-0 flex-1 truncate text-xs text-atlas-text">
+                      {q.questionText}
+                    </span>
+                    <span className="shrink-0 rounded bg-atlas-surface2 px-1.5 py-0.5 text-[10px] font-medium text-atlas-muted">
+                      {q.vertical}
+                    </span>
+                    <span className="shrink-0 text-[10px] text-atlas-muted">
+                      {relativeTime(q.createdAt)}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
+        </div>
 
         <footer className="mt-auto px-6 py-6 text-center text-xs text-atlas-muted">
            <p>
