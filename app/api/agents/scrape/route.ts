@@ -232,8 +232,10 @@ export async function POST(req: NextRequest) {
 
       // 4. Extract agents from each page
       let agentsAll: ExtractedAgent[] = [];
+      let firstPagePreview: string | null = null;
       for (const r of extracted.results) {
         if (!r.rawContent || r.rawContent.length < 100) continue;
+        if (!firstPagePreview) firstPagePreview = r.rawContent.slice(0, 500);
         const got = await extractAgents(r.rawContent, sourceId, r.url, city);
         agentsAll = agentsAll.concat(got);
       }
@@ -275,7 +277,12 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({
     ok: true, city, saved: totalSaved,
-    debug: { urlsFound, pagesExtracted, agentsFound },
+    debug: {
+      urlsFound,
+      pagesExtracted,
+      agentsFound,
+      firstPagePreview: firstPagePreview ? firstPagePreview.replace(/\s+/g, " ").slice(0, 400) : null,
+    },
     errors: errors.length > 0 ? errors.slice(0, 5) : undefined,
   });
 }
