@@ -175,22 +175,26 @@ export async function POST(req: NextRequest) {
       for (const a of agents) {
         if (!a.name) continue;
         const id = `${sourceId}_${a.name.toLowerCase().replace(/[^a-z0-9]+/g, "_").slice(0, 60)}`;
-        await prisma.agent.upsert({
-          where: { id },
-          create: {
-            id, source: sourceId, name: a.name,
-            agency: a.agency, phone: a.phone, email: a.email,
-            areas: (a.areas || []).join(", "),
-            profileUrl: a.profileUrl, city: a.city || city,
-            rawJson: a as any,
-          },
-          update: {
-            agency: a.agency, phone: a.phone, email: a.email,
-            areas: (a.areas || []).join(", "),
-            profileUrl: a.profileUrl, scrapedAt: new Date(),
-          },
-        });
-        totalSaved += 1;
+        try {
+          await prisma.agent.upsert({
+            where: { id },
+            create: {
+              id, source: sourceId, name: a.name,
+              agency: a.agency, phone: a.phone, email: a.email,
+              areas: (a.areas || []).join(", "),
+              profileUrl: a.profileUrl, city: a.city || city,
+              rawJson: a as any,
+            },
+            update: {
+              agency: a.agency, phone: a.phone, email: a.email,
+              areas: (a.areas || []).join(", "),
+              profileUrl: a.profileUrl, scrapedAt: new Date(),
+            },
+          });
+          totalSaved += 1;
+        } catch (dbErr) {
+          errors.push(`db: ${dbErr instanceof Error ? dbErr.message.split("\n")[0] : String(dbErr)}`);
+        }
       }
     } catch (e) {
       errors.push(`${sourceId}: ${e instanceof Error ? e.message : String(e)}`);
