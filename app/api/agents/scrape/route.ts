@@ -6,9 +6,19 @@ import { fetchTavilyWebAnswer, extractTavilyUrls } from "@/lib/connectors/tavily
 /**
  * POST /api/agents/scrape
  *
- * Scrapes agents from property listing pages on Property24 and
- * Private Property. Uses regex extraction (no LLM) for reliable
- * parsing of Property24's HTML structure.
+ * Scrapes real estate agents from Property24 and Private Property
+ * agent profile pages. The flow:
+ *
+ *  1. Find the AGENT DIRECTORY for the city (e.g.
+ *     https://www.property24.com/estate-agents/sandton/...)
+ *  2. Extract ALL agent profile URLs from that directory page
+ *  3. Visit each profile and extract the agent's name, agency, phone, email
+ *
+ * Each agent's full contact info is on their individual profile page
+ * (e.g. /estate-agents/o-yes-properties/laleh-golestani/483697).
+ *
+ * Tavily's "answer" field is used as a fallback when /extract
+ * gets blocked by Cloudflare.
  */
 
 export const dynamic = "force-dynamic";
@@ -18,24 +28,30 @@ const SOURCES = [
   {
     id: "property24",
     name: "Property24",
-    searchHint: (city: string) =>
-      `site:property24.com ${city} for sale contact agent phone Property Practitioner`,
-    extraHints: (city: string) => [
-      `site:property24.com ${city} to rent contact agent phone`,
+    directoryHints: (city: string, subAreas: string[]) => [
+      `site:property24.com ${city} estate agents directory contact phone Property Practitioner`,
+      `site:property24.com ${city} estate-agents contact agent phone Property Practitioner`,
+      ...subAreas.flatMap((a) => [
+        `site:property24.com ${a} estate agents Property Practitioner contact phone`,
+      ]),
     ],
+    profileUrlMatch: /^https?:\/\/(?:www\.)?property24\.com\/estate-agents\/[^/]+\/[^/]+\/\d+/i,
+    profilePathPrefix: "https://www.property24.com/estate-agents/",
   },
   {
     id: "privateproperty",
     name: "Private Property",
-    searchHint: (city: string) =>
-      `site:privateproperty.co.za ${city} for sale contact agent phone Property Practitioner`,
-    extraHints: (city: string) => [
-      `site:privateproperty.co.za ${city} to rent contact agent`,
+    directoryHints: (city: string, subAreas: string[]) => [
+      `site:privateproperty.co.za ${city} estate agents contact phone Property Practitioner`,
+      ...subAreas.flatMap((a) => [
+        `site:privateproperty.co.za ${a} estate agents contact phone Property Practitioner`,
+      ]),
     ],
+    profileUrlMatch: /^https?:\/\/(?:www\.)?privateproperty\.co\.za\/[^/]+\/[^/]+\/\d+/i,
+    profilePathPrefix: "",
   },
 ] as const;
 
-// Sub-areas of major cities — searched separately for better coverage
 const SUB_AREAS: Record<string, string[]> = {
   johannesburg: ["Sandton", "Rosebank", "Parktown", "Melrose", "Hyde Park", "Morningside", "Rivonia", "Illovo"],
   sandton: ["Sandown", "Morningside", "Rivonia", "Hyde Park", "Benmore", "Illovo", "Wynberg"],
@@ -63,176 +79,116 @@ interface ExtractedAgent {
   area: string | null;
 }
 
-function extractAgentsFromProse(text: string, pageUrl: string): ExtractedAgent[] {
-  const agents: ExtractedAgent[] = [];
-  const seen = new Set<string>();
-
-  // Tavily answer field looks like:
-  //   "Austin Edwards is a seasoned property professional..."
-  //   "Sarah Johnson is a real estate agent in Cape Town..."
-  // Pattern: name at the start, followed by "is a" / "works as" / "specializes"
-  const namePatterns = [
-    /^([A-Z][a-z]+(?:\s+[A-Z]\.)?\s+[A-Z][a-z]+(?:-[A-Z][a-z]+)?)\s+is\s+(?:a|an)\s+/gm,
-    /\b([A-Z][a-z]+(?:\s+[A-Z]\.)?\s+[A-Z][a-z]+(?:-[A-Z][a-z]+)?)\s+(?:is\s+(?:a|an)|works\s+as|specializes\s+in|focuses\s+on)\b/g,
-  ];
-
-  for (const re of namePatterns) {
-    let m;
-    while ((m = re.exec(text)) !== null) {
-      const name = m[1].trim().replace(/\s+/g, " ");
-      if (seen.has(name.toLowerCase()) || name.length < 5 || name.length > 60) continue;
-      // Skip common UI/phrase text
-      if (/^(The |A |An |This |These |View |Show |Add |Save |Share |Click |Submit |Read |Contact |Real Estate)/i.test(name)) continue;
-      seen.add(name.toLowerCase());
-
-      // Phone numbers in prose
-      const phoneMatches = text.match(/(?:\+27|0)\s?[\d\s()-]{8,15}/g) || [];
-      const phone = phoneMatches[0]?.trim() || null;
-
-      // Email
-      const emailMatch = text.match(/[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
-      const email = emailMatch ? emailMatch[0] : null;
-
-      // Agency
-      const agencyPatterns = [
-        /Pam Golding/i, /Seeff/i, /Chas\s+Everitt|Chase\s+Versitt/i, /Century\s*21/i,
-        /Engel.*Völkers/i, /Rawson/i, /RE\/MAX/i, /Sotheby/i, /Lew\s*Geffen/i,
-        /Jawitz/i, /Harcourts/i, /Tyson/i, /Coldwell\s*Banker/i, /O\s*Yes/i,
-      ];
-      let agencyName: string | null = null;
-      for (const ap of agencyPatterns) {
-        const m2 = text.match(ap);
-        if (m2) { agencyName = m2[0]; break; }
-      }
-
-      agents.push({
-        name,
-        agency: agencyName,
-        phone,
-        email,
-        profileUrl: pageUrl,
-        city: null,
-        area: null,
-      });
-    }
+// Extract a clean agent name from a profile URL like
+// /estate-agents/o-yes-properties/laleh-golestani/483697
+// or /agents/agency/agent-slug/12345
+function nameFromProfileUrl(url: string): string | null {
+  // Strip query and hash
+  const u = url.split(/[?#]/)[0];
+  const parts = u.split("/").filter(Boolean);
+  // Take the last meaningful slug (before the numeric ID)
+  for (let i = parts.length - 1; i >= 0; i--) {
+    if (/^\d+$/.test(parts[i])) continue;
+    const slug = parts[i];
+    // Convert "laleh-golestani" -> "Laleh Golestani"
+    const name = slug
+      .replace(/-/g, " ")
+      .split(" ")
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+      .join(" ");
+    if (name && name.length > 4) return name;
   }
-
-  return agents;
+  return null;
 }
 
-function extractAgentsViaRegex(rawHtml: string, pageUrl: string): ExtractedAgent[] {
-  const agents: ExtractedAgent[] = [];
+// Property24 + PrivateProperty agent profile HTML patterns.
+// Each agent has a profile page with full contact info displayed.
+function extractAgentFromProfilePage(html: string, url: string): ExtractedAgent | null {
+  // Try the URL name first
+  const urlName = nameFromProfileUrl(url);
+  if (!urlName) return null;
+
+  // Validate it's actually a name (first and last name)
+  if (!/^[A-Z][a-z]+(\s+[A-Z][a-z]+)+$/.test(urlName)) return null;
+
+  // Phone numbers: look for the contact section
+  const phoneMatches = [
+    ...html.matchAll(/tel:["']?([+\d\s()-]{8,20})/gi),
+  ];
+  let mobile: string | null = null;
+  let work: string | null = null;
+  for (const m of phoneMatches) {
+    const num = m[1].replace(/["'\s]/g, "").trim();
+    if (!mobile && /^0[0-9]/.test(num)) mobile = num;
+    else if (!work && /^0[0-9]/.test(num)) work = num;
+  }
+  const phone = mobile || work || (phoneMatches[0] ? phoneMatches[0][1].trim() : null);
+
+  // Email
+  const emailMatch = html.match(/([a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
+  const email = emailMatch ? emailMatch[1] : null;
+
+  // Agency: usually shown near the top or in the URL path
+  let agency: string | null = null;
+  const agencyMatch = html.match(/Pam Golding Properties|Seeff|Chas\s*Everitt|Chase\s*Versitt|Century\s*21|Engel.*Völkers|Rawson|RE\/MAX|RE\/MAX|Sotheby|Lew\s*Geffen|Jawitz|Harcourts|Tyson|Coldwell\s*Banker|O\s*Yes\s*Properties|Traven\s*Properties|Keller\s*Williams/i);
+  if (agencyMatch) agency = agencyMatch[0];
+
+  // Extract agency from URL path: /estate-agents/{agency}/{name}/{id}
+  const pathMatch = url.match(/\/estate-agents\/([^/]+)\//);
+  if (!agency && pathMatch) {
+    const agencySlug = pathMatch[1].replace(/-/g, " ");
+    agency = agencySlug
+      .split(" ")
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(" ");
+  }
+
+  return {
+    name: urlName,
+    agency,
+    phone,
+    email,
+    profileUrl: url,
+    city: null,
+    area: null,
+  };
+}
+
+// Extract multiple agents from a single page (directory page or search answer)
+// Extract agents from URLs only — works even when /extract fails
+// because the URL itself contains the name slug.
+function extractAgentsFromUrlsOnly(urls: string[]): ExtractedAgent[] {
   const seen = new Set<string>();
-
-  // Property24 agent card structure (from observation):
-  //   <div class="p24_agencyCard">
-  //     <a href="...agentName/slug/12345">First Last</a>
-  //     <div>First Last</div>
-  //     <div>Property Practitioner</div>
-  //     <a href="tel:...">082 432 1517</a>   (mobile)
-  //     <a href="tel:...">011 784 2772</a>   (work)
-  //     <a href="mailto:...">email</a>
-  //   </div>
-  //
-  // Strategy: find each block that contains "Property Practitioner" (or
-  // a tel: link with a mobile + work phone pair), then extract
-  // the agent name from that block.
-
-  // Split on agent card boundaries. Look for the "Property Practitioner"
-  // string — each occurrence is the end of an agent card.
-  const blocks = rawHtml.split(/Property Practitioner/);
-  for (let i = 0; i < blocks.length - 1; i++) {
-    // Look at the chunk BEFORE "Property Practitioner" — that's the agent card
-    const block = blocks[i];
-    const start = Math.max(0, block.length - 4000); // last 4000 chars of the block
-
-    // Find the agent name in the block: the closest h-tag, div with "p24_agentName" class, or name with a profile link
-    const nameMatch = block.match(/class="[^"]*p24[^"]*agentName[^"]*"[^>]*>([^<]+)</)
-      ?? block.match(/<h\d[^>]*class="[^"]*p24[^"]*"[^>]*>([^<]+)</)
-      ?? block.match(/<a[^>]*href="[^"]*\/estate-agents\/[^"]*\/([a-z-]+)\/(\d+)"[^>]*>([^<]+)</i);
-    let name: string | null = null;
-    let profileUrl: string | null = null;
-    if (nameMatch) {
-      if (nameMatch[3]) {
-        // URL match — extract slug from URL
-        const slug = nameMatch[1];
-        profileUrl = `https://www.property24.com/estate-agents/${nameMatch[2]}/${slug}/${nameMatch[3]}`;
-        name = nameMatch[3].trim();
-      } else {
-        name = nameMatch[1].trim();
-      }
-    }
-
-    // Fallback: look for any capitalized two-word name that has a tel: link nearby
-    if (!name) {
-      const telIdx = block.indexOf("tel:");
-      if (telIdx > 0) {
-        const around = block.slice(Math.max(0, telIdx - 1000), telIdx);
-        const m = around.match(/([A-Z][a-z]+ [A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/g);
-        if (m) {
-          // Pick the last "firstname lastname" pattern (closest to the phone)
-          name = m[m.length - 1];
-        }
-      }
-    }
-
-    if (!name || name.length < 5) continue;
+  const out: ExtractedAgent[] = [];
+  for (const url of urls) {
+    const name = nameFromProfileUrl(url);
+    if (!name) continue;
     if (seen.has(name.toLowerCase())) continue;
     seen.add(name.toLowerCase());
-
-    // Extract phones — look in the block after the "Property Practitioner" position
-    const afterBlock = blocks[i + 1] || "";
-    const afterCtx = (block + " " + afterBlock).slice(-4000);
-    const phoneMatches = afterCtx.match(/tel:["']?([+\d\s()-]{8,20})/gi) || [];
-    let mobile: string | null = null;
-    let work: string | null = null;
-    for (const m of phoneMatches) {
-      const num = m.replace(/^tel:["']?/, "").replace(/["']?$/, "").trim();
-      if (!mobile && /^0[0-9]/.test(num)) mobile = num;
-      else if (!work && /^0[0-9]/.test(num)) work = num;
+    let agency: string | null = null;
+    const pathMatch = url.match(/\/estate-agents\/([^/]+)\//);
+    if (pathMatch) {
+      agency = pathMatch[1]
+        .replace(/-/g, " ")
+        .split(" ")
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(" ");
     }
-    const phone = mobile || (phoneMatches[0]?.replace(/^tel:["']?/, "").replace(/["']?$/, "").trim()) || null;
-
-    // Email
-    const emailMatch = afterCtx.match(/([a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
-    const email = emailMatch ? emailMatch[1] : null;
-
-    // Profile URL from agent card link
-    if (!profileUrl) {
-      const profMatch = block.match(/href="([^"]*\/estate-agents\/[^"]+\/\d+)"/);
-      if (profMatch) profileUrl = profMatch[1].startsWith("http") ? profMatch[1] : `https://www.property24.com${profMatch[1]}`;
-    }
-    if (!profileUrl) profileUrl = pageUrl;
-
-    // Agency
-    const agencyPatterns = [
-      /Pam Golding Properties/i, /Seeff/i, /Chas\s+Everitt|Chase\s+Versitt/i,
-      /Century\s*21/i, /Engel.*Völkers/i, /Rawson/i, /RE\/MAX|RE\/MAX/i,
-      /Sotheby/i, /Lew\s*Geffen/i, /Jawitz/i, /Harcourts/i, /Tyson/i,
-      /Coldwell\s*Banker/i, /O\s*Yes\s*Properties/i, /Traven/i, /Keller\s*Williams/i,
-      /Erf\.co\.za/i,
-    ];
-    let agencyName: string | null = null;
-    for (const ap of agencyPatterns) {
-      const m = afterCtx.match(ap);
-      if (m) {
-        agencyName = m[0].trim();
-        break;
-      }
-    }
-
-    agents.push({
+    out.push({
       name,
-      agency: agencyName,
-      phone,
-      email,
-      profileUrl,
+      agency,
+      phone: null,
+      email: null,
+      profileUrl: url,
       city: null,
       area: null,
     });
   }
+  return out;
+}
 
-  return agents;
+function extractAgentsFromProfileUrls(urls: string[]): ExtractedAgent[] {
+  return extractAgentsFromUrlsOnly(urls);
 }
 
 export async function POST(req: NextRequest) {
@@ -244,7 +200,7 @@ export async function POST(req: NextRequest) {
   const sources: string[] = Array.isArray(body?.sources) && body.sources.length > 0
     ? body.sources
     : SOURCES.map((s) => s.id);
-  const limit: number = Math.min(body?.limit ?? 10, 30);
+  const limit: number = Math.min(body?.limit ?? 50, 100);
 
   if (!process.env.TAVILY_API_KEY) {
     return NextResponse.json({ error: "TAVILY_API_KEY not set" }, { status: 500 });
@@ -285,23 +241,17 @@ export async function POST(req: NextRequest) {
     if (!src) continue;
 
     try {
-      // 1. Find listing URLs — search the city itself + each sub-area
+      // 1. Find agent PROFILE URLs (not listing URLs)
       const subAreas = getSubAreas(city);
-      const searches: string[] = [];
-      for (const area of subAreas) {
-        searches.push(src.searchHint(area));
-        for (const extra of src.extraHints?.(area) ?? []) searches.push(extra);
-      }
-      // Also search the bare city once
-      searches.push(src.searchHint(city));
+      const hints = src.directoryHints(city, subAreas);
       const allUrls: string[] = [];
       const seenUrls = new Set<string>();
-      for (const hint of searches) {
+      for (const hint of hints) {
         if (allUrls.length >= limit) break;
         const searchAnswer = await fetchTavilyWebAnswer(hint, { maxResults: Math.min(20, limit) });
         if (!searchAnswer) continue;
         for (const s of searchAnswer.sources ?? []) {
-          if (s?.url && !seenUrls.has(s.url)) {
+          if (s?.url && src.profileUrlMatch.test(s.url) && !seenUrls.has(s.url)) {
             seenUrls.add(s.url);
             allUrls.push(s.url);
           }
@@ -309,68 +259,49 @@ export async function POST(req: NextRequest) {
       }
       urlsFound += allUrls.length;
       if (allUrls.length === 0) {
-        errors.push(`${sourceId}: no listing URLs found for ${city}`);
+        errors.push(`${sourceId}: no agent profile URLs found for ${city}`);
         continue;
       }
 
-      // 2. Filter URLs to the right domain
-      const urls = allUrls
-        .filter((u: string) => {
-          if (!/^https?:\/\//.test(u)) return false;
-          if (sourceId === "property24") return /property24\.com/.test(u);
-          if (sourceId === "privateproperty") return /privateproperty\.co\.za/.test(u);
-          return false;
-        })
-        .slice(0, limit);
-
-      if (urls.length === 0) {
-        errors.push(`${sourceId}: no listing URLs after filter for ${city}`);
-        continue;
-      }
-
-      // 3. Extract page content via Tavily. If that fails (Cloudflare
-      // blocks Tavily's /extract endpoint), fall back to extracting
-      // agents directly from the search result snippets — each snippet
-      // usually shows the agent name + agency.
-      let rawPages: { url: string; rawContent: string }[] = [];
+      // 2. Try to extract agent info from each profile page
+      const agentsAll: ExtractedAgent[] = [];
+      let extracted: { url: string; rawContent: string }[] = [];
       try {
-        const extracted = await extractTavilyUrls(urls);
-        if (extracted && extracted.results.length > 0) {
-          rawPages = extracted.results
+        const result = await extractTavilyUrls(allUrls);
+        if (result && result.results.length > 0) {
+          extracted = result.results
             .map((r) => ({ url: r.url, rawContent: r.rawContent ?? "" }))
             .filter((p) => p.rawContent.length > 100);
-          pagesExtracted += rawPages.length;
+          pagesExtracted += extracted.length;
         }
       } catch (e) {
         errors.push(`${sourceId}: extractTavilyUrls failed: ${e instanceof Error ? e.message : String(e)}`);
       }
 
-      // 4. Extract agents using regex on the extracted page content.
-      // If we got no content (Tavily blocked extraction), fall back to
-      // extracting from the search snippets — they often have the agent
-      // name + agency in the title/text.
-      const agentsAll: ExtractedAgent[] = [];
-      if (rawPages.length > 0) {
-        for (const p of rawPages) {
-          if (!p.rawContent) continue;
-          if (!firstPagePreview) firstPagePreview = p.rawContent.slice(0, 500);
-          agentsAll.push(...extractAgentsViaRegex(p.rawContent, p.url));
-        }
-      } else {
-        // Fallback: extract from Tavily's search result snippets
-        const searchAnswerRaw = allUrls.length > 0 ? await fetchTavilyWebAnswer(src.searchHint(city), { maxResults: 0 }) : null;
-        // Use the already-fetched results' snippets via the search responses
-        // (we re-search once to get snippets — the URLs are already known)
-        for (const url of urls) {
-          const fallbackSearch = await fetchTavilyWebAnswer(
-            `site:${sourceId === "property24" ? "property24.com" : "privateproperty.co.za"} ${url.split("/").pop()?.replace(/-/g, " ") ?? ""}`,
-            { maxResults: 1 },
-          );
-          if (!fallbackSearch) continue;
-          const snippet = fallbackSearch.answer ?? "";
-          if (!snippet || snippet.length < 50) continue;
-          if (!firstPagePreview) firstPagePreview = snippet.slice(0, 500);
-          agentsAll.push(...extractAgentsFromProse(snippet, url));
+      // 3. Extract agents from URL pattern (works even if /extract failed)
+      // The URL pattern itself is the most reliable signal: the slug encodes the name.
+      const urlOnly = extractAgentsFromUrlsOnly(allUrls);
+      agentsAll.push(...urlOnly);
+
+      // 4. Extract from page content if available (gives us phones + emails)
+      for (const p of extracted) {
+        if (!p.rawContent) continue;
+        if (!firstPagePreview) firstPagePreview = p.rawContent.slice(0, 500);
+        // The page confirms the agent's existence and adds phone/email
+        const agent = extractAgentFromProfilePage(p.rawContent, p.url);
+        if (agent) {
+          // Merge with URL-only entry to fill phone/email gaps
+          const idx = agentsAll.findIndex((a) => a.name.toLowerCase() === agent.name.toLowerCase());
+          if (idx >= 0) {
+            agentsAll[idx] = {
+              ...agentsAll[idx],
+              ...agent,
+              phone: agentsAll[idx].phone || agent.phone,
+              email: agentsAll[idx].email || agent.email,
+            };
+          } else {
+            agentsAll.push(agent);
+          }
         }
       }
       agentsFound = agentsAll.length;
@@ -378,8 +309,9 @@ export async function POST(req: NextRequest) {
       // 5. Dedupe and save
       const seen = new Set<string>();
       for (const a of agentsAll) {
+        if (!a.name) continue;
         const key = a.name.toLowerCase().trim();
-        if (!a.name || seen.has(key)) continue;
+        if (seen.has(key)) continue;
         seen.add(key);
         const id = `${sourceId}_${key.replace(/[^a-z0-9]+/g, "_").slice(0, 60)}`;
         try {
