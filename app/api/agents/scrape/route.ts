@@ -241,6 +241,14 @@ export async function POST(req: NextRequest) {
     if (!src) continue;
 
     try {
+      // Clear stale records for this city+source combo first.
+      // The route was iterated multiple times with looser regexes that
+      // inserted junk like "Find Estate" / "Real Estate". We delete them
+      // so the user only ever sees the latest clean scrape.
+      try {
+        await prisma.agent.deleteMany({ where: { source: sourceId, city } });
+      } catch {}
+
       // 1. Find agent PROFILE URLs (not listing URLs)
       const subAreas = getSubAreas(city);
       const hints = src.directoryHints(city, subAreas);
