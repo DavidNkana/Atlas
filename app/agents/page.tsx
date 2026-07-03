@@ -137,6 +137,24 @@ export default function AgentsPage() {
             {scraping ? "Scraping… (this may take 30-60s)" : `Scrape agents for ${city || "…"}`}
           </button>
 
+          <button
+            type="button"
+            onClick={async () => {
+              if (!confirm("Delete ALL agent records? This clears the table so a fresh scrape can re-populate it cleanly.")) return;
+              setError(null);
+              const r = await fetch("/api/agents/clear", { method: "POST" });
+              const data = await r.json();
+              if (data.ok) {
+                setCount(0);
+              } else {
+                setError(data.error || "Clear failed");
+              }
+            }}
+            className="mt-2 w-full rounded-md border border-rose-500/40 bg-rose-500/5 px-4 py-1.5 text-xs font-medium text-rose-300 transition-colors hover:bg-rose-500/15"
+          >
+            Clear all data
+          </button>
+
           {error && (
             <div className="mt-3 rounded-md border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-300">
               {error}
