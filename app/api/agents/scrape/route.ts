@@ -192,30 +192,18 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      // 2. Filter URLs to listing pages only (not search results or about pages)
+      // 2. Filter URLs to listing pages — very permissive: anything from
+      // the matching domain is OK to extract. We rely on the LLM to skip
+      // search pages / about pages.
       const urls = (searchAnswer.sources ?? [])
         .map((s: any) => s.url)
         .filter((u: string) => {
           if (!/^https?:\/\//.test(u)) return false;
-          // Prefer listing detail pages
-          if (sourceId === "property24" && /\/(for-sale|to-rent)\/[\d]+/.test(u)) return true;
-          if (sourceId === "privateproperty" && /\/(for-sale|to-rent)\/[\d]+/.test(u)) return true;
+          if (sourceId === "property24") return /property24\.com/.test(u);
+          if (sourceId === "privateproperty") return /privateproperty\.co\.za/.test(u);
           return false;
-        });
-
-      // Fallback: take any URLs from the matching domain
-      if (urls.length === 0) {
-        const fallback = (searchAnswer.sources ?? [])
-          .map((s: any) => s.url)
-          .filter((u: string) => {
-            if (!/^https?:\/\//.test(u)) return false;
-            if (sourceId === "property24") return /property24\.com/.test(u);
-            if (sourceId === "privateproperty") return /privateproperty\.co\.za/.test(u);
-            return false;
-          })
-          .slice(0, limit);
-        urls.push(...fallback);
-      }
+        })
+        .slice(0, limit);
 
       if (urls.length === 0) {
         errors.push(`${sourceId}: no listing URLs found for ${city}`);
