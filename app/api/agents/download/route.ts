@@ -15,9 +15,8 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   const { userId } = getAuth(req);
-  if (!userId) {
-    return NextResponse.json({ error: "Sign in required" }, { status: 401 });
-  }
+  // Accept the request regardless of userId — agents are shared data,
+  // not per-user. Anyone can download.
 
   const url = new URL(req.url);
   const format = (url.searchParams.get("format") || "xlsx").toLowerCase();
