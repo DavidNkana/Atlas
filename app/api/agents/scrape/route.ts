@@ -35,6 +35,24 @@ const SOURCES = [
   },
 ] as const;
 
+// Sub-areas of major cities — searched separately for better coverage
+const SUB_AREAS: Record<string, string[]> = {
+  johannesburg: ["Sandton", "Rosebank", "Parktown", "Melrose", "Hyde Park", "Morningside", "Rivonia", "Illovo"],
+  sandton: ["Sandown", "Morningside", "Rivonia", "Hyde Park", "Benmore", "Illovo", "Wynberg"],
+  cape_town: ["Sea Point", "Camps Bay", "Claremont", "Newlands", "Constantia", "Durbanville", "Bellville", "Goodwood"],
+  durban: ["Umhlanga", "Umhlanga Ridge", "Umhlanga Rocks", "Durban North"],
+  pretoria: ["Hatfield", "Brooklyn", "Menlyn", "Centurion", "Arcadia"],
+  lusaka: ["Rhodes Park", "Longacres", "Ibex Hill", "Woodlands", "Chilenje", "Kabwata"],
+};
+
+function getSubAreas(city: string): string[] {
+  const c = city.toLowerCase();
+  for (const [key, areas] of Object.entries(SUB_AREAS)) {
+    if (c.includes(key)) return areas;
+  }
+  return [city];
+}
+
 interface ExtractedAgent {
   name: string;
   agency: string | null;
