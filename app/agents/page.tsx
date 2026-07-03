@@ -19,7 +19,7 @@ export default function AgentsPage() {
   const [city, setCity] = useState("Sandton");
   const [sources, setSources] = useState<string[]>(["property24", "privateproperty"]);
   const [scraping, setScraping] = useState(false);
-  const [result, setResult] = useState<{ saved: number; city: string; errors?: string[] } | null>(null);
+  const [result, setResult] = useState<{ saved: number; city: string; errors?: string[]; debug?: any } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [count, setCount] = useState<number | null>(null);
 
@@ -48,7 +48,7 @@ export default function AgentsPage() {
       const res = await fetch("/api/agents/scrape", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ city, sources }),
+        body: JSON.stringify({ city, sources, limit: 100 }),
       });
       const data = await res.json();
       if (!res.ok) {

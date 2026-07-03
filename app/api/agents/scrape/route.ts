@@ -210,12 +210,20 @@ export async function POST(req: NextRequest) {
     if (!src) continue;
 
     try {
-      // 1. Find listing URLs — combine primary hint + extra hints
-      const hints = [src.searchHint(city), ...(src.extraHints?.(city) ?? [])];
+      // 1. Find listing URLs — search the city itself + each sub-area
+      const subAreas = getSubAreas(city);
+      const searches: string[] = [];
+      for (const area of subAreas) {
+        searches.push(src.searchHint(area));
+        for (const extra of src.extraHints?.(area) ?? []) searches.push(extra);
+      }
+      // Also search the bare city once
+      searches.push(src.searchHint(city));
       const allUrls: string[] = [];
       const seenUrls = new Set<string>();
-      for (const hint of hints) {
-        const searchAnswer = await fetchTavilyWebAnswer(hint, { maxResults: limit });
+      for (const hint of searches) {
+        if (allUrls.length >= limit) break;
+        const searchAnswer = await fetchTavilyWebAnswer(hint, { maxResults: Math.min(20, limit) });
         if (!searchAnswer) continue;
         for (const s of searchAnswer.sources ?? []) {
           if (s?.url && !seenUrls.has(s.url)) {
@@ -223,7 +231,6 @@ export async function POST(req: NextRequest) {
             allUrls.push(s.url);
           }
         }
-        if (allUrls.length >= limit) break;
       }
       urlsFound += allUrls.length;
       if (allUrls.length === 0) {
