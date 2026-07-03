@@ -152,3 +152,48 @@ export async function fetchTavilyWebAnswer(
     return null;
   }
 }
+
+/**
+ * Day 28+ — Tavily /extract endpoint.
+ *
+ * Different from fetchTavilyWebAnswer:
+ *   - /search returns a generated answer + source URLs
+ *   - /extract returns raw page content for given URLs
+ *
+ * We use /extract when we need the full HTML of a known page
+ * (e.g. an agent directory) so we can pass it to an LLM for
+ * structured extraction.
+ */
+
+export interface TavilyExtractResult {
+  results: Array<{ url: string; rawContent: string }>;
+  failedResults: Array<{ url: string; error: string }>;
+}
+
+export async function extractTavilyUrls(
+  urls: string[],
+  options: { tavilyApiKey?: string; extractDepth?: "basic" | "advanced" } = {},
+): Promise<TavilyExtractResult | null> {
+  if (urls.length === 0) return { results: [], failedResults: [] };
+  const key = options.tavilyApiKey ?? process.env.TAVILY_API_KEY ?? "";
+  if (!key) return null;
+  try {
+    const res = await fetch(`${TAVILY_BASE}/extract`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        api_key: key,
+        urls,
+        extract_depth: options.extractDepth ?? "basic",
+      }),
+    });
+    if (!res.ok) return null;
+    const data: any = await res.json();
+    return {
+      results: (data.results ?? []).map((r: any) => ({ url: r.url, rawContent: r.raw_content ?? "" })),
+      failedResults: (data.failed_results ?? []).map((r: any) => ({ url: r.url, error: r.error ?? "unknown" })),
+    };
+  } catch {
+    return null;
+  }
+}
