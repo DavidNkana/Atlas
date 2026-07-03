@@ -8,15 +8,6 @@ import { fetchTavilyWebAnswer, extractTavilyUrls } from "@/lib/connectors/tavily
  *
  * Scrapes agents from property listings on Property24, Private Property,
  * and other major SA real estate portals.
- *
- * Strategy:
- *  1. Tavily search → find listing URLs for a city on each portal
- *  2. Tavily /extract → fetch HTML of each listing
- *  3. Gemini (cheap) → extract agent name, phone, email from each listing
- *  4. Dedupe by name within a source, save to DB
- *
- * Each listing has the agent contact, so scraping listings gives us
- * hundreds of agents per source.
  */
 
 export const dynamic = "force-dynamic";
@@ -26,7 +17,6 @@ const SOURCES = [
   {
     id: "property24",
     name: "Property24",
-    // Listing search — find specific property listings
     searchHint: (city: string) =>
       `site:property24.com ${city} for sale listing contact agent phone`,
   },
@@ -57,18 +47,10 @@ async function extractAgentsViaGemini(
   const key = process.env.GEMINI_API_KEY;
   if (!key) return [];
   const prompt = `Extract ALL real estate agent details visible on this property listing page.
-Each property is listed BY AN AGENT — extract the agent who listed it.
-Return a JSON array of objects, each with:
-  - name (string, the agent's name e.g. "John Smith")
-  - agency (string|null, the agency name e.g. "Pam Golding Properties")
-  - phone (string|null, contact phone e.g. "+27 11 555 1234")
-  - email (string|null, contact email)
-  - profileUrl (string|null, link to agent's profile page)
-  - area (string|null, suburb / area of the property)
-
-A page may have MULTIPLE agents (one per listing). Extract ALL of them.
-Skip obvious company entries with no individual name.
-Phone format: +27 or 0xx. If the page has no agents, return [].
+Each property is listed BY AN AGENT — extract the listing agent.
+Return a JSON array of objects: { name, agency, phone, email, profileUrl, area }.
+Skip companies without individual names.
+If no agents, return [].
 
 Source: ${source}
 City: ${city}
@@ -113,7 +95,7 @@ async function extractAgentsViaOpenRouter(
   if (!key) return [];
   const prompt = `Extract ALL real estate agent details from this property listing page.
 Each property has an agent — extract the listing agent.
-Return a JSON array of objects: { name, agency, phone, email, profileUrl, area }.
+Return a JSON array: { name, agency, phone, email, profileUrl, area }.
 Skip companies without individual names.
 If no agents, return [].
 
@@ -175,6 +157,9 @@ export async function POST(req: NextRequest) {
   }
 
   let totalSaved = 0;
+  let urlsFound = 0;
+  let pagesExtracted = 0;
+  let agentsFound = 0;
   const errors: string[] = [];
 
   for (const sourceId of sources) {
@@ -192,9 +177,7 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      // 2. Filter URLs to listing pages — very permissive: anything from
-      // the matching domain is OK to extract. We rely on the LLM to skip
-      // search pages / about pages.
+      // 2. Filter URLs to property24 / privateproperty domain
       const urls = (searchAnswer.sources ?? [])
         .map((s: any) => s.url)
         .filter((u: string) => {
@@ -204,26 +187,29 @@ export async function POST(req: NextRequest) {
           return false;
         })
         .slice(0, limit);
+      urlsFound += urls.length;
 
       if (urls.length === 0) {
-        errors.push(`${sourceId}: no listing URLs found for ${city}`);
+        errors.push(`${sourceId}: no listing URLs found for ${city} (Tavily returned ${searchAnswer.sources?.length ?? 0} URLs but none matched)`);
         continue;
       }
 
       // 3. Extract page content
-      const extracted = await extractTavilyUrls(urls.slice(0, limit));
+      const extracted = await extractTavilyUrls(urls);
       if (!extracted || extracted.results.length === 0) {
-        errors.push(`${sourceId}: extraction returned no content`);
+        errors.push(`${sourceId}: extraction returned no content for ${urls.length} URLs`);
         continue;
       }
+      pagesExtracted += extracted.results.length;
 
       // 4. Extract agents from each page
       let agentsAll: ExtractedAgent[] = [];
       for (const r of extracted.results) {
-        if (!r.rawContent) continue;
+        if (!r.rawContent || r.rawContent.length < 100) continue;
         const got = await extractAgents(r.rawContent, sourceId, r.url, city);
         agentsAll = agentsAll.concat(got);
       }
+      agentsFound = agentsAll.length;
 
       // 5. Dedupe and save
       const seen = new Set<string>();
@@ -261,6 +247,7 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({
     ok: true, city, saved: totalSaved,
+    debug: { urlsFound, pagesExtracted, agentsFound },
     errors: errors.length > 0 ? errors.slice(0, 5) : undefined,
   });
 }
