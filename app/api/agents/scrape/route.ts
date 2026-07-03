@@ -17,14 +17,16 @@ const SOURCES = [
   {
     id: "property24",
     name: "Property24",
+    // Tavily returns a list of URLs from the search. We filter for the
+    // ones that actually contain agent listings.
     searchHint: (city: string) =>
-      `site:property24.com ${city} estate agents directory`,
+      `${city} estate agents contact details site:property24.com OR site:privateproperty.co.za OR site:seeff.com OR site:chaseveritt.co.za`,
   },
   {
     id: "privateproperty",
     name: "Private Property",
     searchHint: (city: string) =>
-      `site:privateproperty.co.za ${city} estate agents directory`,
+      `${city} estate agents directory site:privateproperty.co.za`,
   },
 ] as const;
 
@@ -157,9 +159,12 @@ export async function POST(req: NextRequest) {
       if (!searchAnswer) continue;
 
       // 2. Extract page content with Tavily /extract
+      // Try any URL that Tavily found — agent listings appear on
+      // Property24, PrivateProperty, agency sites, and LinkedIn.
       const urls = (searchAnswer.sources ?? [])
         .map((s: any) => s.url)
-        .filter((u: string) => /property24|privateproperty/.test(u));
+        .filter((u: string) => /^https?:\/\//.test(u))
+        .slice(0, 5);
       if (urls.length === 0) continue;
       const extracted = await extractTavilyUrls(urls.slice(0, 3));
       if (!extracted) continue;
