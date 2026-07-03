@@ -6,8 +6,15 @@ import { fetchTavilyWebAnswer, extractTavilyUrls } from "@/lib/connectors/tavily
 /**
  * POST /api/agents/scrape
  *
- * Scrapes agents from property listings on Property24, Private Property,
- * and other major SA real estate portals.
+ * Scrapes agents from property listing pages on Property24 and
+ * Private Property. Uses regex extraction (no LLM) for reliable
+ * parsing of Property24's HTML structure.
+ *
+ * Property24 agent block (typical):
+ *   <a href="/agents/laleh-golestani-12345">Laleh Golestani</a>
+ *   <span>Property Practitioner</span>
+ *   <a href="tel:+27115551234">+27 11 555 1234</a>
+ *   <a href="mailto:laleh@example.com">laleh@example.com</a>
  */
 
 export const dynamic = "force-dynamic";
@@ -18,13 +25,13 @@ const SOURCES = [
     id: "property24",
     name: "Property24",
     searchHint: (city: string) =>
-      `site:property24.com ${city} for sale listing contact agent phone`,
+      `site:property24.com ${city} for sale contact agent phone`,
   },
   {
     id: "privateproperty",
     name: "Private Property",
     searchHint: (city: string) =>
-      `site:privateproperty.co.za ${city} for sale listing contact agent phone`,
+      `site:privateproperty.co.za ${city} for sale contact agent phone`,
   },
 ] as const;
 
@@ -38,134 +45,55 @@ interface ExtractedAgent {
   area: string | null;
 }
 
-async function extractAgentsViaGemini(
-  rawText: string,
-  source: string,
-  sourceUrl: string,
-  city: string,
-): Promise<ExtractedAgent[]> {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) return [];
-  const prompt = `Extract ALL real estate agent details visible on this property listing page.
-Each property is listed BY AN AGENT — extract the listing agent.
-Return a JSON array of objects: { name, agency, phone, email, profileUrl, area }.
-Skip companies without individual names.
-If no agents, return [].
+// Regex extractors — work directly on the HTML
+function extractAgentsViaRegex(rawHtml: string, pageUrl: string): ExtractedAgent[] {
+  const agents: ExtractedAgent[] = [];
+  const seen = new Set<string>();
 
-Source: ${source}
-City: ${city}
-URL: ${sourceUrl}
+  // Property24 has agent blocks in the page. Pattern:
+  //   <h2 class="...">Laleh Golestani</h2>
+  //   or <a class="...">Laleh Golestani</a>
+  //   followed by phone and email
 
-Webpage content:
-${rawText.slice(0, 40000)}`;
-  try {
-    for (const model of ["gemini-2.0-flash", "gemini-1.5-flash"]) {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ role: "user", parts: [{ text: prompt }] }],
-            generationConfig: { temperature: 0.1, maxOutputTokens: 8192 },
-          }),
-        }
-      );
-      if (!res.ok) {
-        console.warn(`[agents] Gemini ${model} status=${res.status} url=${sourceUrl.slice(0, 60)}`);
-        continue;
-      }
-      const data: any = await res.json();
-      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-      if (!text) {
-        console.warn(`[agents] Gemini ${model} returned empty text url=${sourceUrl.slice(0, 60)} finishReason=${data?.candidates?.[0]?.finishReason}`);
-        continue;
-      }
-      console.log(`[agents] Gemini ${model} text preview url=${sourceUrl.slice(0, 60)}: ${text.slice(0, 300).replace(/\n/g, " ")}`);
-      // Match either a JSON array or a single object wrapper
-      let match = text.match(/\[[\s\S]*?\]/);
-      if (!match) match = text.match(/```json\s*([\s\S]*?)```/);
-      if (!match) continue;
-      try {
-        const candidate = match[1] || match[0];
-        const parsed = JSON.parse(candidate);
-        if (Array.isArray(parsed)) return parsed;
-        if (Array.isArray(parsed?.agents)) return parsed.agents;
-        if (Array.isArray(parsed?.results)) return parsed.results;
-        return [];
-      } catch (e) { continue; }
-    }
-  } catch {}
-  return [];
-}
+  // Try multiple patterns for agent names
+  const namePatterns = [
+    /([A-Z][a-z]+ [A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s*(?:Property Practitioner|Agent|Sales)/g,
+    /(?:agent|lister)["\s:>]+([A-Z][a-z]+ [A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/gi,
+  ];
 
-async function extractAgentsViaOpenRouter(
-  rawText: string,
-  source: string,
-  sourceUrl: string,
-  city: string,
-): Promise<ExtractedAgent[]> {
-  const key = process.env.OPENROUTER_API_KEY;
-  if (!key) return [];
-  const prompt = `Extract ALL real estate agent details from this property listing page.
-Each property has an agent — extract the listing agent.
-Return a JSON array: { name, agency, phone, email, profileUrl, area }.
-Skip companies without individual names.
-If no agents, return [].
+  for (const re of namePatterns) {
+    let match;
+    while ((match = re.exec(rawHtml)) !== null) {
+      const name = match[1].trim();
+      if (seen.has(name) || name.length < 5) continue;
+      seen.add(name);
 
-Source: ${source}
-City: ${city}
-URL: ${sourceUrl}
+      // Find context around this name
+      const ctx = rawHtml.slice(Math.max(0, match.index - 500), match.index + match[0].length + 1000);
 
-Webpage content:
-${rawText.slice(0, 40000)}`;
-  // Try multiple OpenRouter free models
-  const models = ["openai/gpt-4o-mini", "meta-llama/llama-3.1-8b-instruct:free"];
-  for (const modelName of models) {
-    try {
-      const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-        body: JSON.stringify({
-          model: modelName,
-          messages: [{ role: "user", content: prompt }],
-          temperature: 0.1,
-        }),
+      // Extract phone
+      const phoneMatch = ctx.match(/(?:\+27|0)\s?[\d\s()-]{8,15}/);
+      const phone = phoneMatch ? phoneMatch[0].trim() : null;
+
+      // Extract email
+      const emailMatch = ctx.match(/[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+      const email = emailMatch ? emailMatch[0] : null;
+
+      // Extract agency name (usually a known brand or surname + "Properties")
+      const agencyMatch = ctx.match(/((?:Pam Golding|Seeff|Chase Versitt|Engel & Völkers|Rawson|RE\/MAX|Seeff|Chas Everitt|Engel)[a-zA-Z\s]*)/i);
+
+      agents.push({
+        name,
+        agency: agencyMatch ? agencyMatch[1].trim() : null,
+        phone,
+        email,
+        profileUrl: pageUrl,
+        city: null,
+        area: null,
       });
-      if (!res.ok) {
-        console.warn(`[agents] OpenRouter ${modelName} status=${res.status}`);
-        continue;
-      }
-      const data: any = await res.json();
-      const text = data?.choices?.[0]?.message?.content ?? "";
-      if (!text) continue;
-      console.log(`[agents] OpenRouter ${modelName} text preview url=${sourceUrl.slice(0, 60)}: ${text.slice(0, 300).replace(/\n/g, " ")}`);
-      let match = text.match(/\[[\s\S]*?\]/);
-      if (!match) match = text.match(/```json\s*([\s\S]*?)```/);
-      if (!match) continue;
-      try {
-        const candidate = match[1] || match[0];
-        const parsed = JSON.parse(candidate);
-        if (Array.isArray(parsed)) return parsed;
-        if (Array.isArray(parsed?.agents)) return parsed.agents;
-        if (Array.isArray(parsed?.results)) return parsed.results;
-        return [];
-      } catch { continue; }
-    } catch {}
+    }
   }
-  return [];
-}
 
-async function extractAgents(
-  rawText: string,
-  source: string,
-  sourceUrl: string,
-  city: string,
-): Promise<ExtractedAgent[]> {
-  let agents = await extractAgentsViaGemini(rawText, source, sourceUrl, city);
-  if (agents.length === 0) {
-    agents = await extractAgentsViaOpenRouter(rawText, source, sourceUrl, city);
-  }
   return agents;
 }
 
@@ -206,7 +134,7 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      // 2. Filter URLs to property24 / privateproperty domain
+      // 2. Filter URLs to the right domain
       const urls = (searchAnswer.sources ?? [])
         .map((s: any) => s.url)
         .filter((u: string) => {
@@ -219,24 +147,24 @@ export async function POST(req: NextRequest) {
       urlsFound += urls.length;
 
       if (urls.length === 0) {
-        errors.push(`${sourceId}: no listing URLs found for ${city} (Tavily returned ${searchAnswer.sources?.length ?? 0} URLs but none matched)`);
+        errors.push(`${sourceId}: no listing URLs found for ${city}`);
         continue;
       }
 
       // 3. Extract page content
       const extracted = await extractTavilyUrls(urls);
       if (!extracted || extracted.results.length === 0) {
-        errors.push(`${sourceId}: extraction returned no content for ${urls.length} URLs`);
+        errors.push(`${sourceId}: extraction returned no content`);
         continue;
       }
       pagesExtracted += extracted.results.length;
 
-      // 4. Extract agents from each page
+      // 4. Extract agents using regex (no LLM)
       let agentsAll: ExtractedAgent[] = [];
       for (const r of extracted.results) {
         if (!r.rawContent || r.rawContent.length < 100) continue;
         if (!firstPagePreview) firstPagePreview = r.rawContent.slice(0, 500);
-        const got = await extractAgents(r.rawContent, sourceId, r.url, city);
+        const got = extractAgentsViaRegex(r.rawContent, r.url);
         agentsAll = agentsAll.concat(got);
       }
       agentsFound = agentsAll.length;
@@ -244,9 +172,8 @@ export async function POST(req: NextRequest) {
       // 5. Dedupe and save
       const seen = new Set<string>();
       for (const a of agentsAll) {
-        if (!a.name) continue;
         const key = a.name.toLowerCase().trim();
-        if (seen.has(key)) continue;
+        if (!a.name || seen.has(key)) continue;
         seen.add(key);
         const id = `${sourceId}_${key.replace(/[^a-z0-9]+/g, "_").slice(0, 60)}`;
         try {
