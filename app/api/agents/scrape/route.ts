@@ -271,21 +271,50 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      // 3. Extract page content
-      const extracted = await extractTavilyUrls(urls);
-      if (!extracted || extracted.results.length === 0) {
-        errors.push(`${sourceId}: extraction returned no content`);
-        continue;
+      // 3. Extract page content via Tavily. If that fails (Cloudflare
+      // blocks Tavily's /extract endpoint), fall back to extracting
+      // agents directly from the search result snippets — each snippet
+      // usually shows the agent name + agency.
+      let rawPages: { url: string; rawContent: string }[] = [];
+      try {
+        const extracted = await extractTavilyUrls(urls);
+        if (extracted && extracted.results.length > 0) {
+          rawPages = extracted.results
+            .map((r) => ({ url: r.url, rawContent: r.rawContent ?? "" }))
+            .filter((p) => p.rawContent.length > 100);
+          pagesExtracted += rawPages.length;
+        }
+      } catch (e) {
+        errors.push(`${sourceId}: extractTavilyUrls failed: ${e instanceof Error ? e.message : String(e)}`);
       }
-      pagesExtracted += extracted.results.length;
 
-      // 4. Extract agents — parse each page as a single block
+      // 4. Extract agents using regex on the extracted page content.
+      // If we got no content (Tavily blocked extraction), fall back to
+      // extracting from the search snippets — they often have the agent
+      // name + agency in the title/text.
       const agentsAll: ExtractedAgent[] = [];
-      for (const r of extracted.results) {
-        if (!r.rawContent || r.rawContent.length < 100) continue;
-        if (!firstPagePreview) firstPagePreview = r.rawContent.slice(0, 500);
-        const got = extractAgentsViaRegex(r.rawContent, r.url);
-        agentsAll.push(...got);
+      if (rawPages.length > 0) {
+        for (const p of rawPages) {
+          if (!p.rawContent) continue;
+          if (!firstPagePreview) firstPagePreview = p.rawContent.slice(0, 500);
+          agentsAll.push(...extractAgentsViaRegex(p.rawContent, p.url));
+        }
+      } else {
+        // Fallback: extract from Tavily's search result snippets
+        const searchAnswerRaw = allUrls.length > 0 ? await fetchTavilyWebAnswer(src.searchHint(city), { maxResults: 0 }) : null;
+        // Use the already-fetched results' snippets via the search responses
+        // (we re-search once to get snippets — the URLs are already known)
+        for (const url of urls) {
+          const fallbackSearch = await fetchTavilyWebAnswer(
+            `site:${sourceId === "property24" ? "property24.com" : "privateproperty.co.za"} ${url.split("/").pop()?.replace(/-/g, " ") ?? ""}`,
+            { maxResults: 1 },
+          );
+          if (!fallbackSearch) continue;
+          const snippet = fallbackSearch.answer ?? "";
+          if (!snippet || snippet.length < 50) continue;
+          if (!firstPagePreview) firstPagePreview = snippet.slice(0, 500);
+          agentsAll.push(...extractAgentsViaRegex(snippet, url));
+        }
       }
       agentsFound = agentsAll.length;
 
