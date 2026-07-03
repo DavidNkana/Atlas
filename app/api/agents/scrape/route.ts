@@ -62,32 +62,54 @@ function extractAgentsViaRegex(rawHtml: string, pageUrl: string): ExtractedAgent
   //   or <a class="...">Laleh Golestani</a>
   //   followed by phone and email
 
-  // Try multiple patterns for agent names
+  // Strict name patterns — only names that look like real person names
+  // (Two capitalized words, no common UI/button text).
+  // The negative lookbehind/lookahead filter out "South Africa",
+  // "Find Estate", "Property Portfolio", etc.
+  const BLOCKED_NAMES = new Set([
+    "South Africa", "North West", "Western Cape", "Eastern Cape",
+    "Northern Cape", "KwaZulu Natal", "Free State", "Mpumalanga", "Limpopo",
+    "Find Estate", "Find Letting", "Find Sales", "Find Rent", "Find Property",
+    "Ratings And Reviews", "Property Portfolio", "View All", "View All",
+    "Properties For Sale", "Contact Agent", "Get In Touch", "Read More",
+    "Add To", "Send Inquiry", "View Details", "Make An", "Book Viewing",
+    "View More", "Read Less", "Show More", "Show Less", "Load More",
+    "Recent Posts", "Latest Properties", "Featured Properties",
+  ]);
+
   const namePatterns = [
-    /([A-Z][a-z]+ [A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s*(?:Property Practitioner|Agent|Sales)/g,
-    /([A-Z][a-z]+ [A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s*Property Practitioner/g,
-    /<h\d[^>]*>([A-Z][a-z]+ [A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)<\/h\d>/g,
+    /Property Practitioner\s*<\/[^>]+>\s*([A-Z][a-z]+ [A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/g,
+    /<h\d[^>]*class="[^"]*p24[^"]*agentName[^"]*"[^>]*>([^<]+)</g,
+    /<a[^>]*class="[^"]*p24[^"]*agentName[^"]*"[^>]*>([^<]+)</g,
   ];
 
   for (const re of namePatterns) {
     let match;
     while ((match = re.exec(rawHtml)) !== null) {
-      const name = match[1].trim();
-      if (seen.has(name) || name.length < 5) continue;
+      const name = match[1].trim().replace(/\s+/g, " ");
+      if (seen.has(name) || name.length < 5 || name.length > 60) continue;
+      // Filter out known UI text and common non-person phrases
+      if (BLOCKED_NAMES.has(name)) continue;
+      if (/^(The |A |An |This |These |View |Show |Add |Save |Share |Click |Submit |Read )/i.test(name)) continue;
+      if (/\b(Road|Street|Avenue|Lane|Province|Region|Country|City|Town)\b/i.test(name)) continue;
+      if (!/^[A-Z][a-z]+(\s[A-Z][a-z]+)+$/.test(name) && !/^[A-Z][a-z]+\s[A-Z]\.\s[A-Z][a-z]+$/.test(name)) {
+        // Allow: "First Last" or "First M. Last" but not single words
+        continue;
+      }
       seen.add(name);
 
-      // Find context around this name
       const ctx = rawHtml.slice(Math.max(0, match.index - 500), match.index + match[0].length + 1500);
 
-      // Extract phone
-      const phoneMatch = ctx.match(/(?:\+27|0)\s?[\d\s()-]{8,15}/);
-      const phone = phoneMatch ? phoneMatch[0].trim() : null;
+      // Require a phone number in the context — strongest signal of a real agent
+      const phoneMatch = ctx.match(/(\+27|0)\s?[\d\s()-]{8,15}/);
+      if (!phoneMatch) continue;
+      const phone = phoneMatch[0].trim();
 
-      // Extract email
+      // Email
       const emailMatch = ctx.match(/[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
       const email = emailMatch ? emailMatch[0] : null;
 
-      // Extract agency name
+      // Agency name
       const agencyPatterns: RegExp[] = [
         /Pam Golding Properties/i,
         /Seeff/i,
@@ -103,18 +125,31 @@ function extractAgentsViaRegex(rawHtml: string, pageUrl: string): ExtractedAgent
         /Tyson/i,
         /Royal\s+LePage/i,
         /Coldwell\s*Banker/i,
-        /[A-Z][a-zA-Z]+\s+Properties?/,
+        /O\s*Yes\s*Properties/i,
+        /Traven\s*Properties/i,
+        /Keller\s*Williams/i,
+        /RE\/MAX/i,
       ];
-      let agencyMatch: RegExpMatchArray | null = null;
       let agencyName: string | null = null;
       for (const ap of agencyPatterns) {
-        agencyMatch = ctx.match(ap);
-        if (agencyMatch) {
-          agencyName = agencyMatch[1] || agencyMatch[0];
-          agencyName = agencyName.replace(/\s+/g, " ").trim();
+        const m = ctx.match(ap);
+        if (m) {
+          agencyName = (m[0] || m[1] || "").replace(/\s+/g, " ").trim();
           break;
         }
       }
+
+      agents.push({
+        name,
+        agency: agencyName,
+        phone,
+        email,
+        profileUrl: pageUrl,
+        city: null,
+        area: null,
+      });
+    }
+  }
 
       agents.push({
         name,
