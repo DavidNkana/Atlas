@@ -3,7 +3,6 @@ import { getAuth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/db";
 import {
   fetchTavilyWebAnswer,
-  extractTavilyUrls,
   bustTavilyWebCache,
   TavilyQuotaError,
 } from "@/lib/connectors/tavily-search";
@@ -282,6 +281,115 @@ function extractAgentsFromProfileUrls(urls: string[]): ExtractedAgent[] {
   return extractAgentsFromUrlsOnly(urls);
 }
 
+/**
+ * LCP-90 direct fetch — try to get the agent directory HTML directly
+ * from Property24 / PrivateProperty without going through Tavily.
+ *
+ * Tavily's index returns 0 URLs for these domains (audit-proven), so
+ * we go straight to the source. Realistic User-Agent to look like a
+ * normal browser. If the site returns 403 / Cloudflare challenge, we
+ * fall back to Tavily (which won't help either, but at least the
+ * audit tells us why).
+ */
+async function directFetchAgentUrls(
+  sourceId: string,
+  domain: string,
+  profileUrlMatch: RegExp,
+  city: string,
+): Promise<{ urls: string[]; httpStatus: number; bodyBytes: number; error?: string }> {
+  // Property24's agent directory lives at /estate-agents/{city}
+  // PrivateProperty doesn't have a clean /estate-agents/ index we
+  // know of — we'll try /agents/{city} as the best guess and rely on
+  // the profileUrlMatch regex to find any profile links.
+  const candidates = sourceId === "property24"
+    ? [
+        `https://www.${domain}/estate-agents/${encodeURIComponent(city.toLowerCase())}`,
+        `https://www.${domain}/estate-agents/${encodeURIComponent(city)}`,
+        `https://${domain}/estate-agents/${encodeURIComponent(city.toLowerCase())}`,
+      ]
+    : [
+        `https://www.${domain}/agents/${encodeURIComponent(city.toLowerCase())}`,
+        `https://www.${domain}/agents/${encodeURIComponent(city)}`,
+        `https://${domain}/estate-agents/${encodeURIComponent(city.toLowerCase())}`,
+      ];
+
+  const DIRECT_PROBE_UA =
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+
+  for (const url of candidates) {
+    try {
+      const res = await fetch(url, {
+        headers: {
+          "User-Agent": DIRECT_PROBE_UA,
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "Accept-Language": "en-US,en;q=0.9",
+          "Accept-Encoding": "gzip, deflate, br",
+          "Cache-Control": "no-cache",
+        },
+        redirect: "follow",
+        // Vercel serverless default timeout is fine; set explicit for clarity
+        signal: AbortSignal.timeout(15000),
+      });
+      const body = await res.text().catch(() => "");
+      if (res.ok && body.length > 500) {
+        // Extract every href in the HTML that matches the profile regex.
+        const hrefRegex = /href\s*=\s*["']([^"']+)["']/gi;
+        const matched: string[] = [];
+        const seen = new Set<string>();
+        for (const m of body.matchAll(hrefRegex)) {
+          const raw = m[1];
+          // Resolve relative URLs against the directory base.
+          const abs = raw.startsWith("http")
+            ? raw
+            : new URL(raw, url).toString();
+          if (profileUrlMatch.test(abs) && !seen.has(abs)) {
+            seen.add(abs);
+            matched.push(abs);
+          }
+        }
+        return { urls: matched, httpStatus: res.status, bodyBytes: body.length };
+      }
+      // Log + try next candidate
+      if (res.status === 403 || res.status === 503) {
+        return { urls: [], httpStatus: res.status, bodyBytes: body.length, error: `HTTP ${res.status} from ${url}` };
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message.split("\n")[0] : String(e);
+      return { urls: [], httpStatus: 0, bodyBytes: 0, error: `fetch failed for ${url}: ${msg}` };
+    }
+  }
+  return { urls: [], httpStatus: 0, bodyBytes: 0, error: "all candidate URLs failed" };
+}
+
+/**
+ * LCP-90 direct profile fetch — same idea but for a single agent
+ * profile page. Returns the raw HTML if successful so the existing
+ * extractAgentFromProfilePage can pull name + agency + phone.
+ */
+async function directFetchProfileHtml(
+  url: string,
+): Promise<{ html: string | null; httpStatus: number; error?: string }> {
+  const DIRECT_PROBE_UA =
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": DIRECT_PROBE_UA,
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+      },
+      redirect: "follow",
+      signal: AbortSignal.timeout(15000),
+    });
+    const html = await res.text().catch(() => "");
+    if (res.ok && html.length > 200) return { html, httpStatus: res.status };
+    return { html: null, httpStatus: res.status, error: `HTTP ${res.status}` };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message.split("\n")[0] : String(e);
+    return { html: null, httpStatus: 0, error: msg };
+  }
+}
+
 export async function POST(req: NextRequest) {
   const { userId } = getAuth(req);
 
@@ -312,6 +420,14 @@ export async function POST(req: NextRequest) {
   // result was cached for 30 min and short-circuited all subsequent
   // calls. We always want a fresh Tavily answer here.
   bustTavilyWebCache();
+
+  // LCP-90 Phase 1: direct-fetch probe to Property24 / PrivateProperty
+  // directory pages. Tavily's index returns 0 URLs for these domains
+  // (audit-proven), so we try to get the agent directory HTML directly.
+  // If this works we don't need Tavily for URL discovery at all.
+  const DIRECT_PROBE_UA =
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+  // Will be populated per (city, source) below.
 
   // Ensure the Agent table exists. Vercel doesn't auto-run Prisma
   // migrations, so we create it on-demand the first time a route
@@ -380,61 +496,61 @@ export async function POST(req: NextRequest) {
         const hints = src.directoryHints(targetCity, subAreas);
         const allUrls: string[] = [];
         const seenUrls = new Set<string>();
-        // LCP-90 audit: prove whether the empty-result problem is
-        // "Tavily index doesn't cover this domain" or "Tavily has
-        // URLs but they don't match the agent-profile regex".
-        for (const hint of hints) {
-          if (allUrls.length >= limit) break;
-          const searchAnswer = await fetchTavilyWebAnswer(hint, {
-            maxResults: Math.min(20, limit),
-            includeDomains: [src.domain],
-          });
-          if (!searchAnswer) {
-            audit.push({
-              city: targetCity,
-              source: sourceId,
-              hint,
-              tavilyReturned: 0,
-              firstUrls: [],
-              matchedRegex: 0,
-            });
-            continue;
-          }
-          const urls = (searchAnswer.sources ?? []).map((s: any) => s?.url).filter(Boolean);
-          let matched = 0;
-          for (const u of urls) {
-            if (u && src.profileUrlMatch.test(u) && !seenUrls.has(u)) {
+
+        // LCP-90 PRIMARY: direct fetch of the agent directory page.
+        // Tavily's index returns 0 URLs for property24.com /
+        // privateproperty.co.za (audit-proven), so we go straight to
+        // the source. If the site returns 200 with profile URLs in
+        // the HTML, we skip Tavily entirely for this city.
+        const direct = await directFetchAgentUrls(
+          sourceId,
+          src.domain,
+          src.profileUrlMatch,
+          targetCity,
+        );
+        audit.push({
+          city: targetCity,
+          source: sourceId,
+          hint: `[direct-fetch] ${sourceId} /${targetCity}`,
+          tavilyReturned: direct.urls.length,
+          firstUrls: direct.urls.slice(0, 3),
+          matchedRegex: direct.urls.length,
+        });
+        if (direct.urls.length > 0) {
+          for (const u of direct.urls.slice(0, limit)) {
+            if (!seenUrls.has(u)) {
               seenUrls.add(u);
               allUrls.push(u);
-              matched += 1;
             }
           }
+          if (direct.error) {
+            errors.push(`${sourceId}/${targetCity} direct-fetch partial: ${direct.error}`);
+          }
+        } else {
+          // Direct fetch failed — fall back to Tavily.
           audit.push({
             city: targetCity,
             source: sourceId,
-            hint,
-            tavilyReturned: urls.length,
-            firstUrls: urls.slice(0, 3),
-            matchedRegex: matched,
+            hint: `[direct-fetch failed: ${direct.error ?? "HTTP " + direct.httpStatus}]`,
+            tavilyReturned: 0,
+            firstUrls: [],
+            matchedRegex: 0,
           });
         }
-        // LCP-90 fallback: if domain-restricted search returned 0,
-        // try the same hints WITHOUT includeDomains. The audit proved
-        // Tavily's index returns nothing for property24.com /
-        // privateproperty.co.za when forced — but the general web
-        // index may still have those URLs. The regex is the gate.
+
+        // Tavily fallback (only runs if direct fetch returned 0 URLs)
         if (allUrls.length === 0) {
           for (const hint of hints) {
             if (allUrls.length >= limit) break;
             const searchAnswer = await fetchTavilyWebAnswer(hint, {
               maxResults: Math.min(20, limit),
-              // No includeDomains — let Tavily search the open web.
+              includeDomains: [src.domain],
             });
             if (!searchAnswer) {
               audit.push({
                 city: targetCity,
                 source: sourceId,
-                hint: `[fallback no-domain] ${hint}`,
+                hint,
                 tavilyReturned: 0,
                 firstUrls: [],
                 matchedRegex: 0,
@@ -453,11 +569,28 @@ export async function POST(req: NextRequest) {
             audit.push({
               city: targetCity,
               source: sourceId,
-              hint: `[fallback no-domain] ${hint}`,
+              hint,
               tavilyReturned: urls.length,
               firstUrls: urls.slice(0, 3),
               matchedRegex: matched,
             });
+          }
+          // No-domain fallback if still 0
+          if (allUrls.length === 0) {
+            for (const hint of hints) {
+              if (allUrls.length >= limit) break;
+              const searchAnswer = await fetchTavilyWebAnswer(hint, {
+                maxResults: Math.min(20, limit),
+              });
+              if (!searchAnswer) continue;
+              const urls = (searchAnswer.sources ?? []).map((s: any) => s?.url).filter(Boolean);
+              for (const u of urls) {
+                if (u && src.profileUrlMatch.test(u) && !seenUrls.has(u)) {
+                  seenUrls.add(u);
+                  allUrls.push(u);
+                }
+              }
+            }
           }
         }
         if (allUrls.length === 0) {
@@ -468,19 +601,22 @@ export async function POST(req: NextRequest) {
 // 2. Try to extract agent info from each profile page
       const agentsAll: ExtractedAgent[] = [];
       let extracted: { url: string; rawContent: string }[] = [];
-      try {
-        // advanced depth returns fuller HTML — better chance of finding
-        // phone numbers even when "Show contact" gates them in the UI.
-        const result = await extractTavilyUrls(allUrls, { extractDepth: "advanced" });
-        if (result && result.results.length > 0) {
-            extracted = result.results
-              .map((r) => ({ url: r.url, rawContent: r.rawContent ?? "" }))
-              .filter((p) => p.rawContent.length > 100);
-            pagesExtracted += extracted.length;
-          }
-        } catch (e) {
-          errors.push(`${sourceId}/${targetCity}: extractTavilyUrls failed: ${e instanceof Error ? e.message : String(e)}`);
+      // LCP-90 PRIMARY: fetch each profile page directly. If the site
+      // returns HTML with the phone in static markup (most SA sites do
+      // even when the UI hides it behind "Show contact"), we get
+      // phones for free.
+      for (const u of allUrls) {
+        const { html, httpStatus, error } = await directFetchProfileHtml(u);
+        if (html && html.length > 200) {
+          extracted.push({ url: u, rawContent: html });
+          pagesExtracted += 1;
+        } else if (error) {
+          errors.push(`${sourceId}/${targetCity} profile fetch: ${u} → ${error}`);
         }
+        // LCP-90 throttle: small delay between profile fetches to avoid
+        // hammering the site. 200ms × 20 URLs = 4s per city.
+        await new Promise((r) => setTimeout(r, 200));
+      }
 
         // 3. Extract agents from URL pattern (works even if /extract failed)
         // The URL pattern itself is the most reliable signal: the slug encodes the name.
