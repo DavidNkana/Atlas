@@ -342,6 +342,17 @@ export async function POST(req: NextRequest) {
   let agentsFound = 0;
   let firstPagePreview: string | null = null;
   const errors: string[] = [];
+  // LCP-90 audit: collect per-(city,source,hint) Tavily results so
+  // when the route returns 0 saved we can tell whether Tavily returned
+  // 0 URLs vs Tavily returned URLs but none matched our regex.
+  const audit: Array<{
+    city: string;
+    source: string;
+    hint: string;
+    tavilyReturned: number;
+    firstUrls: string[];
+    matchedRegex: number;
+  }> = [];
 
   // Outer loop: iterate across cities when scrapeAll=true.
   // Vercel maxDuration is 300s. ~25s/city × 12 cities = 300s budget.
@@ -375,15 +386,35 @@ export async function POST(req: NextRequest) {
             maxResults: Math.min(20, limit),
             includeDomains: [src.domain],
           });
-          if (!searchAnswer) continue;
-          for (const s of searchAnswer.sources ?? []) {
-            if (s?.url && src.profileUrlMatch.test(s.url) && !seenUrls.has(s.url)) {
-              seenUrls.add(s.url);
-              allUrls.push(s.url);
+          if (!searchAnswer) {
+            audit.push({
+              city: targetCity,
+              source: sourceId,
+              hint,
+              tavilyReturned: 0,
+              firstUrls: [],
+              matchedRegex: 0,
+            });
+            continue;
+          }
+          const urls = (searchAnswer.sources ?? []).map((s: any) => s?.url).filter(Boolean);
+          let matched = 0;
+          for (const u of urls) {
+            if (u && src.profileUrlMatch.test(u) && !seenUrls.has(u)) {
+              seenUrls.add(u);
+              allUrls.push(u);
+              matched += 1;
             }
           }
+          audit.push({
+            city: targetCity,
+            source: sourceId,
+            hint,
+            tavilyReturned: urls.length,
+            firstUrls: urls.slice(0, 3),
+            matchedRegex: matched,
+          });
         }
-        urlsFound += allUrls.length;
         if (allUrls.length === 0) {
           errors.push(`${sourceId}/${targetCity}: no agent profile URLs found`);
           continue;
@@ -511,6 +542,10 @@ export async function POST(req: NextRequest) {
       agentsFound,
       firstPagePreview: firstPagePreview ? firstPagePreview.replace(/\s+/g, " ").slice(0, 400) : null,
     },
+    // LCP-90 audit: included when no agents were saved so we can tell
+    // whether Tavily returned 0 URLs vs returned URLs that didn't match
+    // our regex. Truncated to first 12 entries to keep response small.
+    audit: totalSaved === 0 ? audit.slice(0, 12) : undefined,
     errors: errors.length > 0 ? errors.slice(0, 5) : undefined,
   });
 }
