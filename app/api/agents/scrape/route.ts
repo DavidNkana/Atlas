@@ -29,11 +29,19 @@ const SOURCES = [
     id: "property24",
     name: "Property24",
     domain: "property24.com",
+    // Query shape: short natural-language phrases. include_domains is set
+    // on the Tavily call, so we don't repeat `site:` here — that
+    // double-signaling was returning 0 results in production.
+    // Multiple shapes give us a better chance against dynamic / poorly
+    // indexed pages.
     directoryHints: (city: string, subAreas: string[]) => [
-      `site:property24.com ${city} estate agents directory contact phone Property Practitioner`,
-      `site:property24.com ${city} estate-agents contact agent phone Property Practitioner`,
-      ...subAreas.flatMap((a) => [
-        `site:property24.com ${a} estate agents Property Practitioner contact phone`,
+      `${city} estate agents contact`,
+      `${city} property practitioner profile`,
+      `${city} real estate agent directory`,
+      `${city} estate agent phone number`,
+      ...subAreas.slice(0, 4).flatMap((a) => [
+        `${a} estate agents contact`,
+        `${a} property practitioner`,
       ]),
     ],
     profileUrlMatch: /^https?:\/\/(?:www\.)?property24\.com\/estate-agents\/[^/]+\/[^/]+\/\d+/i,
@@ -44,9 +52,13 @@ const SOURCES = [
     name: "Private Property",
     domain: "privateproperty.co.za",
     directoryHints: (city: string, subAreas: string[]) => [
-      `site:privateproperty.co.za ${city} estate agents contact phone Property Practitioner`,
-      ...subAreas.flatMap((a) => [
-        `site:privateproperty.co.za ${a} estate agents contact phone Property Practitioner`,
+      `${city} estate agents contact`,
+      `${city} private property agents profile`,
+      `${city} property practitioner`,
+      `${city} real estate agent directory`,
+      ...subAreas.slice(0, 4).flatMap((a) => [
+        `${a} estate agents contact`,
+        `${a} property practitioner`,
       ]),
     ],
     profileUrlMatch: /^https?:\/\/(?:www\.)?privateproperty\.co\.za\/[^/]+\/[^/]+\/\d+/i,
@@ -378,12 +390,14 @@ export async function POST(req: NextRequest) {
           continue;
         }
 
-        // 2. Try to extract agent info from each profile page
-        const agentsAll: ExtractedAgent[] = [];
-        let extracted: { url: string; rawContent: string }[] = [];
-        try {
-          const result = await extractTavilyUrls(allUrls);
-          if (result && result.results.length > 0) {
+// 2. Try to extract agent info from each profile page
+      const agentsAll: ExtractedAgent[] = [];
+      let extracted: { url: string; rawContent: string }[] = [];
+      try {
+        // advanced depth returns fuller HTML — better chance of finding
+        // phone numbers even when "Show contact" gates them in the UI.
+        const result = await extractTavilyUrls(allUrls, { extractDepth: "advanced" });
+        if (result && result.results.length > 0) {
             extracted = result.results
               .map((r) => ({ url: r.url, rawContent: r.rawContent ?? "" }))
               .filter((p) => p.rawContent.length > 100);
