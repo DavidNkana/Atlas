@@ -9,6 +9,12 @@ import { fetchTavilyWebAnswer, extractTavilyUrls } from "@/lib/connectors/tavily
  * Scrapes agents from property listing pages on Property24 and
  * Private Property. Uses regex extraction (no LLM) for reliable
  * parsing of Property24's HTML structure.
+ *
+ * Property24 agent block (typical):
+ *   <a href="/agents/laleh-golestani-12345">Laleh Golestani</a>
+ *   <span>Property Practitioner</span>
+ *   <a href="tel:+27115551234">+27 11 555 1234</a>
+ *   <a href="mailto:laleh@example.com">laleh@example.com</a>
  */
 
 export const dynamic = "force-dynamic";
@@ -22,6 +28,7 @@ const SOURCES = [
       `site:property24.com ${city} for sale contact agent phone Property Practitioner`,
     extraHints: (city: string) => [
       `site:property24.com ${city} to rent contact agent phone`,
+      `site:property24.com property ${city} Property Practitioner contact`,
     ],
   },
   {
@@ -45,23 +52,35 @@ interface ExtractedAgent {
   area: string | null;
 }
 
+// Regex extractors — work directly on the HTML
 function extractAgentsViaRegex(rawHtml: string, pageUrl: string): ExtractedAgent[] {
   const agents: ExtractedAgent[] = [];
   const seen = new Set<string>();
 
+  // Property24 has agent blocks in the page. Pattern:
+  //   <h2 class="...">Laleh Golestani</h2>
+  //   or <a class="...">Laleh Golestani</a>
+  //   followed by phone and email
+
+  // Strict name patterns — only names that look like real person names
+  // (Two capitalized words, no common UI/button text).
+  // The negative lookbehind/lookahead filter out "South Africa",
+  // "Find Estate", "Property Portfolio", etc.
   const BLOCKED_NAMES = new Set([
     "South Africa", "North West", "Western Cape", "Eastern Cape",
     "Northern Cape", "KwaZulu Natal", "Free State", "Mpumalanga", "Limpopo",
     "Find Estate", "Find Letting", "Find Sales", "Find Rent", "Find Property",
-    "Ratings And Reviews", "Property Portfolio", "View All",
+    "Ratings And Reviews", "Property Portfolio", "View All", "View All",
     "Properties For Sale", "Contact Agent", "Get In Touch", "Read More",
     "Add To", "Send Inquiry", "View Details", "Make An", "Book Viewing",
     "View More", "Read Less", "Show More", "Show Less", "Load More",
+    "Recent Posts", "Latest Properties", "Featured Properties",
   ]);
 
   const namePatterns = [
-    /Property Practitioner[\s\S]{0,500}?([A-Z][a-z]+ [A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/g,
-    /class="[^"]*p24[^"]*agentName[^"]*"[^>]*>([^<]+)</g,
+    /Property Practitioner\s*<\/[^>]+>\s*([A-Z][a-z]+ [A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/g,
+    /<h\d[^>]*class="[^"]*p24[^"]*agentName[^"]*"[^>]*>([^<]+)</g,
+    /<a[^>]*class="[^"]*p24[^"]*agentName[^"]*"[^>]*>([^<]+)</g,
   ];
 
   for (const re of namePatterns) {
@@ -69,22 +88,29 @@ function extractAgentsViaRegex(rawHtml: string, pageUrl: string): ExtractedAgent
     while ((match = re.exec(rawHtml)) !== null) {
       const name = match[1].trim().replace(/\s+/g, " ");
       if (seen.has(name) || name.length < 5 || name.length > 60) continue;
+      // Filter out known UI text and common non-person phrases
       if (BLOCKED_NAMES.has(name)) continue;
-      if (/^(The|A|An|This|These|View|Show|Add|Save|Share|Click|Submit|Read|Properties)/i.test(name)) continue;
+      if (/^(The |A |An |This |These |View |Show |Add |Save |Share |Click |Submit |Read )/i.test(name)) continue;
       if (/\b(Road|Street|Avenue|Lane|Province|Region|Country|City|Town)\b/i.test(name)) continue;
-      if (!/^[A-Z][a-z]+(\s[A-Z][a-z]+)+$/.test(name)) continue;
+      if (!/^[A-Z][a-z]+(\s[A-Z][a-z]+)+$/.test(name) && !/^[A-Z][a-z]+\s[A-Z]\.\s[A-Z][a-z]+$/.test(name)) {
+        // Allow: "First Last" or "First M. Last" but not single words
+        continue;
+      }
       seen.add(name);
 
       const ctx = rawHtml.slice(Math.max(0, match.index - 500), match.index + match[0].length + 1500);
 
+      // Require a phone number in the context — strongest signal of a real agent
       const phoneMatch = ctx.match(/(\+27|0)\s?[\d\s()-]{8,15}/);
       if (!phoneMatch) continue;
       const phone = phoneMatch[0].trim();
 
+      // Email
       const emailMatch = ctx.match(/[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
       const email = emailMatch ? emailMatch[0] : null;
 
-      const agencyPatterns = [
+      // Agency name
+      const agencyPatterns: RegExp[] = [
         /Pam Golding Properties/i,
         /Seeff/i,
         /Chas\s+Everitt|Chase\s+Versitt/i,
@@ -100,6 +126,9 @@ function extractAgentsViaRegex(rawHtml: string, pageUrl: string): ExtractedAgent
         /Royal\s+LePage/i,
         /Coldwell\s*Banker/i,
         /O\s*Yes\s*Properties/i,
+        /Traven\s*Properties/i,
+        /Keller\s*Williams/i,
+        /RE\/MAX/i,
       ];
       let agencyName: string | null = null;
       for (const ap of agencyPatterns) {
@@ -109,6 +138,18 @@ function extractAgentsViaRegex(rawHtml: string, pageUrl: string): ExtractedAgent
           break;
         }
       }
+
+      agents.push({
+        name,
+        agency: agencyName,
+        phone,
+        email,
+        profileUrl: pageUrl,
+        city: null,
+        area: null,
+      });
+    }
+  }
 
       agents.push({
         name,
@@ -137,7 +178,7 @@ export async function POST(req: NextRequest) {
   const limit: number = Math.min(body?.limit ?? 10, 30);
 
   if (!process.env.TAVILY_API_KEY) {
-    return NextResponse.json({ error: "TAVILY_API_KEY not set" }, { status: 500 });
+  return NextResponse.json({ error: "TAVILY_API_KEY not set" }, { status: 500 });
   }
 
   // Ensure the Agent table exists. Vercel doesn't auto-run Prisma
@@ -207,7 +248,7 @@ export async function POST(req: NextRequest) {
         .slice(0, limit);
 
       if (urls.length === 0) {
-        errors.push(`${sourceId}: no listing URLs after filter for ${city}`);
+        errors.push(`${sourceId}: no listing URLs found for ${city}`);
         continue;
       }
 
@@ -220,12 +261,12 @@ export async function POST(req: NextRequest) {
       pagesExtracted += extracted.results.length;
 
       // 4. Extract agents using regex (no LLM)
-      const agentsAll: ExtractedAgent[] = [];
+      let agentsAll: ExtractedAgent[] = [];
       for (const r of extracted.results) {
         if (!r.rawContent || r.rawContent.length < 100) continue;
         if (!firstPagePreview) firstPagePreview = r.rawContent.slice(0, 500);
         const got = extractAgentsViaRegex(r.rawContent, r.url);
-        agentsAll.push(...got);
+        agentsAll = agentsAll.concat(got);
       }
       agentsFound = agentsAll.length;
 
