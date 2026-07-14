@@ -29,8 +29,7 @@
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "resend": "^6.14.0",
-    "stripe": "^17.7.0",
-    "xlsx": "^0.18.5"
+    "stripe": "^17.7.0"
   },
   "devDependencies": {
     "@types/mapbox-gl": "^3.4.1",
