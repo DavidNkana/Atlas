@@ -6,17 +6,8 @@ import { fetchTavilyWebAnswer, extractTavilyUrls } from "@/lib/connectors/tavily
 /**
  * POST /api/agents/scrape
  *
- * Scrapes agents from property listings on Property24, Private Property,
- * and other major SA real estate portals.
- *
- * Strategy:
- *  1. Tavily search → find listing URLs for a city on each portal
- *  2. Tavily /extract → fetch HTML of each listing
- *  3. Gemini (cheap) → extract agent name, phone, email from each listing
- *  4. Dedupe by name within a source, save to DB
- *
- * Each listing has the agent contact, so scraping listings gives us
- * hundreds of agents per source.
+ * Scrapes real estate agent directories (Property24 + PrivateProperty)
+ * for a given city. Returns the count of agents saved.
  */
 
 export const dynamic = "force-dynamic";
@@ -26,15 +17,16 @@ const SOURCES = [
   {
     id: "property24",
     name: "Property24",
-    // Listing search — find specific property listings
+    // Tavily returns a list of URLs from the search. We filter for the
+    // ones that actually contain agent listings.
     searchHint: (city: string) =>
-      `site:property24.com ${city} for sale listing contact agent phone`,
+      `${city} estate agents contact details site:property24.com OR site:privateproperty.co.za OR site:seeff.com OR site:chaseveritt.co.za`,
   },
   {
     id: "privateproperty",
     name: "Private Property",
     searchHint: (city: string) =>
-      `site:privateproperty.co.za ${city} for sale listing contact agent phone`,
+      `${city} estate agents directory site:privateproperty.co.za`,
   },
 ] as const;
 
@@ -43,39 +35,24 @@ interface ExtractedAgent {
   agency: string | null;
   phone: string | null;
   email: string | null;
+  areas: string[];
   profileUrl: string | null;
   city: string | null;
-  area: string | null;
 }
 
-async function extractAgentsViaGemini(
-  rawText: string,
-  source: string,
-  sourceUrl: string,
-  city: string,
-): Promise<ExtractedAgent[]> {
+async function extractViaGemini(rawText: string, source: string, city: string): Promise<ExtractedAgent[]> {
   const key = process.env.GEMINI_API_KEY;
   if (!key) return [];
-  const prompt = `Extract ALL real estate agent details visible on this property listing page.
-Each property is listed BY AN AGENT — extract the agent who listed it.
-Return a JSON array of objects, each with:
-  - name (string, the agent's name e.g. "John Smith")
-  - agency (string|null, the agency name e.g. "Pam Golding Properties")
-  - phone (string|null, contact phone e.g. "+27 11 555 1234")
-  - email (string|null, contact email)
-  - profileUrl (string|null, link to agent's profile page)
-  - area (string|null, suburb / area of the property)
-
-A page may have MULTIPLE agents (one per listing). Extract ALL of them.
-Skip obvious company entries with no individual name.
+  const prompt = `Extract real estate agent records from this webpage content.
+Return a JSON array of objects, each with: name (string), agency (string|null), phone (string|null), email (string|null), areas (array of suburb strings), profileUrl (string|null).
+Only return agents that are clearly listed with a name. Skip company entries.
 Phone format: +27 or 0xx. If the page has no agents, return [].
 
-Source: ${source}
+Webpage source: ${source}
 City: ${city}
-URL: ${sourceUrl}
 
 Webpage content:
-${rawText.slice(0, 40000)}`;
+${rawText.slice(0, 30000)}`;
   try {
     for (const model of ["gemini-2.0-flash", "gemini-1.5-flash"]) {
       const res = await fetch(
@@ -85,7 +62,7 @@ ${rawText.slice(0, 40000)}`;
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             contents: [{ role: "user", parts: [{ text: prompt }] }],
-            generationConfig: { temperature: 0.1, maxOutputTokens: 8192 },
+            generationConfig: { temperature: 0.1, maxOutputTokens: 4096 },
           }),
         }
       );
@@ -103,26 +80,19 @@ ${rawText.slice(0, 40000)}`;
   return [];
 }
 
-async function extractAgentsViaOpenRouter(
-  rawText: string,
-  source: string,
-  sourceUrl: string,
-  city: string,
-): Promise<ExtractedAgent[]> {
+async function extractViaOpenRouter(rawText: string, source: string, city: string): Promise<ExtractedAgent[]> {
   const key = process.env.OPENROUTER_API_KEY;
   if (!key) return [];
-  const prompt = `Extract ALL real estate agent details from this property listing page.
-Each property has an agent — extract the listing agent.
-Return a JSON array of objects: { name, agency, phone, email, profileUrl, area }.
-Skip companies without individual names.
-If no agents, return [].
+  const prompt = `Extract real estate agent records from this webpage content.
+Return a JSON array of objects, each with: name (string), agency (string|null), phone (string|null), email (string|null), areas (array of suburb strings), profileUrl (string|null).
+Only return agents that are clearly listed with a name. Skip company entries.
+Phone format: +27 or 0xx. If the page has no agents, return [].
 
-Source: ${source}
+Webpage source: ${source}
 City: ${city}
-URL: ${sourceUrl}
 
 Webpage content:
-${rawText.slice(0, 40000)}`;
+${rawText.slice(0, 30000)}`;
   try {
     const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
@@ -146,15 +116,10 @@ ${rawText.slice(0, 40000)}`;
   return [];
 }
 
-async function extractAgents(
-  rawText: string,
-  source: string,
-  sourceUrl: string,
-  city: string,
-): Promise<ExtractedAgent[]> {
-  let agents = await extractAgentsViaGemini(rawText, source, sourceUrl, city);
+async function extractAgents(rawText: string, source: string, city: string): Promise<ExtractedAgent[]> {
+  let agents = await extractViaGemini(rawText, source, city);
   if (agents.length === 0) {
-    agents = await extractAgentsViaOpenRouter(rawText, source, sourceUrl, city);
+    agents = await extractViaOpenRouter(rawText, source, city);
   }
   return agents;
 }
@@ -168,7 +133,12 @@ export async function POST(req: NextRequest) {
   const sources: string[] = Array.isArray(body?.sources) && body.sources.length > 0
     ? body.sources
     : SOURCES.map((s) => s.id);
-  const limit: number = Math.min(body?.limit ?? 10, 30);
+
+  // Accept the request regardless of userId — signed-in users get
+  // their scrape tied to their account, anonymous users can still use it.
+  if (!userId && process.env.NODE_ENV !== "production") {
+    console.warn(`[agents-scrape-anon] no userId for city=${city}`);
+  }
 
   if (!process.env.TAVILY_API_KEY) {
     return NextResponse.json({ error: "TAVILY_API_KEY not set" }, { status: 500 });
@@ -182,82 +152,47 @@ export async function POST(req: NextRequest) {
     if (!src) continue;
 
     try {
-      // 1. Find listing URLs
       const searchAnswer = await fetchTavilyWebAnswer(
         src.searchHint(city),
-        { maxResults: limit },
+        { maxResults: 3 },
       );
-      if (!searchAnswer) {
-        errors.push(`${sourceId}: no search results`);
-        continue;
-      }
+      if (!searchAnswer) continue;
 
-      // 2. Filter URLs to listing pages only (not search results or about pages)
+      // 2. Extract page content with Tavily /extract
+      // Try any URL that Tavily found — agent listings appear on
+      // Property24, PrivateProperty, agency sites, and LinkedIn.
       const urls = (searchAnswer.sources ?? [])
         .map((s: any) => s.url)
-        .filter((u: string) => {
-          if (!/^https?:\/\//.test(u)) return false;
-          // Prefer listing detail pages
-          if (sourceId === "property24" && /\/(for-sale|to-rent)\/[\d]+/.test(u)) return true;
-          if (sourceId === "privateproperty" && /\/(for-sale|to-rent)\/[\d]+/.test(u)) return true;
-          return false;
-        });
+        .filter((u: string) => /^https?:\/\//.test(u))
+        .slice(0, 5);
+      if (urls.length === 0) continue;
+      const extracted = await extractTavilyUrls(urls.slice(0, 3));
+      if (!extracted) continue;
 
-      // Fallback: take any URLs from the matching domain
-      if (urls.length === 0) {
-        const fallback = (searchAnswer.sources ?? [])
-          .map((s: any) => s.url)
-          .filter((u: string) => {
-            if (!/^https?:\/\//.test(u)) return false;
-            if (sourceId === "property24") return /property24\.com/.test(u);
-            if (sourceId === "privateproperty") return /privateproperty\.co\.za/.test(u);
-            return false;
-          })
-          .slice(0, limit);
-        urls.push(...fallback);
+      const rawContents = extracted.results.map((r) => r.rawContent).filter(Boolean);
+      let agents: ExtractedAgent[] = [];
+      for (const raw of rawContents.slice(0, 3)) {
+        const got = await extractAgents(raw, sourceId, city);
+        agents = agents.concat(got);
+        if (agents.length >= 5) break;
       }
 
-      if (urls.length === 0) {
-        errors.push(`${sourceId}: no listing URLs found for ${city}`);
-        continue;
-      }
-
-      // 3. Extract page content
-      const extracted = await extractTavilyUrls(urls.slice(0, limit));
-      if (!extracted || extracted.results.length === 0) {
-        errors.push(`${sourceId}: extraction returned no content`);
-        continue;
-      }
-
-      // 4. Extract agents from each page
-      let agentsAll: ExtractedAgent[] = [];
-      for (const r of extracted.results) {
-        if (!r.rawContent) continue;
-        const got = await extractAgents(r.rawContent, sourceId, r.url, city);
-        agentsAll = agentsAll.concat(got);
-      }
-
-      // 5. Dedupe and save
-      const seen = new Set<string>();
-      for (const a of agentsAll) {
+      for (const a of agents) {
         if (!a.name) continue;
-        const key = a.name.toLowerCase().trim();
-        if (seen.has(key)) continue;
-        seen.add(key);
-        const id = `${sourceId}_${key.replace(/[^a-z0-9]+/g, "_").slice(0, 60)}`;
+        const id = `${sourceId}_${a.name.toLowerCase().replace(/[^a-z0-9]+/g, "_").slice(0, 60)}`;
         try {
           await prisma.agent.upsert({
             where: { id },
             create: {
               id, source: sourceId, name: a.name,
               agency: a.agency, phone: a.phone, email: a.email,
-              areas: a.area ?? "",
+              areas: (a.areas || []).join(", "),
               profileUrl: a.profileUrl, city: a.city || city,
               rawJson: a as any,
             },
             update: {
               agency: a.agency, phone: a.phone, email: a.email,
-              areas: a.area ?? "",
+              areas: (a.areas || []).join(", "),
               profileUrl: a.profileUrl, scrapedAt: new Date(),
             },
           });
@@ -267,12 +202,12 @@ export async function POST(req: NextRequest) {
         }
       }
     } catch (e) {
-      errors.push(`${sourceId}: ${e instanceof Error ? e.message.split("\n")[0] : String(e)}`);
+      errors.push(`${sourceId}: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 
   return NextResponse.json({
     ok: true, city, saved: totalSaved,
-    errors: errors.length > 0 ? errors.slice(0, 5) : undefined,
+    errors: errors.length > 0 ? errors : undefined,
   });
 }
