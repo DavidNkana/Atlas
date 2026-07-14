@@ -1,12 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getAuth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/db";
-import {
-  fetchTavilyWebAnswer,
-  extractTavilyUrls,
-  bustTavilyWebCache,
-  TavilyQuotaError,
-} from "@/lib/connectors/tavily-search";
+import { fetchTavilyWebAnswer, extractTavilyUrls, bustTavilyWebCache } from "@/lib/connectors/tavily-search";
 
 /**
  * POST /api/agents/scrape
@@ -35,17 +30,19 @@ const SOURCES = [
     name: "Property24",
     domain: "property24.com",
     // Query shape: short natural-language phrases. include_domains is set
-    // on the Tavily call, so we don't repeat `site:` here.
-    // LCP-90 quota guard: only 1 primary hint per (city × source).
-    // The free Tavily tier throttles hard (~432 after 5 calls/min) so
-    // we used to burn 4-8 hints × 2 sources × 12 cities = ~190 search
-    // calls per scrapeAll. Now: 2 hints × 2 sources × 12 = 48 max,
-    // and the route stops at the first hit that yields >= limit URLs.
+    // on the Tavily call, so we don't repeat `site:` here — that
+    // double-signaling was returning 0 results in production.
+    // Multiple shapes give us a better chance against dynamic / poorly
+    // indexed pages.
     directoryHints: (city: string, subAreas: string[]) => [
       `${city} estate agents contact`,
-      ...(subAreas.length > 0
-        ? [`${subAreas[0]} estate agents contact`]
-        : []),
+      `${city} property practitioner profile`,
+      `${city} real estate agent directory`,
+      `${city} estate agent phone number`,
+      ...subAreas.slice(0, 4).flatMap((a) => [
+        `${a} estate agents contact`,
+        `${a} property practitioner`,
+      ]),
     ],
     profileUrlMatch: /^https?:\/\/(?:www\.)?property24\.com\/estate-agents\/[^/]+\/[^/]+\/\d+/i,
     profilePathPrefix: "https://www.property24.com/estate-agents/",
@@ -56,9 +53,13 @@ const SOURCES = [
     domain: "privateproperty.co.za",
     directoryHints: (city: string, subAreas: string[]) => [
       `${city} estate agents contact`,
-      ...(subAreas.length > 0
-        ? [`${subAreas[0]} estate agents contact`]
-        : []),
+      `${city} private property agents profile`,
+      `${city} property practitioner`,
+      `${city} real estate agent directory`,
+      ...subAreas.slice(0, 4).flatMap((a) => [
+        `${a} estate agents contact`,
+        `${a} property practitioner`,
+      ]),
     ],
     profileUrlMatch: /^https?:\/\/(?:www\.)?privateproperty\.co\.za\/[^/]+\/[^/]+\/\d+/i,
     profilePathPrefix: "",
@@ -468,36 +469,6 @@ export async function POST(req: NextRequest) {
           }
         }
       } catch (e) {
-        // LCP-90 quota guard: if Tavily hit its rate limit / monthly
-        // credit cap, stop the whole scrape right now. Continuing would
-        // burn more calls and 432 every subsequent request, producing
-        // a useless "0 saved" response. Surface the quota error so the
-        // UI can show a clear message.
-        if (e instanceof TavilyQuotaError) {
-          return NextResponse.json({
-            ok: false,
-            quotaExceeded: true,
-            tavilyStatus: e.status,
-            message: e.message,
-            hint: e.hint,
-            city,
-            saved: totalSaved,
-            partial: {
-              citiesCompleted: targetCities.indexOf(targetCity),
-              totalCities: targetCities.length,
-              urlsFound,
-              pagesExtracted,
-              agentsFound,
-            },
-            debug: {
-              urlsFound,
-              pagesExtracted,
-              agentsFound,
-              firstPagePreview: firstPagePreview ? firstPagePreview.replace(/\s+/g, " ").slice(0, 400) : null,
-            },
-            errors: errors.length > 0 ? errors.slice(0, 5) : undefined,
-          }, { status: 429 });
-        }
         errors.push(`${sourceId}/${targetCity}: ${e instanceof Error ? e.message.split("\n")[0] : String(e)}`);
       }
     }

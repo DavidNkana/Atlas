@@ -67,17 +67,6 @@ export function bustTavilyWebCache(query?: string): void {
   }
 }
 
-export class TavilyQuotaError extends Error {
-  readonly status: number;
-  readonly hint: string;
-  constructor(status: number, hint: string) {
-    super(`Tavily quota exceeded (HTTP ${status}). ${hint}`);
-    this.name = "TavilyQuotaError";
-    this.status = status;
-    this.hint = hint;
-  }
-}
-
 export async function fetchTavilyWebAnswer(
   question: string,
   options: {
@@ -139,18 +128,6 @@ export async function fetchTavilyWebAnswer(
     });
 
     if (!res.ok) {
-      // LCP-90 quota guard: Tavily returns HTTP 432 on free-tier rate
-      // limits / monthly credit exhaustion. Surface this as a typed
-      // exception so the route can bail with a clear error instead
-      // of silently treating it as "no results found".
-      if (res.status === 432 || res.status === 429) {
-        const body = await res.text().catch(() => "");
-        console.warn(`[tavily-web] HTTP ${res.status} quota/rate-limit: ${body.slice(0, 200)}`);
-        throw new TavilyQuotaError(
-          res.status,
-          "Free-tier quota or rate limit hit. Either wait, reduce scrape scope, or upgrade Tavily plan.",
-        );
-      }
       console.warn(`[tavily-web] HTTP ${res.status}`);
       return null;
     }
@@ -218,24 +195,13 @@ export async function extractTavilyUrls(
         extract_depth: options.extractDepth ?? "basic",
       }),
     });
-    // LCP-90 quota guard: surface 429/432 as typed exception so caller
-    // can bail instead of silently returning null.
-    if (res.status === 432 || res.status === 429) {
-      const body = await res.text().catch(() => "");
-      console.warn(`[tavily-extract] HTTP ${res.status} quota/rate-limit: ${body.slice(0, 200)}`);
-      throw new TavilyQuotaError(
-        res.status,
-        "Free-tier quota or rate limit hit during page extract. Either wait or reduce scrape scope.",
-      );
-    }
     if (!res.ok) return null;
     const data: any = await res.json();
     return {
       results: (data.results ?? []).map((r: any) => ({ url: r.url, rawContent: r.raw_content ?? "" })),
       failedResults: (data.failed_results ?? []).map((r: any) => ({ url: r.url, error: r.error ?? "unknown" })),
     };
-  } catch (err) {
-    if (err instanceof TavilyQuotaError) throw err;
+  } catch {
     return null;
   }
 }
