@@ -71,29 +71,15 @@ ${rawText.slice(0, 40000)}`;
           }),
         }
       );
-      if (!res.ok) {
-        console.warn(`[agents] Gemini ${model} status=${res.status} url=${sourceUrl.slice(0, 60)}`);
-        continue;
-      }
+      if (!res.ok) continue;
       const data: any = await res.json();
       const text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-      if (!text) {
-        console.warn(`[agents] Gemini ${model} returned empty text url=${sourceUrl.slice(0, 60)} finishReason=${data?.candidates?.[0]?.finishReason}`);
-        continue;
-      }
-      console.log(`[agents] Gemini ${model} text preview url=${sourceUrl.slice(0, 60)}: ${text.slice(0, 300).replace(/\n/g, " ")}`);
-      // Match either a JSON array or a single object wrapper
-      let match = text.match(/\[[\s\S]*?\]/);
-      if (!match) match = text.match(/```json\s*([\s\S]*?)```/);
+      const match = text.match(/\[[\s\S]*\]/);
       if (!match) continue;
       try {
-        const candidate = match[1] || match[0];
-        const parsed = JSON.parse(candidate);
-        if (Array.isArray(parsed)) return parsed;
-        if (Array.isArray(parsed?.agents)) return parsed.agents;
-        if (Array.isArray(parsed?.results)) return parsed.results;
-        return [];
-      } catch (e) { continue; }
+        const parsed = JSON.parse(match[0]);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch { continue; }
     }
   } catch {}
   return [];
@@ -119,40 +105,26 @@ URL: ${sourceUrl}
 
 Webpage content:
 ${rawText.slice(0, 40000)}`;
-  // Try multiple OpenRouter free models
-  const models = ["openai/gpt-4o-mini", "meta-llama/llama-3.1-8b-instruct:free"];
-  for (const modelName of models) {
+  try {
+    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+      body: JSON.stringify({
+        model: "openai/gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.1,
+      }),
+    });
+    if (!res.ok) return [];
+    const data: any = await res.json();
+    const text = data?.choices?.[0]?.message?.content ?? "";
+    const match = text.match(/\[[\s\S]*\]/);
+    if (!match) return [];
     try {
-      const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-        body: JSON.stringify({
-          model: modelName,
-          messages: [{ role: "user", content: prompt }],
-          temperature: 0.1,
-        }),
-      });
-      if (!res.ok) {
-        console.warn(`[agents] OpenRouter ${modelName} status=${res.status}`);
-        continue;
-      }
-      const data: any = await res.json();
-      const text = data?.choices?.[0]?.message?.content ?? "";
-      if (!text) continue;
-      console.log(`[agents] OpenRouter ${modelName} text preview url=${sourceUrl.slice(0, 60)}: ${text.slice(0, 300).replace(/\n/g, " ")}`);
-      let match = text.match(/\[[\s\S]*?\]/);
-      if (!match) match = text.match(/```json\s*([\s\S]*?)```/);
-      if (!match) continue;
-      try {
-        const candidate = match[1] || match[0];
-        const parsed = JSON.parse(candidate);
-        if (Array.isArray(parsed)) return parsed;
-        if (Array.isArray(parsed?.agents)) return parsed.agents;
-        if (Array.isArray(parsed?.results)) return parsed.results;
-        return [];
-      } catch { continue; }
+      const parsed = JSON.parse(match[0]);
+      return Array.isArray(parsed) ? parsed : [];
     } catch {}
-  }
+  } catch {}
   return [];
 }
 
