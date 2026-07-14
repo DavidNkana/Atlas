@@ -246,11 +246,8 @@ export async function POST(req: NextRequest) {
       // inserted junk like "Find Estate" / "Real Estate". We delete them
       // so the user only ever sees the latest clean scrape.
       try {
-        const deleted = await prisma.agent.deleteMany({ where: { source: sourceId, city } });
-        console.log(`[agents] deleted ${deleted.count} stale ${sourceId} records for ${city}`);
-      } catch (e) {
-        console.error("[agents] deleteMany failed:", e instanceof Error ? e.message : String(e));
-      }
+        await prisma.agent.deleteMany({ where: { source: sourceId, city } });
+      } catch {}
 
       // 1. Find agent PROFILE URLs (not listing URLs)
       const subAreas = getSubAreas(city);
