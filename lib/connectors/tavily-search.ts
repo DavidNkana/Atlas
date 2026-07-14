@@ -76,14 +76,6 @@ export async function fetchTavilyWebAnswer(
     maxResults?: number;
     /** Bypass cache (for refreshes). */
     bypassCache?: boolean;
-    /**
-     * Hard domain restriction passed to Tavily as `include_domains`.
-     * Without this, Tavily treats `site:` in the query as a soft hint
-     * and returns general web results — which broke the agents scrape
-     * because the regex needs /estate-agents/agency/name/NUMERIC_ID
-     * URLs that only Property24/PrivateProperty serve.
-     */
-    includeDomains?: string[];
   } = {},
 ): Promise<TavilyWebResult | null> {
   // LCP-31 — Read TAVILY_API_KEY fresh on every call. The previous
@@ -122,7 +114,7 @@ export async function fetchTavilyWebAnswer(
         max_results: Math.min(options.maxResults ?? 5, 10),
         // Bias toward recent facts for finance/real estate queries
         topic: "general",
-        include_domains: options.includeDomains ?? [],
+        include_domains: [],
       }),
       cache: "no-store",
     });

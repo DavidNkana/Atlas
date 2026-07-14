@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getAuth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/db";
-import { fetchTavilyWebAnswer, extractTavilyUrls, bustTavilyWebCache } from "@/lib/connectors/tavily-search";
+import { fetchTavilyWebAnswer, extractTavilyUrls } from "@/lib/connectors/tavily-search";
 
 /**
  * POST /api/agents/scrape
@@ -28,7 +28,6 @@ const SOURCES = [
   {
     id: "property24",
     name: "Property24",
-    domain: "property24.com",
     directoryHints: (city: string, subAreas: string[]) => [
       `site:property24.com ${city} estate agents directory contact phone Property Practitioner`,
       `site:property24.com ${city} estate-agents contact agent phone Property Practitioner`,
@@ -42,7 +41,6 @@ const SOURCES = [
   {
     id: "privateproperty",
     name: "Private Property",
-    domain: "privateproperty.co.za",
     directoryHints: (city: string, subAreas: string[]) => [
       `site:privateproperty.co.za ${city} estate agents contact phone Property Practitioner`,
       ...subAreas.flatMap((a) => [
@@ -296,12 +294,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "TAVILY_API_KEY not set" }, { status: 500 });
   }
 
-  // Safety belt: bust the in-memory Tavily cache at the start of every
-  // scrape request. The previous bug surfaced because a stale empty
-  // result was cached for 30 min and short-circuited all subsequent
-  // calls. We always want a fresh Tavily answer here.
-  bustTavilyWebCache();
-
   // Ensure the Agent table exists. Vercel doesn't auto-run Prisma
   // migrations, so we create it on-demand the first time a route
   // needs it. Safe to run repeatedly — IF NOT EXISTS is idempotent.
@@ -360,10 +352,7 @@ export async function POST(req: NextRequest) {
         const seenUrls = new Set<string>();
         for (const hint of hints) {
           if (allUrls.length >= limit) break;
-          const searchAnswer = await fetchTavilyWebAnswer(hint, {
-            maxResults: Math.min(20, limit),
-            includeDomains: [src.domain],
-          });
+          const searchAnswer = await fetchTavilyWebAnswer(hint, { maxResults: Math.min(20, limit) });
           if (!searchAnswer) continue;
           for (const s of searchAnswer.sources ?? []) {
             if (s?.url && src.profileUrlMatch.test(s.url) && !seenUrls.has(s.url)) {
