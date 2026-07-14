@@ -6,27 +6,24 @@ import * as XLSX from "xlsx";
 /**
  * GET /api/agents/download?format=xlsx|csv|pdf&city=&source=
  *
- * Downloads agent records. Each request gets a fresh file with
- * a unique filename (timestamp + agent count) and a no-store
- * Cache-Control header so browsers and spreadsheets can't serve
- * a cached version of an older scrape.
+ * Downloads agent records in Excel, CSV, or PDF format.
+ *
+ * Auth: required.
  */
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  const _userId = getAuth(req);
-  // Accept the request regardless of userId — agents are shared data.
+  const { userId } = getAuth(req);
+  // Accept the request regardless of userId — agents are shared data,
+  // not per-user. Anyone can download.
 
   const url = new URL(req.url);
   const format = (url.searchParams.get("format") || "xlsx").toLowerCase();
   const city = url.searchParams.get("city") || undefined;
   const source = url.searchParams.get("source") || undefined;
 
-  // Use a precise timestamp so the file name changes on every request
-  // — prevents browsers and spreadsheets from serving a cached copy.
-  const ts = new Date().toISOString().replace(/[:.]/g, "-");
-
+  const ts = new Date().toISOString().slice(0, 10);
   const agents = await prisma.agent.findMany({
     where: {
       ...(city ? { city } : {}),
@@ -34,50 +31,37 @@ export async function GET(req: NextRequest) {
     },
     orderBy: [{ source: "asc" }, { name: "asc" }],
   }).catch((e) => {
-    console.error("[agents-download] prisma error:", e?.message);
+    console.error("[agents-download] prisma error (table may not exist yet):", e?.message);
     return [] as Awaited<ReturnType<typeof prisma.agent.findMany>>;
   });
 
-  const hash = `N${agents.length}`;
-
-  // Empty case: return a file with just the header row.
   if (agents.length === 0) {
-    if (format === "csv") {
-      const headers = "Source,Name,Agency,Phone,Email,City,Areas,ProfileURL,ScrapedAt";
-      return new NextResponse(headers, {
-        headers: {
-          "Content-Type": "text/csv; charset=utf-8",
-          "Cache-Control": "no-store, no-cache, must-revalidate",
-          "Content-Disposition": `attachment; filename="atlas-agents-${ts}-${hash}.csv"`,
-        },
-      });
-    }
-    if (format === "xlsx") {
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(
-        wb,
-        XLSX.utils.json_to_sheet([{ Message: "No agents yet. Run a scrape first." }]),
-        "Empty",
-      );
-      const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
-      return new NextResponse(buf, {
-        headers: {
-          "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-          "Cache-Control": "no-store, no-cache, must-revalidate",
-          "Content-Disposition": `attachment; filename="atlas-agents-${ts}-${hash}.xlsx"`,
-        },
-      });
-    }
-    return new NextResponse(
-      "<p>No agents yet. Run a scrape first.</p>",
-      {
-        headers: {
-          "Content-Type": "text/html; charset=utf-8",
-          "Cache-Control": "no-store, no-cache, must-revalidate",
-        },
+    // Return an empty file with just the header row so the download
+    // still works for the count-detection logic on the frontend.
+  if (format === "csv") {
+    const headers = "Source,Name,Agency,Phone,Email,City,Areas,ProfileURL,ScrapedAt";
+    return new NextResponse(headers, {
+      headers: {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename="atlas-agents-${ts}.csv"`,
       },
-    );
+    });
   }
+  if (format === "xlsx") {
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{ Message: "No agents yet. Run a scrape first." }]), "Empty");
+    const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+    return new NextResponse(buf, {
+      headers: {
+        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Disposition": `attachment; filename="atlas-agents-${ts}.xlsx"`,
+      },
+    });
+  }
+  return new NextResponse("<p>No agents yet. Run a scrape first.</p>", {
+    headers: { "Content-Type": "text/html" },
+  });
+}
 
   const rows = agents.map((a) => ({
     Source: a.source,
@@ -102,21 +86,24 @@ export async function GET(req: NextRequest) {
     return new NextResponse(body, {
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
-        "Cache-Control": "no-store, no-cache, must-revalidate",
-        "Content-Disposition": `attachment; filename="atlas-agents-${ts}-${hash}.csv"`,
+        "Content-Disposition": `attachment; filename="atlas-agents-${ts}.csv"`,
       },
     });
   }
 
   if (format === "xlsx") {
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "All Agents");
+    // All agents sheet
+    const allSheet = XLSX.utils.json_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, allSheet, "All Agents");
+    // Per-source sheets
     for (const src of Array.from(new Set(rows.map((r) => r.Source)))) {
       const sub = rows.filter((r) => r.Source === src);
       const sheet = XLSX.utils.json_to_sheet(sub);
       const name = src.replace(/[^A-Za-z0-9]+/g, " ").slice(0, 28) || src;
       XLSX.utils.book_append_sheet(wb, sheet, name);
     }
+    // Per-city sheets
     for (const c of Array.from(new Set(rows.map((r) => r.City).filter(Boolean)))) {
       const sub = rows.filter((r) => r.City === c);
       const sheet = XLSX.utils.json_to_sheet(sub);
@@ -127,8 +114,7 @@ export async function GET(req: NextRequest) {
     return new NextResponse(buf, {
       headers: {
         "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "Cache-Control": "no-store, no-cache, must-revalidate",
-        "Content-Disposition": `attachment; filename="atlas-agents-${ts}-${hash}.xlsx"`,
+        "Content-Disposition": `attachment; filename="atlas-agents-${ts}.xlsx"`,
       },
     });
   }
@@ -170,7 +156,6 @@ export async function GET(req: NextRequest) {
     return new NextResponse(html, {
       headers: {
         "Content-Type": "text/html; charset=utf-8",
-        "Cache-Control": "no-store, no-cache, must-revalidate",
         "Content-Disposition": `inline; filename="atlas-agents-${ts}.html"`,
       },
     });
