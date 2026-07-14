@@ -210,32 +210,6 @@ function extractAgentsFromUrlsOnly(urls: string[]): ExtractedAgent[] {
   return out;
 }
 
-// Fetch phone + email for each agent via a per-agent Tavily search.
-// Property24's "answer" field often contains the agent's contact info.
-async function enrichAgentsWithContact(
-  agents: ExtractedAgent[],
-  city: string,
-  sourceId: string,
-): Promise<ExtractedAgent[]> {
-  if (!process.env.TAVILY_API_KEY) return agents;
-  for (const a of agents) {
-    if (a.phone) continue;
-    try {
-      const query = sourceId === "property24"
-        ? `site:property24.com "${a.name}" ${a.agency ?? ""} ${city} phone contact mobile office email`
-        : `site:privateproperty.co.za "${a.name}" ${city} contact phone email`;
-      const result = await fetchTavilyWebAnswer(query, { maxResults: 1 });
-      if (!result) continue;
-      const text = result.answer ?? "";
-      const phoneMatch = text.match(/(\+27|0)\s?[\d\s()-]{8,15}/);
-      if (phoneMatch) a.phone = phoneMatch[0].trim();
-      const emailMatch = text.match(/[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
-      if (emailMatch) a.email = emailMatch[0];
-    } catch {}
-  }
-  return agents;
-}
-
 function extractAgentsFromProfileUrls(urls: string[]): ExtractedAgent[] {
   return extractAgentsFromUrlsOnly(urls);
 }
@@ -366,10 +340,7 @@ export async function POST(req: NextRequest) {
       }
       agentsFound = agentsAll.length;
 
-      // 5. Per-agent phone + email enrichment via Tavily answer field
-      await enrichAgentsWithContact(agentsAll, city, sourceId);
-
-      // 6. Dedupe and save
+      // 5. Dedupe and save
       const seen = new Set<string>();
       for (const a of agentsAll) {
         if (!a.name) continue;
