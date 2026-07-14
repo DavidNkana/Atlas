@@ -79,26 +79,6 @@ interface ExtractedAgent {
   area: string | null;
 }
 
-// Words that indicate a navigation/UI page, NOT a person.
-// Applied as a post-filter so URLs like
-// /estate-agents/some-agency/find-estate/12345 don't get
-// saved as the agent "Find Estate".
-const NON_NAME_WORDS = new Set([
-  "real", "estate", "find", "search", "results", "agents", "agent",
-  "property", "properties", "contact", "directory", "listing", "listings",
-  "profile", "profiles", "for", "sale", "rent", "browse", "all", "top",
-  "view", "show", "page", "home", "about", "contact", "help", "login",
-  "register", "search", "results", "commercial", "residential",
-]);
-
-function looksLikeRealName(name: string): boolean {
-  if (!name) return false;
-  const words = name.toLowerCase().split(/\s+/);
-  // Reject if ANY word is a known non-name / navigational term.
-  if (words.some((w) => NON_NAME_WORDS.has(w))) return false;
-  return true;
-}
-
 // Extract a clean agent name from a profile URL like
 // /estate-agents/o-yes-properties/laleh-golestani/483697
 // or /agents/agency/agent-slug/12345
@@ -116,10 +96,7 @@ function nameFromProfileUrl(url: string): string | null {
       .split(" ")
       .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
       .join(" ");
-    if (name && name.length > 4 && looksLikeRealName(name)) return name;
-    // If this slug is junk (e.g. "find-estate", "real-estate"), don't
-    // try earlier path segments — they're agency/category names.
-    return null;
+    if (name && name.length > 4) return name;
   }
   return null;
 }
