@@ -124,6 +124,9 @@ async function extractAgents(rawText: string, source: string, city: string): Pro
 
 export async function POST(req: NextRequest) {
   const { userId } = getAuth(req);
+  if (!userId) {
+    return NextResponse.json({ error: "Sign in required" }, { status: 401 });
+  }
 
   let body: any = {};
   try { body = await req.json(); } catch {}
@@ -131,12 +134,6 @@ export async function POST(req: NextRequest) {
   const sources: string[] = Array.isArray(body?.sources) && body.sources.length > 0
     ? body.sources
     : SOURCES.map((s) => s.id);
-
-  // Accept the request regardless of userId — signed-in users get
-  // their scrape tied to their account, anonymous users can still use it.
-  if (!userId && process.env.NODE_ENV !== "production") {
-    console.warn(`[agents-scrape-anon] no userId for city=${city}`);
-  }
 
   if (!process.env.TAVILY_API_KEY) {
     return NextResponse.json({ error: "TAVILY_API_KEY not set" }, { status: 500 });
