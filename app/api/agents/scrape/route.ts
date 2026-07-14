@@ -188,7 +188,6 @@ export async function POST(req: NextRequest) {
   let urlsFound = 0;
   let pagesExtracted = 0;
   let agentsFound = 0;
-  let firstPagePreview: string | null = null;
   const errors: string[] = [];
 
   for (const sourceId of sources) {
@@ -233,6 +232,7 @@ export async function POST(req: NextRequest) {
 
       // 4. Extract agents from each page
       let agentsAll: ExtractedAgent[] = [];
+      let firstPagePreview: string | null = null;
       for (const r of extracted.results) {
         if (!r.rawContent || r.rawContent.length < 100) continue;
         if (!firstPagePreview) firstPagePreview = r.rawContent.slice(0, 500);
