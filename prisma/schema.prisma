@@ -173,3 +173,21 @@ model User {
   @@index([plan])
   @@index([plan, planUpdatedAt])
 }
+
+model Agent {
+  id           String   @id @default(cuid())
+  source       String   // "property24" | "privateproperty"
+  name         String
+  agency       String?
+  phone        String?
+  email        String?
+  areas        String?  // comma-separated
+  profileUrl   String?
+  city         String?
+  rawJson      Json?
+  scrapedAt    DateTime @default(now())
+
+  @@index([source])
+  @@index([city])
+  @@index([source, name])
+}
