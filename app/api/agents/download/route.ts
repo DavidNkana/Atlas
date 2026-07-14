@@ -29,37 +29,10 @@ export async function GET(req: NextRequest) {
       ...(source ? { source } : {}),
     },
     orderBy: [{ source: "asc" }, { name: "asc" }],
-  }).catch((e) => {
-    console.error("[agents-download] prisma error (table may not exist yet):", e?.message);
-    return [] as Awaited<ReturnType<typeof prisma.agent.findMany>>;
   });
 
   if (agents.length === 0) {
-    // Return an empty file with just the header row so the download
-    // still works for the count-detection logic on the frontend.
-    if (format === "csv") {
-      const headers = "Source,Name,Agency,Phone,Email,City,Areas,ProfileURL,ScrapedAt";
-      return new NextResponse(headers, {
-        headers: {
-          "Content-Type": "text/csv; charset=utf-8",
-          "Content-Disposition": `attachment; filename="atlas-agents-${ts}.csv"`,
-        },
-      });
-    }
-    if (format === "xlsx") {
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{ Message: "No agents yet. Run a scrape first." }]), "Empty");
-      const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
-      return new NextResponse(buf, {
-        headers: {
-          "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-          "Content-Disposition": `attachment; filename="atlas-agents-${ts}.xlsx"`,
-        },
-      });
-    }
-    return new NextResponse("<p>No agents yet. Run a scrape first.</p>", {
-      headers: { "Content-Type": "text/html" },
-    });
+    return NextResponse.json({ error: "No agents found. Run a scrape first." }, { status: 404 });
   }
 
   const rows = agents.map((a) => ({
