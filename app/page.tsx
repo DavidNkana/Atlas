@@ -535,6 +535,9 @@ export default function HomePage() {
             <a href="/investors" className="hover:text-atlas-accent">
               Investors
             </a>
+            <a href="/agents" className="hover:text-atlas-accent">
+              Agents
+            </a>
           </div>
         </header>
 
