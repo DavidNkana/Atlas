@@ -134,7 +134,13 @@ export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boole
     }
   }, [prefs]);
 
-  // Fetch last 20 questions for the history list
+  // Fetch last 20 questions for the history list. Re-fetches when:
+  //   - User signs in (isLoaded + user change)
+  //   - User navigates to a different page (pathname change)
+  //   - atlas:history-changed event fires (new question created)
+  // The pathname refetch is the bugfix: previously history was only
+  // loaded once on mount, so navigating between result pages could
+  // show stale data from before the visit.
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -143,10 +149,18 @@ export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boole
         if (!res.ok) return;
         const data = await res.json();
         if (!cancelled && Array.isArray(data.items)) {
-          // Filter out items the user has deleted in this session
-          setHistory(
-            data.items.filter((it: HistoryItem) => !hiddenIds.includes(it.id))
-          );
+          // Filter out items the user has deleted in this session,
+          // then defensively sort by createdAt desc. Server already
+          // sorts, but client-side sort guarantees correct order
+          // regardless of what the API returns.
+          const sorted = [...data.items]
+            .filter((it: HistoryItem) => !hiddenIds.includes(it.id))
+            .sort((a, b) => {
+              const ta = new Date(a.createdAt).getTime();
+              const tb = new Date(b.createdAt).getTime();
+              return tb - ta; // newest first
+            });
+          setHistory(sorted);
         }
       } catch {
         // Silent — sidebar is a passive surface. If the endpoint is down
@@ -167,7 +181,7 @@ export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boole
         window.removeEventListener("atlas:history-changed", onHistoryChanged);
       }
     };
-  }, [isLoaded, user, hiddenIds]);
+  }, [isLoaded, user, hiddenIds, pathname]);
 
   // Day 12 v7: derive the active question id from the current URL.
   // /result/<id> → that id is active. Anything else → no active item.
@@ -326,9 +340,23 @@ export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boole
             )}
             <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
               {(() => {
-                const unpinned = history
-                  .filter((h) => !pins.pinned.some((p) => p.id === h.id))
-                  .slice(0, MAX_HISTORY);
+                const unpinnedAll = history.filter(
+                  (h) => !pins.pinned.some((p) => p.id === h.id),
+                );
+                // LCP-f919a5d-restore: if the active result (current URL)
+                // would NOT appear in the visible top-N (e.g. it's older
+                // than MAX_HISTORY items), force it to the top so the user
+                // always sees "which result am I on" with no scrolling.
+                const activeVisible =
+                  activeId &&
+                  unpinnedAll.some((h) => h.id === activeId);
+                const pinnedTop = activeVisible
+                  ? []
+                  : activeId
+                    ? unpinnedAll.filter((h) => h.id === activeId)
+                    : [];
+                const fill = unpinnedAll.filter((h) => h.id !== activeId);
+                const unpinned = [...pinnedTop, ...fill].slice(0, MAX_HISTORY);
                 if (unpinned.length === 0 && !collapsed) {
                   return (
                     <p className="mt-2 text-xs text-atlas-muted">
