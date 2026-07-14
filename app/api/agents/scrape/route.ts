@@ -49,112 +49,77 @@ function extractAgentsViaRegex(rawHtml: string, pageUrl: string): ExtractedAgent
   const agents: ExtractedAgent[] = [];
   const seen = new Set<string>();
 
-  // Property24 agent card structure (from observation):
-  //   <div class="p24_agencyCard">
-  //     <a href="...agentName/slug/12345">First Last</a>
-  //     <div>First Last</div>
-  //     <div>Property Practitioner</div>
-  //     <a href="tel:...">082 432 1517</a>   (mobile)
-  //     <a href="tel:...">011 784 2772</a>   (work)
-  //     <a href="mailto:...">email</a>
-  //   </div>
-  //
-  // Strategy: find each block that contains "Property Practitioner" (or
-  // a tel: link with a mobile + work phone pair), then extract
-  // the agent name from that block.
+  const BLOCKED_NAMES = new Set([
+    "South Africa", "North West", "Western Cape", "Eastern Cape",
+    "Northern Cape", "KwaZulu Natal", "Free State", "Mpumalanga", "Limpopo",
+    "Find Estate", "Find Letting", "Find Sales", "Find Rent", "Find Property",
+    "Ratings And Reviews", "Property Portfolio", "View All",
+    "Properties For Sale", "Contact Agent", "Get In Touch", "Read More",
+    "Add To", "Send Inquiry", "View Details", "Make An", "Book Viewing",
+    "View More", "Read Less", "Show More", "Show Less", "Load More",
+  ]);
 
-  // Split on agent card boundaries. Look for the "Property Practitioner"
-  // string — each occurrence is the end of an agent card.
-  const blocks = rawHtml.split(/Property Practitioner/);
-  for (let i = 0; i < blocks.length - 1; i++) {
-    // Look at the chunk BEFORE "Property Practitioner" — that's the agent card
-    const block = blocks[i];
-    const start = Math.max(0, block.length - 4000); // last 4000 chars of the block
+  const namePatterns = [
+    /Property Practitioner[\s\S]{0,500}?([A-Z][a-z]+ [A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/g,
+    /class="[^"]*p24[^"]*agentName[^"]*"[^>]*>([^<]+)</g,
+  ];
 
-    // Find the agent name in the block: the closest h-tag, div with "p24_agentName" class, or name with a profile link
-    const nameMatch = block.match(/class="[^"]*p24[^"]*agentName[^"]*"[^>]*>([^<]+)</)
-      ?? block.match(/<h\d[^>]*class="[^"]*p24[^"]*"[^>]*>([^<]+)</)
-      ?? block.match(/<a[^>]*href="[^"]*\/estate-agents\/[^"]*\/([a-z-]+)\/(\d+)"[^>]*>([^<]+)</i);
-    let name: string | null = null;
-    let profileUrl: string | null = null;
-    if (nameMatch) {
-      if (nameMatch[3]) {
-        // URL match — extract slug from URL
-        const slug = nameMatch[1];
-        profileUrl = `https://www.property24.com/estate-agents/${nameMatch[2]}/${slug}/${nameMatch[3]}`;
-        name = nameMatch[3].trim();
-      } else {
-        name = nameMatch[1].trim();
-      }
-    }
+  for (const re of namePatterns) {
+    let match;
+    while ((match = re.exec(rawHtml)) !== null) {
+      const name = match[1].trim().replace(/\s+/g, " ");
+      if (seen.has(name) || name.length < 5 || name.length > 60) continue;
+      if (BLOCKED_NAMES.has(name)) continue;
+      if (/^(The|A|An|This|These|View|Show|Add|Save|Share|Click|Submit|Read|Properties)/i.test(name)) continue;
+      if (/\b(Road|Street|Avenue|Lane|Province|Region|Country|City|Town)\b/i.test(name)) continue;
+      if (!/^[A-Z][a-z]+(\s[A-Z][a-z]+)+$/.test(name)) continue;
+      seen.add(name);
 
-    // Fallback: look for any capitalized two-word name that has a tel: link nearby
-    if (!name) {
-      const telIdx = block.indexOf("tel:");
-      if (telIdx > 0) {
-        const around = block.slice(Math.max(0, telIdx - 1000), telIdx);
-        const m = around.match(/([A-Z][a-z]+ [A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/g);
+      const ctx = rawHtml.slice(Math.max(0, match.index - 500), match.index + match[0].length + 1500);
+
+      const phoneMatch = ctx.match(/(\+27|0)\s?[\d\s()-]{8,15}/);
+      if (!phoneMatch) continue;
+      const phone = phoneMatch[0].trim();
+
+      const emailMatch = ctx.match(/[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+      const email = emailMatch ? emailMatch[0] : null;
+
+      const agencyPatterns = [
+        /Pam Golding Properties/i,
+        /Seeff/i,
+        /Chas\s+Everitt|Chase\s+Versitt/i,
+        /Century\s*21/i,
+        /Engel\s*&?\s*Völkers|Engel.*Volkers/i,
+        /Rawson/i,
+        /RE\/MAX|RE\/MAX/i,
+        /Sotheby/i,
+        /Lew\s*Geffen/i,
+        /Jawitz/i,
+        /Harcourts/i,
+        /Tyson/i,
+        /Royal\s+LePage/i,
+        /Coldwell\s*Banker/i,
+        /O\s*Yes\s*Properties/i,
+      ];
+      let agencyName: string | null = null;
+      for (const ap of agencyPatterns) {
+        const m = ctx.match(ap);
         if (m) {
-          // Pick the last "firstname lastname" pattern (closest to the phone)
-          name = m[m.length - 1];
+          agencyName = (m[0] || m[1] || "").replace(/\s+/g, " ").trim();
+          break;
         }
       }
+
+      agents.push({
+        name,
+        agency: agencyName,
+        phone,
+        email,
+        profileUrl: pageUrl,
+        city: null,
+        area: null,
+      });
     }
-
-    if (!name || name.length < 5) continue;
-    if (seen.has(name.toLowerCase())) continue;
-    seen.add(name.toLowerCase());
-
-    // Extract phones — look in the block after the "Property Practitioner" position
-    const afterBlock = blocks[i + 1] || "";
-    const afterCtx = (block + " " + afterBlock).slice(-4000);
-    const phoneMatches = afterCtx.match(/tel:["']?([+\d\s()-]{8,20})/gi) || [];
-    let mobile: string | null = null;
-    let work: string | null = null;
-    for (const m of phoneMatches) {
-      const num = m.replace(/^tel:["']?/, "").replace(/["']?$/, "").trim();
-      if (!mobile && /^0[0-9]/.test(num)) mobile = num;
-      else if (!work && /^0[0-9]/.test(num)) work = num;
-    }
-    const phone = mobile || (phoneMatches[0]?.replace(/^tel:["']?/, "").replace(/["']?$/, "").trim()) || null;
-
-    // Email
-    const emailMatch = afterCtx.match(/([a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
-    const email = emailMatch ? emailMatch[1] : null;
-
-    // Profile URL from agent card link
-    if (!profileUrl) {
-      const profMatch = block.match(/href="([^"]*\/estate-agents\/[^"]+\/\d+)"/);
-      if (profMatch) profileUrl = profMatch[1].startsWith("http") ? profMatch[1] : `https://www.property24.com${profMatch[1]}`;
-    }
-    if (!profileUrl) profileUrl = pageUrl;
-
-    // Agency
-    const agencyPatterns = [
-      /Pam Golding Properties/i, /Seeff/i, /Chas\s+Everitt|Chase\s+Versitt/i,
-      /Century\s*21/i, /Engel.*Völkers/i, /Rawson/i, /RE\/MAX|RE\/MAX/i,
-      /Sotheby/i, /Lew\s*Geffen/i, /Jawitz/i, /Harcourts/i, /Tyson/i,
-      /Coldwell\s*Banker/i, /O\s*Yes\s*Properties/i, /Traven/i, /Keller\s*Williams/i,
-      /Erf\.co\.za/i,
-    ];
-    let agencyName: string | null = null;
-    for (const ap of agencyPatterns) {
-      const m = afterCtx.match(ap);
-      if (m) {
-        agencyName = m[0].trim();
-        break;
-      }
-    }
-
-    agents.push({
-      name,
-      agency: agencyName,
-      phone,
-      email,
-      profileUrl,
-      city: null,
-      area: null,
-    });
   }
 
   return agents;
@@ -254,7 +219,7 @@ export async function POST(req: NextRequest) {
       }
       pagesExtracted += extracted.results.length;
 
-      // 4. Extract agents — parse each page as a single block
+      // 4. Extract agents using regex (no LLM)
       const agentsAll: ExtractedAgent[] = [];
       for (const r of extracted.results) {
         if (!r.rawContent || r.rawContent.length < 100) continue;
