@@ -380,9 +380,6 @@ export async function POST(req: NextRequest) {
         const hints = src.directoryHints(targetCity, subAreas);
         const allUrls: string[] = [];
         const seenUrls = new Set<string>();
-        // LCP-90 audit: prove whether the empty-result problem is
-        // "Tavily index doesn't cover this domain" or "Tavily has
-        // URLs but they don't match the agent-profile regex".
         for (const hint of hints) {
           if (allUrls.length >= limit) break;
           const searchAnswer = await fetchTavilyWebAnswer(hint, {
@@ -417,48 +414,6 @@ export async function POST(req: NextRequest) {
             firstUrls: urls.slice(0, 3),
             matchedRegex: matched,
           });
-        }
-        // LCP-90 fallback: if domain-restricted search returned 0,
-        // try the same hints WITHOUT includeDomains. The audit proved
-        // Tavily's index returns nothing for property24.com /
-        // privateproperty.co.za when forced — but the general web
-        // index may still have those URLs. The regex is the gate.
-        if (allUrls.length === 0) {
-          for (const hint of hints) {
-            if (allUrls.length >= limit) break;
-            const searchAnswer = await fetchTavilyWebAnswer(hint, {
-              maxResults: Math.min(20, limit),
-              // No includeDomains — let Tavily search the open web.
-            });
-            if (!searchAnswer) {
-              audit.push({
-                city: targetCity,
-                source: sourceId,
-                hint: `[fallback no-domain] ${hint}`,
-                tavilyReturned: 0,
-                firstUrls: [],
-                matchedRegex: 0,
-              });
-              continue;
-            }
-            const urls = (searchAnswer.sources ?? []).map((s: any) => s?.url).filter(Boolean);
-            let matched = 0;
-            for (const u of urls) {
-              if (u && src.profileUrlMatch.test(u) && !seenUrls.has(u)) {
-                seenUrls.add(u);
-                allUrls.push(u);
-                matched += 1;
-              }
-            }
-            audit.push({
-              city: targetCity,
-              source: sourceId,
-              hint: `[fallback no-domain] ${hint}`,
-              tavilyReturned: urls.length,
-              firstUrls: urls.slice(0, 3),
-              matchedRegex: matched,
-            });
-          }
         }
         if (allUrls.length === 0) {
           errors.push(`${sourceId}/${targetCity}: no agent profile URLs found`);
