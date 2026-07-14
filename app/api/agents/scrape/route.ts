@@ -61,35 +61,6 @@ const SUB_AREAS: Record<string, string[]> = {
   lusaka: ["Rhodes Park", "Longacres", "Ibex Hill", "Woodlands", "Chilenje", "Kabwata"],
 };
 
-// All major SA cities + sub-areas for a "scrape all of SA" run.
-const SA_CITIES: string[] = [
-  "Sandton", "Johannesburg", "Pretoria", "Cape Town", "Durban", "Stellenbosch",
-  "Bloemfontein", "Port Elizabeth", "East London", "Knysna", "George", "Nelspruit",
-  "Polokwane", "Nelspruit", "Rustenburg", "Kimberley", "Potchefstroom", "Klerksdorp",
-  "Welkom", "Vereeniging", "Centurion", "Midrand", "Pietermaritzburg", "Richards Bay",
-  "Newcastle", "Bethlehem", "Vryheid", "Upington", "George", "Knysna", "Mossel Bay",
-  "Oudtshoorn", "Worcester", "Paarl", "Stellenbosch", "Somerset West", "Hermanus",
-  "Vredendal", "Springbok", "Upington", "Kuruman", "Vryburg", "Potchefstroom",
-];
-
-const ZA_CITY_MAP: Record<string, string[]> = {
-  sandton: ["Sandown", "Morningside", "Rivonia", "Hyde Park", "Benmore", "Illovo", "Wynberg"],
-  johannesburg: ["Rosebank", "Parktown", "Melrose", "Hyde Park", "Morningside", "Rivonia", "Illovo", "Sandown"],
-  pretoria: ["Hatfield", "Brooklyn", "Menlyn", "Centurion", "Arcadia", "Sunnyridge", "Silver Lakes"],
-  cape_town: ["Sea Point", "Camps Bay", "Claremont", "Newlands", "Constantia", "Durbanville", "Bellville", "Goodwood", "Century City", "Woodstock"],
-  durban: ["Umhlanga", "Umhlanga Ridge", "Umhlanga Rocks", "Durban North", "Mornton", "Musgrave"],
-  stellenbosch: ["Die Boord", "Universiteitsoord", "Stellenbosch Central"],
-  bloemfontein: ["Universitas", "Pellissier", "Fichardt Park", "Spitskop"],
-  port_elizabeth: ["Summerstrand", "Humerail", "Lorraine", "Mill Park"],
-  east_london: ["Quigney", "Southernwood", "Vincent", "Nahoon"],
-  polokwane: ["Bendor", "Welgelegen", "Flora Park", "Sterpark"],
-  nelspruit: ["West Acres", "Riverside", "Steiltes", "Nelspruit Central"],
-  rustenburg: ["Rustenburg Central", "Cashan", "Proteapark", "Geelhoutpark"],
-  potchefstroom: ["Potchefstroom Central", "Baillie Park", "Van Der Hoffpark"],
-  vereeniging: ["Vereeniging Central", "Three Rivers", "Duncanville"],
-  pietermaritzburg: ["Pietermaritzburg Central", "Scottsville", "Chase Valley", "Wembley"],
-};
-
 function getSubAreas(city: string): string[] {
   const c = city.toLowerCase();
   for (const [key, areas] of Object.entries(SUB_AREAS)) {
@@ -275,20 +246,10 @@ export async function POST(req: NextRequest) {
   let body: any = {};
   try { body = await req.json(); } catch {}
   const city: string = (body?.city || "Sandton").trim();
-  const scrapeAll = body?.scrapeAll === true || body?.scrapeAll === "true";
   const sources: string[] = Array.isArray(body?.sources) && body.sources.length > 0
     ? body.sources
     : SOURCES.map((s) => s.id);
   const limit: number = Math.min(body?.limit ?? 50, 100);
-
-  // For "scrape all of SA", iterate through the top cities
-  // sequentially. Each city is one synchronous loop through the
-  // existing extraction logic. The full SA run is bounded by
-  // Vercel's maxDuration of 300s — so we cap at ~10 cities per
-  // request. For the full list, the user runs multiple requests.
-  const targetCities = scrapeAll
-    ? SA_CITIES.slice(0, 12) // ~10 min budget, 12 cities
-    : [city];
 
   if (!process.env.TAVILY_API_KEY) {
     return NextResponse.json({ error: "TAVILY_API_KEY not set" }, { status: 500 });
@@ -324,128 +285,122 @@ export async function POST(req: NextRequest) {
   let firstPagePreview: string | null = null;
   const errors: string[] = [];
 
-  // Outer loop: iterate across cities when scrapeAll=true.
-  // Vercel maxDuration is 300s. ~25s/city × 12 cities = 300s budget.
-  // Each city gets its own stale-data wipe + sub-area expansion +
-  // Tavily search + Tavily enrichment + Prisma upsert.
-  for (const targetCity of targetCities) {
-    for (const sourceId of sources) {
-      const src = SOURCES.find((s) => s.id === sourceId);
-      if (!src) continue;
+  for (const sourceId of sources) {
+    const src = SOURCES.find((s) => s.id === sourceId);
+    if (!src) continue;
 
+    try {
+      // Clear stale records for this city+source combo first.
+      // The route was iterated multiple times with looser regexes that
+      // inserted junk like "Find Estate" / "Real Estate". We delete them
+      // so the user only ever sees the latest clean scrape.
       try {
-        // Clear stale records for this city+source combo first.
-        // The route was iterated multiple times with looser regexes that
-        // inserted junk like "Find Estate" / "Real Estate". We delete them
-        // so the user only ever sees the latest clean scrape.
-        try {
-          const deleted = await prisma.agent.deleteMany({ where: { source: sourceId, city: targetCity } });
-          console.log(`[agents] deleted ${deleted.count} stale ${sourceId} records for ${targetCity}`);
-        } catch (e) {
-          console.error("[agents] deleteMany failed:", e instanceof Error ? e.message : String(e));
-        }
+        const deleted = await prisma.agent.deleteMany({ where: { source: sourceId, city } });
+        console.log(`[agents] deleted ${deleted.count} stale ${sourceId} records for ${city}`);
+      } catch (e) {
+        console.error("[agents] deleteMany failed:", e instanceof Error ? e.message : String(e));
+      }
 
-        // 1. Find agent PROFILE URLs (not listing URLs)
-        const subAreas = getSubAreas(targetCity);
-        const hints = src.directoryHints(targetCity, subAreas);
-        const allUrls: string[] = [];
-        const seenUrls = new Set<string>();
-        for (const hint of hints) {
-          if (allUrls.length >= limit) break;
-          const searchAnswer = await fetchTavilyWebAnswer(hint, { maxResults: Math.min(20, limit) });
-          if (!searchAnswer) continue;
-          for (const s of searchAnswer.sources ?? []) {
-            if (s?.url && src.profileUrlMatch.test(s.url) && !seenUrls.has(s.url)) {
-              seenUrls.add(s.url);
-              allUrls.push(s.url);
-            }
+      // 1. Find agent PROFILE URLs (not listing URLs)
+      const subAreas = getSubAreas(city);
+      const hints = src.directoryHints(city, subAreas);
+      const allUrls: string[] = [];
+      const seenUrls = new Set<string>();
+      for (const hint of hints) {
+        if (allUrls.length >= limit) break;
+        const searchAnswer = await fetchTavilyWebAnswer(hint, { maxResults: Math.min(20, limit) });
+        if (!searchAnswer) continue;
+        for (const s of searchAnswer.sources ?? []) {
+          if (s?.url && src.profileUrlMatch.test(s.url) && !seenUrls.has(s.url)) {
+            seenUrls.add(s.url);
+            allUrls.push(s.url);
           }
         }
-        urlsFound += allUrls.length;
-        if (allUrls.length === 0) {
-          errors.push(`${sourceId}/${targetCity}: no agent profile URLs found`);
-          continue;
-        }
+      }
+      urlsFound += allUrls.length;
+      if (allUrls.length === 0) {
+        errors.push(`${sourceId}: no agent profile URLs found for ${city}`);
+        continue;
+      }
 
-        // 2. Try to extract agent info from each profile page
-        const agentsAll: ExtractedAgent[] = [];
-        let extracted: { url: string; rawContent: string }[] = [];
-        try {
-          const result = await extractTavilyUrls(allUrls);
-          if (result && result.results.length > 0) {
-            extracted = result.results
-              .map((r) => ({ url: r.url, rawContent: r.rawContent ?? "" }))
-              .filter((p) => p.rawContent.length > 100);
-            pagesExtracted += extracted.length;
-          }
-        } catch (e) {
-          errors.push(`${sourceId}/${targetCity}: extractTavilyUrls failed: ${e instanceof Error ? e.message : String(e)}`);
-        }
-
-        // 3. Extract agents from URL pattern (works even if /extract failed)
-        // The URL pattern itself is the most reliable signal: the slug encodes the name.
-        const urlOnly = extractAgentsFromUrlsOnly(allUrls);
-        agentsAll.push(...urlOnly);
-
-        // 4. Extract from page content if available (gives us phones + emails)
-        for (const p of extracted) {
-          if (!p.rawContent) continue;
-          if (!firstPagePreview) firstPagePreview = p.rawContent.slice(0, 500);
-          // The page confirms the agent's existence and adds phone/email
-          const agent = extractAgentFromProfilePage(p.rawContent, p.url);
-          if (agent) {
-            // Merge with URL-only entry to fill phone/email gaps
-            const idx = agentsAll.findIndex((a) => a.name.toLowerCase() === agent.name.toLowerCase());
-            if (idx >= 0) {
-              agentsAll[idx] = {
-                ...agentsAll[idx],
-                ...agent,
-                phone: agentsAll[idx].phone || agent.phone,
-                email: agentsAll[idx].email || agent.email,
-              };
-            } else {
-              agentsAll.push(agent);
-            }
-          }
-        }
-        agentsFound += agentsAll.length;
-
-        // 5. Per-agent phone + email enrichment via Tavily answer field
-        await enrichAgentsWithContact(agentsAll, targetCity, sourceId);
-
-        // 6. Dedupe and save
-        const seen = new Set<string>();
-        for (const a of agentsAll) {
-          if (!a.name) continue;
-          const key = a.name.toLowerCase().trim();
-          if (seen.has(key)) continue;
-          seen.add(key);
-          const id = `${sourceId}_${key.replace(/[^a-z0-9]+/g, "_").slice(0, 60)}`;
-          try {
-            await prisma.agent.upsert({
-              where: { id },
-              create: {
-                id, source: sourceId, name: a.name,
-                agency: a.agency, phone: a.phone, email: a.email,
-                areas: a.area ?? "",
-                profileUrl: a.profileUrl, city: a.city || targetCity,
-                rawJson: a as any,
-              },
-              update: {
-                agency: a.agency, phone: a.phone, email: a.email,
-                areas: a.area ?? "",
-                profileUrl: a.profileUrl, scrapedAt: new Date(),
-              },
-            });
-            totalSaved += 1;
-          } catch (dbErr) {
-            const msg = dbErr instanceof Error ? dbErr.message : String(dbErr);
-            errors.push(`db: ${msg.split("\n")[0].slice(0, 200)}`);
-          }
+      // 2. Try to extract agent info from each profile page
+      const agentsAll: ExtractedAgent[] = [];
+      let extracted: { url: string; rawContent: string }[] = [];
+      try {
+        const result = await extractTavilyUrls(allUrls);
+        if (result && result.results.length > 0) {
+          extracted = result.results
+            .map((r) => ({ url: r.url, rawContent: r.rawContent ?? "" }))
+            .filter((p) => p.rawContent.length > 100);
+          pagesExtracted += extracted.length;
         }
       } catch (e) {
-        errors.push(`${sourceId}/${targetCity}: ${e instanceof Error ? e.message.split("\n")[0] : String(e)}`);
+        errors.push(`${sourceId}: extractTavilyUrls failed: ${e instanceof Error ? e.message : String(e)}`);
       }
+
+      // 3. Extract agents from URL pattern (works even if /extract failed)
+      // The URL pattern itself is the most reliable signal: the slug encodes the name.
+      const urlOnly = extractAgentsFromUrlsOnly(allUrls);
+      agentsAll.push(...urlOnly);
+
+      // 4. Extract from page content if available (gives us phones + emails)
+      for (const p of extracted) {
+        if (!p.rawContent) continue;
+        if (!firstPagePreview) firstPagePreview = p.rawContent.slice(0, 500);
+        // The page confirms the agent's existence and adds phone/email
+        const agent = extractAgentFromProfilePage(p.rawContent, p.url);
+        if (agent) {
+          // Merge with URL-only entry to fill phone/email gaps
+          const idx = agentsAll.findIndex((a) => a.name.toLowerCase() === agent.name.toLowerCase());
+          if (idx >= 0) {
+            agentsAll[idx] = {
+              ...agentsAll[idx],
+              ...agent,
+              phone: agentsAll[idx].phone || agent.phone,
+              email: agentsAll[idx].email || agent.email,
+            };
+          } else {
+            agentsAll.push(agent);
+          }
+        }
+      }
+      agentsFound = agentsAll.length;
+
+      // 5. Per-agent phone + email enrichment via Tavily answer field
+      await enrichAgentsWithContact(agentsAll, city, sourceId);
+
+      // 6. Dedupe and save
+      const seen = new Set<string>();
+      for (const a of agentsAll) {
+        if (!a.name) continue;
+        const key = a.name.toLowerCase().trim();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const id = `${sourceId}_${key.replace(/[^a-z0-9]+/g, "_").slice(0, 60)}`;
+        try {
+          await prisma.agent.upsert({
+            where: { id },
+            create: {
+              id, source: sourceId, name: a.name,
+              agency: a.agency, phone: a.phone, email: a.email,
+              areas: a.area ?? "",
+              profileUrl: a.profileUrl, city: a.city || city,
+              rawJson: a as any,
+            },
+            update: {
+              agency: a.agency, phone: a.phone, email: a.email,
+              areas: a.area ?? "",
+              profileUrl: a.profileUrl, scrapedAt: new Date(),
+            },
+          });
+          totalSaved += 1;
+        } catch (dbErr) {
+          const msg = dbErr instanceof Error ? dbErr.message : String(dbErr);
+          errors.push(`db: ${msg.split("\n")[0].slice(0, 200)}`);
+        }
+      }
+    } catch (e) {
+      errors.push(`${sourceId}: ${e instanceof Error ? e.message.split("\n")[0] : String(e)}`);
     }
   }
 

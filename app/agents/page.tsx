@@ -188,7 +188,7 @@ export default function AgentsPage() {
             ].map((opt) => (
               <a
                 key={opt.fmt}
-                href={`/api/agents/download?format=${opt.fmt}&t=${Date.now()}${city ? `&city=${encodeURIComponent(city)}` : ""}`}
+                href={`/api/agents/download?format=${opt.fmt}${city ? `&city=${encodeURIComponent(city)}` : ""}`}
                 target="_blank"
                 rel="noopener"
                 className="rounded-md border border-atlas-border bg-atlas-surface2 px-3 py-2 text-center text-xs text-atlas-text transition-colors hover:border-atlas-accent"
