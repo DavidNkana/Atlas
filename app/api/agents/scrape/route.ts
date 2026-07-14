@@ -63,63 +63,6 @@ interface ExtractedAgent {
   area: string | null;
 }
 
-function extractAgentsFromProse(text: string, pageUrl: string): ExtractedAgent[] {
-  const agents: ExtractedAgent[] = [];
-  const seen = new Set<string>();
-
-  // Tavily answer field looks like:
-  //   "Austin Edwards is a seasoned property professional..."
-  //   "Sarah Johnson is a real estate agent in Cape Town..."
-  // Pattern: name at the start, followed by "is a" / "works as" / "specializes"
-  const namePatterns = [
-    /^([A-Z][a-z]+(?:\s+[A-Z]\.)?\s+[A-Z][a-z]+(?:-[A-Z][a-z]+)?)\s+is\s+(?:a|an)\s+/gm,
-    /\b([A-Z][a-z]+(?:\s+[A-Z]\.)?\s+[A-Z][a-z]+(?:-[A-Z][a-z]+)?)\s+(?:is\s+(?:a|an)|works\s+as|specializes\s+in|focuses\s+on)\b/g,
-  ];
-
-  for (const re of namePatterns) {
-    let m;
-    while ((m = re.exec(text)) !== null) {
-      const name = m[1].trim().replace(/\s+/g, " ");
-      if (seen.has(name.toLowerCase()) || name.length < 5 || name.length > 60) continue;
-      // Skip common UI/phrase text
-      if (/^(The |A |An |This |These |View |Show |Add |Save |Share |Click |Submit |Read |Contact |Real Estate)/i.test(name)) continue;
-      seen.add(name.toLowerCase());
-
-      // Phone numbers in prose
-      const phoneMatches = text.match(/(?:\+27|0)\s?[\d\s()-]{8,15}/g) || [];
-      const phone = phoneMatches[0]?.trim() || null;
-
-      // Email
-      const emailMatch = text.match(/[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
-      const email = emailMatch ? emailMatch[0] : null;
-
-      // Agency
-      const agencyPatterns = [
-        /Pam Golding/i, /Seeff/i, /Chas\s+Everitt|Chase\s+Versitt/i, /Century\s*21/i,
-        /Engel.*Völkers/i, /Rawson/i, /RE\/MAX/i, /Sotheby/i, /Lew\s*Geffen/i,
-        /Jawitz/i, /Harcourts/i, /Tyson/i, /Coldwell\s*Banker/i, /O\s*Yes/i,
-      ];
-      let agencyName: string | null = null;
-      for (const ap of agencyPatterns) {
-        const m2 = text.match(ap);
-        if (m2) { agencyName = m2[0]; break; }
-      }
-
-      agents.push({
-        name,
-        agency: agencyName,
-        phone,
-        email,
-        profileUrl: pageUrl,
-        city: null,
-        area: null,
-      });
-    }
-  }
-
-  return agents;
-}
-
 function extractAgentsViaRegex(rawHtml: string, pageUrl: string): ExtractedAgent[] {
   const agents: ExtractedAgent[] = [];
   const seen = new Set<string>();
@@ -370,7 +313,7 @@ export async function POST(req: NextRequest) {
           const snippet = fallbackSearch.answer ?? "";
           if (!snippet || snippet.length < 50) continue;
           if (!firstPagePreview) firstPagePreview = snippet.slice(0, 500);
-          agentsAll.push(...extractAgentsFromProse(snippet, url));
+          agentsAll.push(...extractAgentsViaRegex(snippet, url));
         }
       }
       agentsFound = agentsAll.length;
