@@ -23,7 +23,6 @@ export async function GET(req: NextRequest) {
   const city = url.searchParams.get("city") || undefined;
   const source = url.searchParams.get("source") || undefined;
 
-  const ts = new Date().toISOString().slice(0, 10);
   const agents = await prisma.agent.findMany({
     where: {
       ...(city ? { city } : {}),
@@ -38,30 +37,30 @@ export async function GET(req: NextRequest) {
   if (agents.length === 0) {
     // Return an empty file with just the header row so the download
     // still works for the count-detection logic on the frontend.
-  if (format === "csv") {
-    const headers = "Source,Name,Agency,Phone,Email,City,Areas,ProfileURL,ScrapedAt";
-    return new NextResponse(headers, {
-      headers: {
-        "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename="atlas-agents-${ts}.csv"`,
-      },
+    if (format === "csv") {
+      const headers = "Source,Name,Agency,Phone,Email,City,Areas,ProfileURL,ScrapedAt";
+      return new NextResponse(headers, {
+        headers: {
+          "Content-Type": "text/csv; charset=utf-8",
+          "Content-Disposition": `attachment; filename="atlas-agents-${ts}.csv"`,
+        },
+      });
+    }
+    if (format === "xlsx") {
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{ Message: "No agents yet. Run a scrape first." }]), "Empty");
+      const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+      return new NextResponse(buf, {
+        headers: {
+          "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "Content-Disposition": `attachment; filename="atlas-agents-${ts}.xlsx"`,
+        },
+      });
+    }
+    return new NextResponse("<p>No agents yet. Run a scrape first.</p>", {
+      headers: { "Content-Type": "text/html" },
     });
   }
-  if (format === "xlsx") {
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{ Message: "No agents yet. Run a scrape first." }]), "Empty");
-    const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
-    return new NextResponse(buf, {
-      headers: {
-        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "Content-Disposition": `attachment; filename="atlas-agents-${ts}.xlsx"`,
-      },
-    });
-  }
-  return new NextResponse("<p>No agents yet. Run a scrape first.</p>", {
-    headers: { "Content-Type": "text/html" },
-  });
-}
 
   const rows = agents.map((a) => ({
     Source: a.source,
@@ -74,6 +73,8 @@ export async function GET(req: NextRequest) {
     ProfileURL: a.profileUrl ?? "",
     ScrapedAt: a.scrapedAt.toISOString(),
   }));
+
+  const ts = new Date().toISOString().slice(0, 10);
 
   if (format === "csv") {
     const headers = Object.keys(rows[0]);
