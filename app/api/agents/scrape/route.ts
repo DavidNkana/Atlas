@@ -109,30 +109,7 @@ export async function POST(req: NextRequest) {
   const limit: number = Math.min(body?.limit ?? 10, 30);
 
   if (!process.env.TAVILY_API_KEY) {
-  return NextResponse.json({ error: "TAVILY_API_KEY not set" }, { status: 500 });
-  }
-
-  // Ensure the Agent table exists. Vercel doesn't auto-run Prisma
-  // migrations, so we create it on-demand the first time a route
-  // needs it. Safe to run repeatedly — IF NOT EXISTS is idempotent.
-  try {
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS "Agent" (
-        id            TEXT PRIMARY KEY,
-        source        TEXT NOT NULL,
-        name          TEXT NOT NULL,
-        agency        TEXT,
-        phone         TEXT,
-        email         TEXT,
-        areas         TEXT,
-        "profileUrl"  TEXT,
-        city          TEXT,
-        "rawJson"     JSONB,
-        "scrapedAt"   TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-  } catch (e) {
-    console.error("[agents] table-create failed:", e instanceof Error ? e.message : String(e));
+    return NextResponse.json({ error: "TAVILY_API_KEY not set" }, { status: 500 });
   }
 
   let totalSaved = 0;
@@ -217,8 +194,7 @@ export async function POST(req: NextRequest) {
           });
           totalSaved += 1;
         } catch (dbErr) {
-          const msg = dbErr instanceof Error ? dbErr.message : String(dbErr);
-          errors.push(`db: ${msg.split("\n")[0].slice(0, 200)}`);
+          errors.push(`db: ${dbErr instanceof Error ? dbErr.message.split("\n")[0] : String(dbErr)}`);
         }
       }
     } catch (e) {
