@@ -25,20 +25,13 @@ const SOURCES = [
     id: "property24",
     name: "Property24",
     searchHint: (city: string) =>
-      `site:property24.com ${city} for sale contact agent phone Property Practitioner`,
-    extraHints: (city: string) => [
-      `site:property24.com ${city} to rent contact agent phone`,
-      `site:property24.com property ${city} Property Practitioner contact`,
-    ],
+      `site:property24.com ${city} for sale contact agent phone`,
   },
   {
     id: "privateproperty",
     name: "Private Property",
     searchHint: (city: string) =>
-      `site:privateproperty.co.za ${city} for sale contact agent phone Property Practitioner`,
-    extraHints: (city: string) => [
-      `site:privateproperty.co.za ${city} to rent contact agent`,
-    ],
+      `site:privateproperty.co.za ${city} for sale contact agent phone`,
   },
 ] as const;
 
@@ -65,8 +58,7 @@ function extractAgentsViaRegex(rawHtml: string, pageUrl: string): ExtractedAgent
   // Try multiple patterns for agent names
   const namePatterns = [
     /([A-Z][a-z]+ [A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s*(?:Property Practitioner|Agent|Sales)/g,
-    /([A-Z][a-z]+ [A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s*Property Practitioner/g,
-    /<h\d[^>]*>([A-Z][a-z]+ [A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)<\/h\d>/g,
+    /(?:agent|lister)["\s:>]+([A-Z][a-z]+ [A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/gi,
   ];
 
   for (const re of namePatterns) {
@@ -77,7 +69,7 @@ function extractAgentsViaRegex(rawHtml: string, pageUrl: string): ExtractedAgent
       seen.add(name);
 
       // Find context around this name
-      const ctx = rawHtml.slice(Math.max(0, match.index - 500), match.index + match[0].length + 1500);
+      const ctx = rawHtml.slice(Math.max(0, match.index - 500), match.index + match[0].length + 1000);
 
       // Extract phone
       const phoneMatch = ctx.match(/(?:\+27|0)\s?[\d\s()-]{8,15}/);
@@ -87,38 +79,12 @@ function extractAgentsViaRegex(rawHtml: string, pageUrl: string): ExtractedAgent
       const emailMatch = ctx.match(/[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
       const email = emailMatch ? emailMatch[0] : null;
 
-      // Extract agency name
-      const agencyPatterns: RegExp[] = [
-        /Pam Golding Properties/i,
-        /Seeff/i,
-        /Chas\s+Everitt|Chase\s+Versitt/i,
-        /Century\s*21/i,
-        /Engel\s*&?\s*Völkers|Engel.*Volkers/i,
-        /Rawson/i,
-        /RE\/MAX|RE\/MAX/i,
-        /Sotheby/i,
-        /Lew\s*Geffen/i,
-        /Jawitz/i,
-        /Harcourts/i,
-        /Tyson/i,
-        /Royal\s+LePage/i,
-        /Coldwell\s*Banker/i,
-        /[A-Z][a-zA-Z]+\s+Properties?/,
-      ];
-      let agencyMatch: RegExpMatchArray | null = null;
-      let agencyName: string | null = null;
-      for (const ap of agencyPatterns) {
-        agencyMatch = ctx.match(ap);
-        if (agencyMatch) {
-          agencyName = agencyMatch[1] || agencyMatch[0];
-          agencyName = agencyName.replace(/\s+/g, " ").trim();
-          break;
-        }
-      }
+      // Extract agency name (usually a known brand or surname + "Properties")
+      const agencyMatch = ctx.match(/((?:Pam Golding|Seeff|Chase Versitt|Engel & Völkers|Rawson|RE\/MAX|Seeff|Chas Everitt|Engel)[a-zA-Z\s]*)/i);
 
       agents.push({
         name,
-        agency: agencyName,
+        agency: agencyMatch ? agencyMatch[1].trim() : null,
         phone,
         email,
         profileUrl: pageUrl,
@@ -181,29 +147,19 @@ export async function POST(req: NextRequest) {
     if (!src) continue;
 
     try {
-      // 1. Find listing URLs — combine primary hint + extra hints
-      const hints = [src.searchHint(city), ...(src.extraHints?.(city) ?? [])];
-      const allUrls: string[] = [];
-      const seenUrls = new Set<string>();
-      for (const hint of hints) {
-        const searchAnswer = await fetchTavilyWebAnswer(hint, { maxResults: limit });
-        if (!searchAnswer) continue;
-        for (const s of searchAnswer.sources ?? []) {
-          if (s?.url && !seenUrls.has(s.url)) {
-            seenUrls.add(s.url);
-            allUrls.push(s.url);
-          }
-        }
-        if (allUrls.length >= limit) break;
-      }
-      urlsFound += allUrls.length;
-      if (allUrls.length === 0) {
-        errors.push(`${sourceId}: no listing URLs found for ${city}`);
+      // 1. Find listing URLs
+      const searchAnswer = await fetchTavilyWebAnswer(
+        src.searchHint(city),
+        { maxResults: limit },
+      );
+      if (!searchAnswer) {
+        errors.push(`${sourceId}: no search results`);
         continue;
       }
 
       // 2. Filter URLs to the right domain
-      const urls = allUrls
+      const urls = (searchAnswer.sources ?? [])
+        .map((s: any) => s.url)
         .filter((u: string) => {
           if (!/^https?:\/\//.test(u)) return false;
           if (sourceId === "property24") return /property24\.com/.test(u);
@@ -211,6 +167,7 @@ export async function POST(req: NextRequest) {
           return false;
         })
         .slice(0, limit);
+      urlsFound += urls.length;
 
       if (urls.length === 0) {
         errors.push(`${sourceId}: no listing URLs found for ${city}`);
