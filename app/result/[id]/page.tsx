@@ -138,7 +138,17 @@ export default async function ResultPage({
   // (sign-in is needed to ASK a question, not to view one).
 
   const { id } = await params;
-  const question = await prisma.question.findUnique({ where: { id } });
+  // LCP-3696209481: defensive Prisma fetch. If Prisma is down,
+  // connection-pooled, or the row was deleted between submit and
+  // redirect, route to notFound() instead of letting the throw
+  // bubble to Next.js's generic Application error page.
+  let question: Awaited<ReturnType<typeof prisma.question.findUnique>>;
+  try {
+    question = await prisma.question.findUnique({ where: { id } });
+  } catch (err) {
+    console.error("[/result/[id]] prisma fetch failed:", err);
+    notFound();
+  }
   if (!question) {
     notFound();
   }
