@@ -143,10 +143,12 @@ export default async function ResultPage({
   // redirect, route to notFound() instead of letting the throw
   // bubble to Next.js's generic Application error page.
   let question: Awaited<ReturnType<typeof prisma.question.findUnique>>;
+  let prismaError: string | null = null;
   try {
     question = await prisma.question.findUnique({ where: { id } });
   } catch (err) {
-    console.error("[/result/[id]] prisma fetch failed:", err);
+    prismaError = err instanceof Error ? err.message.slice(0, 200) : String(err);
+    console.error("[/result/[id]] prisma fetch failed:", prismaError);
     notFound();
   }
   if (!question) {
