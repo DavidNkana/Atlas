@@ -327,9 +327,21 @@ export function RankedSiteCard({
               </p>
             )}
             {site.dataProvenance && (
-              <p className="font-mono text-[10px] text-atlas-muted">
-                Sources: {site.dataProvenance}
-              </p>
+              <div className="rounded border border-atlas-border bg-atlas-surface2 px-2 py-1.5">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-atlas-muted">
+                  Data provenance
+                </p>
+                <p className="mt-0.5 font-mono text-[10px] text-atlas-text break-words">
+                  {site.dataProvenance}
+                </p>
+                <p className="mt-1 text-[10px] text-atlas-muted">
+                  {(site.confidence ?? 0) >= 0.6 ? (
+                    <span className="text-emerald-400">✓ Confidence {(site.confidence * 100).toFixed(0)}% — sufficient</span>
+                  ) : (
+                    <span className="text-rose-400">⚠ Confidence {(site.confidence * 100).toFixed(0)}% — below threshold, treat with caution</span>
+                  )}
+                </p>
+              </div>
             )}
 
             {/* Day 22 — live listings section. Shows up to 3 real

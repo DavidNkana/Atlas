@@ -166,6 +166,7 @@ export function SettingsDrawer({
           <div className="space-y-1">
             {MODEL_INFO.map((info) => {
               const isActive = prefs.defaultModel === info.id;
+              const isStub = info.id === "curated-stub";
               return (
                 <button
                   key={info.id}
@@ -181,15 +182,26 @@ export function SettingsDrawer({
                   <span className="flex-1 text-atlas-text">
                     {info.displayName}
                   </span>
-                  {info.free && (
+                  {isStub ? (
+                    <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-semibold text-amber-300">
+                      DEMO DATA
+                    </span>
+                  ) : info.free ? (
                     <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-300">
                       FREE
                     </span>
-                  )}
+                  ) : null}
                 </button>
               );
             })}
           </div>
+          {prefs.defaultModel === "curated-stub" && (
+            <p className="mt-2 rounded-md border border-amber-800 bg-amber-950/40 p-2 text-[11px] leading-relaxed text-amber-200">
+              <strong>Demo data, not a real recommendation.</strong>{" "}
+              Curated stub returns hand-curated placeholder sites for demo
+              and offline use. Do not use it for actual property decisions.
+            </p>
+          )}
         </section>
 
         {/* Default vertical */}

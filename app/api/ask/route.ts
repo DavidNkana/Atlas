@@ -683,6 +683,25 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   }
 
 
+  // LCP-critic-trust: Confidence gate. If the model returned sites
+  // but ALL of them have confidence below the threshold, refuse to
+  // score rather than present a polished-looking but unreliable
+  // recommendation. The critic specifically called out "a polished
+  // wrong answer is worse than no answer" — this is the
+  // no-answer half of that tradeoff. Users see an honest
+  // "insufficient confidence — we don't have enough data to score
+  // this" response instead of fabricated-looking rankings.
+  const CONFIDENCE_THRESHOLD = 0.6;
+  if (rankedSites.length > 0) {
+    const avgConfidence =
+      rankedSites.reduce((sum: number, s: any) => sum + (s.confidence ?? 0), 0) /
+      rankedSites.length;
+    if (avgConfidence < CONFIDENCE_THRESHOLD) {
+      rankedSites = []; // Trigger the no-data path below
+      modelError = `Low confidence: average ${avgConfidence.toFixed(2)} < ${CONFIDENCE_THRESHOLD} threshold. Atlas declined to score this query because supporting data was insufficient.`;
+    }
+  }
+
   // Day 28 — supplement AI-ranked sites with catalog entries before
   // building the connector plan. This ensures ALL sites (AI + catalog)
   // get signal data from connectors, not just the AI's top picks.
