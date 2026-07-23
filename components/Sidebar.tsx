@@ -584,16 +584,16 @@ function HistoryRow({
 }) {
   return (
     <div
-      // Day 12 v7: when isActive, the row gets a 2px left accent bar
-      // (border-l-2 border-atlas-accent) and a tinted background
-      // (bg-atlas-accent/10). The non-active state keeps the default
-      // surface. The accent bar is the strongest "you are here"
-      // signal because the user sees it on every row, regardless
-      // of which row they hover.
-      className={`group relative flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors ${
+      // LCP-active-row-fix: the active row was previously only a
+      // subtle bg-atlas-accent/10 tint which was barely visible
+      // against the sidebar surface. Now it's a 3px left accent
+      // bar (border-l-[3px]) plus a stronger tinted background plus
+      // an inline "Current" badge so the user can see at a glance
+      // which result they're on, no squinting required.
+      className={`group relative flex w-full items-start gap-2 rounded-md py-1.5 pl-2 pr-2 text-left text-xs transition-colors ${
         isActive
-          ? "border-l-2 border-atlas-accent bg-atlas-accent/10 text-atlas-text"
-          : "border-l-2 border-transparent text-atlas-text hover:bg-atlas-surface2"
+          ? "border-l-[3px] border-atlas-accent bg-atlas-accent/15 text-atlas-text shadow-[inset_2px_0_0_0_theme(colors.atlas-accent)]"
+          : "border-l-[3px] border-transparent text-atlas-text hover:bg-atlas-surface2"
       }`}
     >
       <button
@@ -610,6 +610,11 @@ function HistoryRow({
             <span className="min-w-0 flex-1 truncate">
               {item.questionText}
             </span>
+            {isActive && (
+              <span className="ml-1 inline-flex h-4 shrink-0 items-center rounded-sm bg-atlas-accent px-1 text-[9px] font-semibold uppercase text-white">
+                Current
+              </span>
+            )}
             <span className="shrink-0 text-[10px] text-atlas-muted">
               {relativeTime(item.createdAt)}
             </span>

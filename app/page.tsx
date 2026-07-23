@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 import { MODEL_INFO } from "@/lib/models/registry";
@@ -109,6 +109,21 @@ export default function HomePage() {
   const [question, setQuestion] = useState<string>("");
   const [attachments, setAttachments] = useState<{ base64: string; mime: string; name: string }[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Bugfix: previously the textarea only auto-resized inside its
+  // own onChange handler. That meant any time `question` was set
+  // programmatically — clicking an old history row, paste, autofill,
+  // drag-drop, etc. — the textarea height stayed at the previous
+  // value. Run resizeTextarea via useLayoutEffect on every `question`
+  // change so programmatic updates also expand the box correctly.
+  const resizeTextarea = (el: HTMLTextAreaElement | null) => {
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 160) + 'px';
+  };
+  useLayoutEffect(() => {
+    resizeTextarea(inputRef.current);
+  }, [question]);
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -703,10 +718,7 @@ export default function HomePage() {
                       value={question}
                       onChange={(e) => {
                         setQuestion(e.target.value);
-                        // Auto-resize
-                        const el = e.target;
-                        el.style.height = 'auto';
-                        el.style.height = Math.min(el.scrollHeight, 160) + 'px';
+                        resizeTextarea(e.target);
                       }}
                       placeholder={placeholder}
                       rows={1}
