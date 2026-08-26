@@ -28,11 +28,6 @@ export default function RootLayout({
       signUpFallbackRedirectUrl="/"
     >
       <html lang="en" className="dark">
-        <head>
-          <script dangerouslySetInnerHTML={{
-            __html: `if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js').catch(() => {}); }); }`,
-          }} />
-        </head>
         <body className="min-h-screen bg-atlas-bg text-atlas-text font-sans antialiased">
           <ThemeBootstrapper />
           <NavigationLoader />
