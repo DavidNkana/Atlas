@@ -12,6 +12,7 @@ import { ChatGPTThinking } from "@/components/ChatGPTThinking";
 import { ModelIcon } from "@/components/ModelIcon";
 import { OutOfScopeModal, useOutOfScopeGate } from "@/components/OutOfScopeModal";
 import { VerticalMismatchModal, suggestVertical } from "@/components/VerticalMismatchModal";
+import { AuthGateModal } from "@/components/AuthGateModal";
 import { readPrefs, DEFAULT_PREFS, type AtlasPrefs } from "@/components/SettingsDrawer";
 
 /**
@@ -146,6 +147,7 @@ export default function HomePage() {
   // Model picker flips up if there isn't enough space below the
   // button. We measure on open.
   const [modelPickerFlipUp, setModelPickerFlipUp] = useState<boolean>(false);
+  const [authGateOpen, setAuthGateOpen] = useState<boolean>(false);
   const [mismatchOpen, setMismatchOpen] = useState<boolean>(false);
   const [mismatchData, setMismatchData] = useState<{
     question: string;
@@ -325,6 +327,15 @@ export default function HomePage() {
     e.preventDefault();
     if (!question.trim()) return;
 
+    // Auth gate. Unauth users see the friendly AuthGateModal
+    // instead of an inline 401. The /api/ask route still rejects
+    // unauth requests with 401 (defense in depth), but the user-
+    // facing experience is a clear next-step, not an error string.
+    if (!user) {
+      setAuthGateOpen(true);
+      return;
+    }
+
     // Out-of-scope prompt gate. If the question doesn't look like a
     // location intelligence question, show the modal and don't submit.
     if (outOfScope.checkQuestion(question.trim())) {
@@ -447,6 +458,11 @@ export default function HomePage() {
     <AppShell>
       <outOfScope.Modal />
 
+      <AuthGateModal
+        open={authGateOpen}
+        onClose={() => setAuthGateOpen(false)}
+      />
+
       {mismatchOpen && mismatchData && (
         <VerticalMismatchModal
           question={mismatchData.question}
@@ -535,7 +551,6 @@ export default function HomePage() {
             {/* Explore Crypto button removed */}
           </div>
           <div className="flex items-center gap-3">
-            <a href="/news" className="hover:text-atlas-accent">News</a>
             <a href="/demo" className="hover:text-atlas-accent">
               Demo
             </a>
