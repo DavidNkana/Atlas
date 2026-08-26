@@ -3,10 +3,24 @@
 /**
  * Atlas — ChatGPT-style thinking loader.
  *
- * Day 9 polish. While Atlas is fetching data, this component shows
- * a sequence of pre-written multi-line paragraphs that "type out"
- * word-by-word in prose register ("Alright, let's map this out. I
- * need to find sites in Sandton for a gas station...").
+ * Day 9 polish + Day 22 redesign. While Atlas is fetching data,
+ * this component shows a sequence of pre-written multi-line
+ * paragraphs that "type out" word-by-word in prose register,
+ * personalised with the user's first name, their question, and
+ * the selected vertical ("Alright David. I got your question —
+ * 'Where in Sandton for vacant land?' Let me think this through
+ * for you.").
+ *
+ * Day 22 visual upgrade:
+ *   - Bigger, more visible dots (h-3 w-3 instead of h-1.5 w-1.5)
+ *     with a bouncier staggered animation (scale + opacity)
+ *   - Bigger text (text-xl instead of text-sm) for legibility
+ *   - Rounded geometric sans-serif font stack: ui-rounded,
+ *     "SF Pro Rounded", "Nunito", system-ui. These are rounded
+ *     typefaces that ship with the OS — no web font dep.
+ *   - Each paragraph is now personalised with the user's prompt
+ *     in quotes so the user sees Atlas acknowledge their exact
+ *     question before doing any work.
  *
  * The lines are personalised with the user's first name, their
  * question, and the selected vertical. Each line types out
@@ -16,7 +30,7 @@
  * always sees motion.
  *
  * Implementation:
- *   - A pool of 5 paragraphs. We pick all 5 per render (they're
+ *   - A pool of 6 paragraphs. We pick all 6 per render (they're
  *     short enough).
  *   - Each paragraph is revealed 1 word at a time at ~80ms/word.
  *   - After a paragraph finishes, hold for 1.6s, then fade out
@@ -52,12 +66,12 @@ function buildParagraphs(opts: {
   // not a fragment. The user gets the feeling of a real AI working
   // through the problem step by step.
   return [
-    `Alright ${name}. I got your question — "${qShort}". Let me think this through for you.`,
-    `First, I need to find the right sites in ${city} for a ${v}. I'll start by mapping the area and pulling in the relevant signals.`,
-    `Next, I'll check live POI density — what else is nearby that matters for a ${v}, and how busy the surrounding streets actually are.`,
-    `Then I'll layer in demographics and recent real estate activity, so I'm not just guessing based on geography.`,
-    `Almost there. I'm cross-referencing the strongest candidates and ranking them by traffic, access, and demand.`,
-    `Final pass — drafting the answer with scores and a clear rationale for each of the top 5 sites.`,
+    `Alright ${name} — got your question: "${qShort}". Let me think through this for you.`,
+    `Mapping ${city} for a ${v} now. Pulling in the relevant signals — POI density, road access, competition.`,
+    `Cross-checking with demographics and recent activity in the area. Don't want to guess on geography alone.`,
+    `Filtering for environmental constraints — flood plains, protected land, industrial hazards. Quick.`,
+    `Ranking the top candidates by traffic, access, and demand. Almost there.`,
+    `Final pass — drafting the answer with a clear rationale for each of the top sites.`,
   ];
 }
 
@@ -82,17 +96,18 @@ export function ChatGPTThinking({
     }
     const words = paragraphs[pIdx].split(/\s+/);
     if (wordCount < words.length) {
-      // Type out the next word. Faster than letter-by-letter,
-      // reads more like ChatGPT's natural cadence.
+      // Type out the next word. Slightly faster than letter-by-letter,
+      // reads more like ChatGPT's natural cadence. Tuned for the
+      // bigger text — a touch slower per word feels deliberate.
       const t = setTimeout(() => {
         setWordCount((c) => c + 1);
-      }, 80);
+      }, 65);
       return () => clearTimeout(t);
     }
     if (!fading) {
       // Hold the completed paragraph on screen briefly, then
       // start fading.
-      const t = setTimeout(() => setFading(true), 1800);
+      const t = setTimeout(() => setFading(true), 1600);
       return () => clearTimeout(t);
     }
     // After fade-out completes, advance to the next paragraph.
@@ -100,7 +115,7 @@ export function ChatGPTThinking({
       setFading(false);
       setWordCount(0);
       setPIdx((i) => i + 1);
-    }, 350);
+    }, 320);
     return () => clearTimeout(t);
   }, [pIdx, wordCount, fading, paragraphs, onDone]);
 
@@ -110,23 +125,28 @@ export function ChatGPTThinking({
 
   return (
     <div className="flex flex-col items-center gap-3 py-8 text-center">
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3 py-2">
         {[0, 1, 2].map((i) => (
           <span
             key={i}
-            className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-atlas-accent"
-            style={{ animationDelay: `${i * 200}ms` }}
+            className="atlas-thinking-dot inline-block h-3 w-3 rounded-full bg-atlas-accent shadow-[0_0_12px_rgba(99,102,241,0.6)]"
+            style={{ animationDelay: `${i * 180}ms` }}
           />
         ))}
       </div>
       <p
-        className={`min-h-[4.5rem] max-w-lg text-sm leading-relaxed text-atlas-text transition-opacity duration-300 ${
+        className={`min-h-[6rem] max-w-2xl px-2 text-center text-xl font-medium leading-relaxed text-atlas-text transition-opacity duration-300 ${
           fading ? "opacity-0" : "opacity-100"
         }`}
+        style={{
+          fontFamily:
+            '"SF Pro Rounded", "Nunito", "Quicksand", ui-rounded, system-ui, -apple-system, "Segoe UI", sans-serif',
+          letterSpacing: "0.005em",
+        }}
       >
         {visible}
         {wordCount < words.length && (
-          <span className="ml-0.5 inline-block h-4 w-1 animate-pulse bg-atlas-accent align-middle" />
+          <span className="ml-1 inline-block h-5 w-1 animate-pulse bg-atlas-accent align-middle" />
         )}
       </p>
     </div>
