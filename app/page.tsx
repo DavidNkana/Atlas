@@ -12,7 +12,6 @@ import { ChatGPTThinking } from "@/components/ChatGPTThinking";
 import { ModelIcon } from "@/components/ModelIcon";
 import { OutOfScopeModal, useOutOfScopeGate } from "@/components/OutOfScopeModal";
 import { VerticalMismatchModal, suggestVertical } from "@/components/VerticalMismatchModal";
-import { AuthGateModal } from "@/components/AuthGateModal";
 import { readPrefs, DEFAULT_PREFS, type AtlasPrefs } from "@/components/SettingsDrawer";
 
 /**
@@ -44,13 +43,67 @@ type Vertical = BuiltinVertical | `custom:${string}`;
 const MAX_CUSTOM_VERTICAL_LEN = 40;
 const CUSTOM_VERTICAL_RE = /^[a-z][a-z0-9_]{1,39}$/;
 
+/**
+ * Day 25: client-side subset of the custom-vertical keyword map from
+ * lib/scoring/custom-vertical.ts. Used by the UI to show "resolves to
+ * <type>" as the user types. Don't import from the scoring module to
+ * avoid pulling the server module graph into the client bundle.
+ * Keep this roughly in sync with the server-side version.
+ */
+const CUSTOM_VERTICAL_KEYWORDS_CLIENT: Record<string, string> = {
+  hospital: "Civic / Community", clinic: "Civic / Community",
+  school: "Civic / Community", church: "Civic / Community",
+  mosque: "Civic / Community", library: "Civic / Community",
+  university: "Civic / Community", college: "Civic / Community",
+  museum: "Civic / Community", gallery: "Civic / Community",
+  hotel: "Commercial Land", motel: "Commercial Land",
+  lodge: "Commercial Land", resort: "Commercial Land",
+  guesthouse: "Commercial Land", office: "Commercial Land",
+  mall: "Commercial Land", plaza: "Commercial Land",
+  farm: "Agricultural Land", ranch: "Agricultural Land",
+  vineyard: "Agricultural Land", orchard: "Agricultural Land",
+  factory: "Industrial Land", workshop: "Industrial Land",
+  mill: "Industrial Land",
+  restaurant: "Restaurant", cafe: "Restaurant", bar: "Restaurant",
+  pub: "Restaurant", bakery: "Restaurant", "fast food": "Restaurant",
+  shop: "Retail Shop", store: "Retail Shop", supermarket: "Retail Shop",
+  boutique: "Retail Shop", grocery: "Retail Shop",
+  house: "Residential Land", home: "Residential Land",
+  apartment: "Residential Land", mansion: "Residential Land",
+  estate: "Residential Land", villa: "Residential Land",
+  gym: "Commercial Land",
+};
+
 function customVerticalLabel(value: string): string {
-  // "custom:residential_land" -> "Residential land"
   const id = value.replace(/^custom:/, "");
   return id
     .split("_")
     .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
     .join(" ");
+}
+
+/**
+ * Day 25: returns the built-in vertical name that this custom
+ * vertical would resolve to, for display in the UI as the user
+ * types. Returns null if no keyword matches. Same matching logic
+ * as the server-side mapCustomVertical — exact first, then longest
+ * substring match.
+ */
+function customVerticalResolvedName(input: string): string | null {
+  const normalized = input.toLowerCase().trim().replace(/\s+/g, "_");
+  if (!normalized) return null;
+  if (CUSTOM_VERTICAL_KEYWORDS_CLIENT[normalized]) {
+    return CUSTOM_VERTICAL_KEYWORDS_CLIENT[normalized];
+  }
+  let best: { name: string; keywordLen: number } | null = null;
+  for (const [keyword, name] of Object.entries(CUSTOM_VERTICAL_KEYWORDS_CLIENT)) {
+    if (normalized.includes(keyword) || keyword.includes(normalized)) {
+      if (!best || keyword.length > best.keywordLen) {
+        best = { name, keywordLen: keyword.length };
+      }
+    }
+  }
+  return best ? best.name : null;
 }
 
 function isCustomVertical(value: string): value is `custom:${string}` {
@@ -148,7 +201,6 @@ export default function HomePage() {
   // button. We measure on open.
   const [modelPickerFlipUp, setModelPickerFlipUp] = useState<boolean>(false);
   const [mismatchOpen, setMismatchOpen] = useState<boolean>(false);
-  const [authGateOpen, setAuthGateOpen] = useState<boolean>(false);
   const [mismatchData, setMismatchData] = useState<{
     question: string;
     current: string;
@@ -352,15 +404,6 @@ export default function HomePage() {
     e.preventDefault();
     if (!question.trim()) return;
 
-    // Auth gate — Day 17. Unauthed users see the friendly AuthGateModal
-    // instead of getting an inline 401. The /api/ask route still rejects
-    // unauth requests with 401 (defense in depth), but the user-facing
-    // experience is a clear next-step, not an error string.
-    if (!user) {
-      setAuthGateOpen(true);
-      return;
-    }
-
     // Out-of-scope prompt gate. If the question doesn't look like a
     // location intelligence question, show the modal and don't submit.
     if (outOfScope.checkQuestion(question.trim())) {
@@ -483,12 +526,6 @@ export default function HomePage() {
     <AppShell>
       <outOfScope.Modal />
 
-      <AuthGateModal
-        open={authGateOpen}
-        onClose={() => setAuthGateOpen(false)}
-      />
-
-
       {mismatchOpen && mismatchData && (
         <VerticalMismatchModal
           question={mismatchData.question}
@@ -577,7 +614,6 @@ export default function HomePage() {
             {/* Explore Crypto button removed */}
           </div>
           <div className="flex items-center gap-3">
-            <a href="/news" className="hover:text-atlas-accent">News</a>
             <a href="/demo" className="hover:text-atlas-accent">
               Demo
             </a>
@@ -691,15 +727,32 @@ export default function HomePage() {
                           setCustomError(null);
                         }
                       }}
-                      placeholder="e.g. residential_land"
+                      placeholder="e.g. antique_furniture_store"
                       maxLength={MAX_CUSTOM_VERTICAL_LEN}
                       autoComplete="off"
                       spellCheck={false}
                       className="min-w-0 flex-1 rounded bg-atlas-bg px-2 py-1 text-xs text-atlas-text placeholder:text-atlas-muted focus:outline-none"
                     />
+                    {customInputValue.trim() && (
+                      <span className="text-[10px] text-atlas-muted">
+                        {customVerticalResolvedName(customInputValue) ? (
+                          <>
+                            {" "}→ resolves to{" "}
+                            <span className="text-atlas-accent">
+                              {customVerticalResolvedName(customInputValue)}
+                            </span>
+                          </>
+                        ) : (
+                          <span className="text-amber-400">
+                            {" "}→ generic weights (no match)
+                          </span>
+                        )}
+                      </span>
+                    )}
                     <button
                       type="button"
                       onClick={commitCustomVertical}
+
                       className="rounded bg-atlas-accent px-2 py-1 text-xs text-white transition-colors hover:bg-atlas-accent2"
                     >
                       Use
