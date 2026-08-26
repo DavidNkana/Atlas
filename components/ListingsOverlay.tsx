@@ -491,31 +491,84 @@ function PlotCardBelt({
           </p>
         )}
 
-        {plot.sourceUrl && (
-          <a
-            href={plot.sourceUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-1.5 inline-flex items-center gap-1 self-start rounded border border-atlas-accent/40 bg-atlas-accent/10 px-2.5 py-1 text-[10px] font-medium text-atlas-accent transition hover:bg-atlas-accent/20"
-          >
-            View listing
-            <svg
-              width="10"
-              height="10"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <line x1="7" y1="17" x2="17" y2="7" />
-              <polyline points="7 7 17 7 17 17" />
-            </svg>
-          </a>
-        )}
+        <ListingCtaButton plot={plot} />
       </div>
     </article>
+  );
+}
+
+/**
+ * Day 23 — Listing CTA button.
+ *
+ * Renders the bottom-right action on a plot card. Three modes:
+ *   1. plot has sourceUrl → "View listing" link, opens portal in new tab
+ *   2. no sourceUrl but has lat/lng → "View on map" link, opens Google Maps
+ *   3. no sourceUrl and no lat/lng → "No link available" small tag
+ *
+ * Renders as an inline-flex pill. Kept tiny (h-6) so it doesn't crowd
+ * the card. For a future iteration: capture click events on the whole
+ * card via onClick on the parent <article>, but that requires hoisting
+ * state up to the result page.
+ */
+function ListingCtaButton({ plot }: { plot: PlotCard }) {
+  if (plot.sourceUrl) {
+    return (
+      <a
+        href={plot.sourceUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-1.5 inline-flex items-center gap-1 self-start rounded border border-atlas-accent/40 bg-atlas-accent/10 px-2.5 py-1 text-[10px] font-medium text-atlas-accent transition hover:bg-atlas-accent/20"
+      >
+        View listing
+        <svg
+          width="10"
+          height="10"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <line x1="7" y1="17" x2="17" y2="7" />
+          <polyline points="7 7 17 7 17 17" />
+        </svg>
+      </a>
+    );
+  }
+  // No URL — fall back to Google Maps using lat/lng if available.
+  if (plot.lat != null && plot.lng != null) {
+    const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${plot.lat},${plot.lng}`;
+    return (
+      <a
+        href={mapsUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-1.5 inline-flex items-center gap-1 self-start rounded border border-atlas-border bg-atlas-bg px-2.5 py-1 text-[10px] font-medium text-atlas-muted transition hover:border-atlas-accent hover:text-atlas-text"
+        title={`Open ${plot.suburb ?? "this location"} on Google Maps`}
+      >
+        View on map
+        <svg
+          width="10"
+          height="10"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <line x1="7" y1="17" x2="17" y2="7" />
+          <polyline points="7 7 17 7 17 17" />
+        </svg>
+      </a>
+    );
+  }
+  // Last resort — no link available at all.
+  return (
+    <span className="mt-1.5 inline-flex items-center self-start rounded border border-dashed border-atlas-border/60 px-2.5 py-1 text-[10px] text-atlas-muted">
+      No link available
+    </span>
   );
 }
 
