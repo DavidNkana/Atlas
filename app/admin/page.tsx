@@ -44,6 +44,13 @@ export default async function AdminPage() {
     plotCount,
     recentUsers,
     feedbackEntries,
+    // Day 21: onboarding profile data.
+    onboardedUsers,
+    profileByIntent,
+    profileByAccountType,
+    profileByReferral,
+    onboardingCompleteCount,
+    onboardingTotalCount,
   ] = await Promise.all([
     prisma.question.count(),
     prisma.question.count({
@@ -123,6 +130,21 @@ export default async function AdminPage() {
       .findMany({
         orderBy: { planUpdatedAt: "desc" },
         take: 10,
+        select: {
+          id: true,
+          email: true,
+          plan: true,
+          stripeCustomerId: true,
+          createdAt: true,
+          planUpdatedAt: true,
+          location: true,
+          accountType: true,
+          organizationName: true,
+          intent: true,
+          referralSource: true,
+          onboardingComplete: true,
+          onboardingCompletedAt: true,
+        },
       })
       .catch(() => [] as any[]),
     prisma.question.findMany({
@@ -131,6 +153,43 @@ export default async function AdminPage() {
       take: 20,
       select: { id: true, questionText: true, vertical: true, rating: true, ratingNote: true, ratedAt: true, userId: true },
     }),
+    // Onboarding profile data — Day 21
+    prisma.user
+      .findMany({
+        where: { onboardingComplete: true },
+        orderBy: { onboardingCompletedAt: "desc" },
+        take: 25,
+        select: {
+          id: true,
+          email: true,
+          location: true,
+          accountType: true,
+          organizationName: true,
+          intent: true,
+          referralSource: true,
+          onboardingCompletedAt: true,
+        },
+      })
+      .catch(() => [] as any[]),
+    prisma.user.groupBy({
+      by: ["intent"],
+      where: { intent: { not: null } },
+      _count: { _all: true },
+      orderBy: { _count: { intent: "desc" } },
+    }).catch(() => [] as any[]),
+    prisma.user.groupBy({
+      by: ["accountType"],
+      where: { accountType: { not: null } },
+      _count: { _all: true },
+    }).catch(() => [] as any[]),
+    prisma.user.groupBy({
+      by: ["referralSource"],
+      where: { referralSource: { not: null } },
+      _count: { _all: true },
+      orderBy: { _count: { referralSource: "desc" } },
+    }).catch(() => [] as any[]),
+    prisma.user.count({ where: { onboardingComplete: true } }).catch(() => 0),
+    prisma.user.count().catch(() => 0),
   ]);
 
   return (
@@ -378,6 +437,12 @@ export default async function AdminPage() {
                       </th>
                       <th className="px-3 py-2 text-left font-medium">Plan</th>
                       <th className="px-3 py-2 text-left font-medium">
+                        Location
+                      </th>
+                      <th className="px-3 py-2 text-left font-medium">Type</th>
+                      <th className="px-3 py-2 text-left font-medium">Intent</th>
+                      <th className="px-3 py-2 text-left font-medium">Source</th>
+                      <th className="px-3 py-2 text-left font-medium">
                         Stripe ID
                       </th>
                       <th className="px-3 py-2 text-left font-medium">When</th>
@@ -397,6 +462,22 @@ export default async function AdminPage() {
                             {u.plan}
                           </span>
                         </td>
+                        <td className="px-3 py-2 text-[10px] text-atlas-text">
+                          {u.location ?? <em className="text-atlas-muted">—</em>}
+                        </td>
+                        <td className="px-3 py-2 text-[10px] text-atlas-text">
+                          {u.accountType
+                            ? u.accountType === "organization" && u.organizationName
+                              ? <>org <span className="text-atlas-muted">· {u.organizationName}</span></>
+                              : u.accountType
+                            : <em className="text-atlas-muted">—</em>}
+                        </td>
+                        <td className="px-3 py-2 text-[10px] text-atlas-text">
+                          {u.intent ?? <em className="text-atlas-muted">—</em>}
+                        </td>
+                        <td className="px-3 py-2 text-[10px] text-atlas-muted">
+                          {u.referralSource ?? "—"}
+                        </td>
                         <td className="px-3 py-2 font-mono text-[10px] text-atlas-muted">
                           {u.stripeCustomerId?.slice(0, 16) ?? "—"}…
                         </td>
@@ -410,6 +491,82 @@ export default async function AdminPage() {
               </div>
             </section>
           )}
+
+          {/* Onboarding profile data — Day 21 */}
+          <section className="mb-8">
+            <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-atlas-muted">
+              Onboarding profile ({onboardingCompleteCount}/{onboardingTotalCount} completed)
+            </h2>
+
+            {/* Aggregated breakdowns */}
+            <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+              <ProfileGrouping
+                title="By intent"
+                rows={profileByIntent.map((g) => ({ key: g.intent ?? "—", count: g._count._all }))}
+              />
+              <ProfileGrouping
+                title="By account type"
+                rows={profileByAccountType.map((g) => ({ key: g.accountType ?? "—", count: g._count._all }))}
+              />
+              <ProfileGrouping
+                title="By referral source"
+                rows={profileByReferral.map((g) => ({ key: g.referralSource ?? "—", count: g._count._all }))}
+              />
+            </div>
+
+            {/* Recent onboarded users */}
+            {onboardedUsers.length === 0 ? (
+              <p className="rounded-xl border border-atlas-border bg-atlas-surface px-4 py-6 text-center text-sm text-atlas-muted">
+                No completed onboarding profiles yet.
+              </p>
+            ) : (
+              <div className="overflow-hidden rounded-xl border border-atlas-border bg-atlas-surface">
+                <table className="w-full text-sm">
+                  <thead className="border-b border-atlas-border text-[10px] uppercase tracking-wider text-atlas-muted">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-medium">Email</th>
+                      <th className="px-3 py-2 text-left font-medium">Location</th>
+                      <th className="px-3 py-2 text-left font-medium">Type</th>
+                      <th className="px-3 py-2 text-left font-medium">Intent</th>
+                      <th className="px-3 py-2 text-left font-medium">Source</th>
+                      <th className="px-3 py-2 text-left font-medium">Completed</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {onboardedUsers.map((u) => (
+                      <tr
+                        key={u.id}
+                        className="border-b border-atlas-border last:border-0"
+                      >
+                        <td className="px-3 py-2 font-mono text-xs text-atlas-text">
+                          {u.email}
+                        </td>
+                        <td className="px-3 py-2 text-[10px] text-atlas-text">
+                          {u.location ?? <em className="text-atlas-muted">—</em>}
+                        </td>
+                        <td className="px-3 py-2 text-[10px] text-atlas-text">
+                          {u.accountType
+                            ? u.accountType === "organization" && u.organizationName
+                              ? <>org <span className="text-atlas-muted">· {u.organizationName}</span></>
+                              : u.accountType
+                            : <em className="text-atlas-muted">—</em>}
+                        </td>
+                        <td className="px-3 py-2 text-[10px] text-atlas-text">
+                          {u.intent ?? <em className="text-atlas-muted">—</em>}
+                        </td>
+                        <td className="px-3 py-2 text-[10px] text-atlas-muted">
+                          {u.referralSource ?? "—"}
+                        </td>
+                        <td className="px-3 py-2 text-[10px] text-atlas-muted">
+                          {relativeTime(u.onboardingCompletedAt)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
 
           {/* Recent questions */}
           <section>
@@ -542,4 +699,47 @@ function relativeTime(d: Date | string): string {
   const day = Math.floor(hr / 24);
   if (day < 30) return `${day}d ago`;
   return `${Math.floor(day / 30)}mo ago`;
+
+function ProfileGrouping({
+  title,
+  rows,
+}: {
+  title: string;
+  rows: { key: string; count: number }[];
+}) {
+  const total = rows.reduce((sum, r) => sum + r.count, 0);
+  const sorted = [...rows].sort((a, b) => b.count - a.count);
+  return (
+    <div className="rounded-xl border border-atlas-border bg-atlas-surface p-5">
+      <h3 className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-atlas-muted">
+        {title}
+      </h3>
+      {total === 0 ? (
+        <p className="text-xs text-atlas-muted">No data yet.</p>
+      ) : (
+        <ul className="space-y-2">
+          {sorted.map((r) => {
+            const pct = total > 0 ? Math.round((r.count / total) * 100) : 0;
+            return (
+              <li key={r.key} className="text-xs">
+                <div className="mb-1 flex items-center justify-between">
+                  <span className="text-atlas-text">{r.key}</span>
+                  <span className="font-mono text-atlas-muted">
+                    {r.count} <span className="text-[10px]">({pct}%)</span>
+                  </span>
+                </div>
+                <div className="h-1 w-full overflow-hidden rounded-full bg-atlas-border">
+                  <div
+                    className="h-full bg-atlas-accent"
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
 }
