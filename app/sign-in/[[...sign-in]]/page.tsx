@@ -31,22 +31,24 @@ export default function SignInPage() {
                 rootBox: "w-full",
                 card: "bg-transparent shadow-none w-full",
                 formButtonPrimary:
-                  "bg-atlas-accent hover:bg-atlas-accent2 text-white",
-                footerActionLink: "text-atlas-accent hover:text-atlas-accent2",
+                  "bg-atlas-accent hover:bg-atlas-accent2 text-white font-medium",
+                footerActionLink:
+                  "text-atlas-accent hover:text-atlas-accent2 font-medium",
                 formFieldInput:
-                  "bg-atlas-bg border-atlas-border text-atlas-text",
-                formFieldLabel: "text-atlas-muted",
+                  "bg-atlas-surface2 border-atlas-border text-atlas-text placeholder:text-atlas-muted/60",
+                formFieldLabel:
+                  "text-atlas-text/80 font-medium text-xs",
                 identityPreviewText: "text-atlas-text",
                 identityPreviewEditButton: "text-atlas-accent",
                 formFieldAction: "text-atlas-accent",
                 socialButtonsBlockButton:
-                  "bg-atlas-bg border-atlas-border text-atlas-text hover:bg-atlas-surface2",
+                  "bg-atlas-surface2 border-atlas-border text-atlas-text hover:bg-atlas-surface",
                 socialButtonsBlockButtonText: "text-atlas-text",
                 dividerLine: "bg-atlas-border",
                 dividerText: "text-atlas-muted",
                 formResendCodeLink: "text-atlas-accent",
                 otpCodeFieldInput:
-                  "bg-atlas-bg border-atlas-border text-atlas-text",
+                  "bg-atlas-surface2 border-atlas-border text-atlas-text",
                 alert: "bg-red-500/10 border-red-500/30 text-red-300",
                 alertText: "text-red-300",
                 formFieldErrorText: "text-red-300",
