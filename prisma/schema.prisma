@@ -170,6 +170,34 @@ model User {
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 
+  // Day 21: Onboarding profile fields captured after Clerk signup.
+  // All optional — user can skip — but a nudge UI steers them to fill
+  // these in. Captured via app/onboarding/page.tsx + POSTed to
+  // /api/profile, which upserts into the existing User row.
+  //
+  // location: free text (city + country is the typical input). Used
+  // for defaulting the ask flow's region picker.
+  location             String?
+  // accountType: "individual" | "organization".
+  accountType          String?
+  // organizationName: only populated when accountType === "organization".
+  organizationName     String?
+  // intent: answers "What brings you to Atlas?" — captures the user's
+  // primary use case (invest, develop, rent, board, research, other).
+  // Drives admin segmentation and feature surfacing.
+  intent               String?
+  // referralSource: dropdown — where the user heard about Atlas.
+  referralSource       String?
+  // onboardingComplete: true after user finishes the 4-question form
+  // (or explicitly skips it). Used by app/page.tsx to decide whether
+  // to redirect authed users to /onboarding.
+  onboardingComplete   Boolean  @default(false)
+  onboardingCompletedAt DateTime?
+
   @@index([plan])
   @@index([plan, planUpdatedAt])
+  @@index([intent])
+  @@index([accountType])
+  @@index([referralSource])
+  @@index([onboardingComplete])
 }
