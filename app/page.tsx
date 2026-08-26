@@ -12,7 +12,6 @@ import { ChatGPTThinking } from "@/components/ChatGPTThinking";
 import { ModelIcon } from "@/components/ModelIcon";
 import { OutOfScopeModal, useOutOfScopeGate } from "@/components/OutOfScopeModal";
 import { VerticalMismatchModal, suggestVertical } from "@/components/VerticalMismatchModal";
-import { AuthGateModal } from "@/components/AuthGateModal";
 import { readPrefs, DEFAULT_PREFS, type AtlasPrefs } from "@/components/SettingsDrawer";
 
 /**
@@ -147,7 +146,6 @@ export default function HomePage() {
   // Model picker flips up if there isn't enough space below the
   // button. We measure on open.
   const [modelPickerFlipUp, setModelPickerFlipUp] = useState<boolean>(false);
-  const [authGateOpen, setAuthGateOpen] = useState<boolean>(false);
   const [mismatchOpen, setMismatchOpen] = useState<boolean>(false);
   const [mismatchData, setMismatchData] = useState<{
     question: string;
@@ -221,6 +219,31 @@ export default function HomePage() {
     }
     setShowThinkingLoader(p.showThinkingLoader);
   }, []);
+
+  // Day 21: Onboarding gate. Authed users who haven't completed the
+  // 4-question profile form get redirected to /onboarding. Skips
+  // silently if /api/profile fails (e.g. DB column not yet added —
+  // we fail open to avoid breaking the home page for existing users).
+  useEffect(() => {
+    if (!isLoaded || !user) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/profile", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json().catch(() => ({}));
+        if (cancelled) return;
+        if (data?.profile && data.profile.onboardingComplete === false) {
+          router.push("/onboarding");
+        }
+      } catch {
+        // Fail open — never block the home page on a profile fetch.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoaded, user, router]);
 
   // Listen for Settings changes
   useEffect(() => {
@@ -326,15 +349,6 @@ export default function HomePage() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!question.trim()) return;
-
-    // Auth gate. Unauth users see the friendly AuthGateModal
-    // instead of an inline 401. The /api/ask route still rejects
-    // unauth requests with 401 (defense in depth), but the user-
-    // facing experience is a clear next-step, not an error string.
-    if (!user) {
-      setAuthGateOpen(true);
-      return;
-    }
 
     // Out-of-scope prompt gate. If the question doesn't look like a
     // location intelligence question, show the modal and don't submit.
@@ -457,11 +471,6 @@ export default function HomePage() {
   return (
     <AppShell>
       <outOfScope.Modal />
-
-      <AuthGateModal
-        open={authGateOpen}
-        onClose={() => setAuthGateOpen(false)}
-      />
 
       {mismatchOpen && mismatchData && (
         <VerticalMismatchModal
