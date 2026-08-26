@@ -699,6 +699,7 @@ function relativeTime(d: Date | string): string {
   const day = Math.floor(hr / 24);
   if (day < 30) return `${day}d ago`;
   return `${Math.floor(day / 30)}mo ago`;
+}
 
 function ProfileGrouping({
   title,
