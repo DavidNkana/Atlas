@@ -1,19 +1,27 @@
 /**
- * Day 5 — Scoring engine.
+ * Day 5 (original) — Scoring engine.
+ * Day 24 — expanded to apply per-signal-type weights per vertical.
  *
- * combine(aiSite, signals, vertical) takes the AI's score for a site and the
- * list of Signals connectors returned for it, and produces a ScoreBreakdown
- * the API route can attach to the response and the UI can render.
+ * combine(aiSite, signals, vertical) takes the AI's score for a site
+ * and the list of Signals connectors returned for it, and produces a
+ * ScoreBreakdown the API route can attach to the response and the UI
+ * can render.
  *
- * v1 is intentionally simple:
- *   - one signal type (amenity_density) is supported
- *   - the boost = signal.weight * verticalWeights.amenityDensity
- *   - the boost is clamped to [-maxSignalBoost, +maxSignalBoost]
- *   - the breakdown lists every signal as a ScoreFactor
- *
- * When Day 60 adds new signal types, the engine reads `signal.type` and
- * routes to per-type scoring functions. The API contract (ScoreBreakdown)
- * will not change.
+ * Per-signal-type scoring:
+ *   - SIGNAL_TYPE_WEIGHT_KEYS maps signal.type → a key in
+ *     VerticalWeights. So a `schools_count` signal in a
+ *     residential_land query uses weights.schools.
+ *   - Each signal's contribution is `(sig.weight - 0.5) * factorWeight`,
+ *     so an "average" density (weight=0.5) contributes 0 and a high
+ *     density (weight=1) contributes +factorWeight/2, low density
+ *     contributes -factorWeight/2.
+ *   - Competitor and env-risk signals are INVERTED — high values
+ *     push the score DOWN because high competition or high
+ *     environmental risk is bad for the user's site.
+ *   - Each contribution is clamped to ±maxSignalBoost so one
+ *     outlier signal can't dominate the final score.
+ *   - Unrecognised signal types contribute 0 but are still surfaced
+ *     in the breakdown for UI transparency.
  */
 
 import type { Vertical } from "@/lib/models/types";
@@ -50,29 +58,61 @@ export function combine(
   const factors: ScoreFactor[] = [];
   let signalScore = 0;
 
+  // Per-signal-type weighting. Each signal type has a dedicated
+  // weight in VerticalWeights. Special-case: competitor is INVERTED
+  // (high count = bad for the user's site) and env_risk is also
+  // INVERTED (high risk = bad). Everything else follows the
+  // standard "centre at 0.5" rule: weight=0.5 → 0, weight=1 → +half,
+  // weight=0 → -half.
+  const SIGNAL_TYPE_WEIGHT_KEYS: Record<string, keyof VerticalWeights> = {
+    amenity_density: "amenityDensity",
+    competitor_count: "competitor",
+    schools_count: "schools",
+    transit_count: "transit",
+    healthcare_count: "healthcare",
+    roads_count: "roads",
+    landuse_count: "landuse",
+    building_density: "landuse",  // same family as landuse
+    vacant_land: "landuse",
+    env_risk: "envRisk",
+    demographic_profile: "demographics",
+    economic_zone: "demographics",
+    median_income: "demographics",
+    population_growth: "demographics",
+  };
+
+  // Signal types that are INVERTED — high value = BAD for the user's
+  // site. We negate the centred contribution so high signal value
+  // pushes the score DOWN (and vice versa).
+  const INVERTED_SIGNAL_TYPES = new Set([
+    "competitor_count", // too many competitors = bad
+    "env_risk",         // flood/protected/hazards = bad
+  ]);
+
   for (const sig of signals) {
-    // Today we only score amenity_density. Other signal types add 0 and
-    // are still surfaced as factors (so the UI can render them).
-    let factorWeight: number;
+    const weightKey = SIGNAL_TYPE_WEIGHT_KEYS[sig.type];
+    let factorWeight = 0;
     let contribution = 0;
-    if (sig.type === "amenity_density") {
-      factorWeight = weights.amenityDensity;
-      // sig.weight is already normalised [0..1] by the connector. Multiply
-      // by the vertical's factor weight, then centre around zero so a low
-      // density is mildly negative and high density is mildly positive.
-      // Centre = 0.5: weight=0.5 → 0, weight=1.0 → +factorWeight/2, weight=0 → -factorWeight/2.
+
+    if (weightKey !== undefined) {
+      factorWeight = weights[weightKey] as number;
+      // sig.weight is normalised [0..1] by the connector. Centre
+      // around 0.5 so "average" density contributes 0 and
+      // "high"/"low" push the score positively or negatively.
       const centred = (sig.weight - 0.5) * factorWeight;
+      // For competitor_count and env_risk, high values are bad.
+      // Negate the centred value so a high signal value pushes
+      // the score DOWN.
+      const signed = INVERTED_SIGNAL_TYPES.has(sig.type) ? -centred : centred;
       contribution = clamp(
-        centred,
+        signed,
         -weights.maxSignalBoost,
         weights.maxSignalBoost,
       );
-    } else {
-      factorWeight = 0;
     }
     factors.push({
       name: sig.type,
-      weight: factorWeight,
+      weight: round2(factorWeight),
       contribution: round2(contribution),
       evidence: sig.label,
     });
