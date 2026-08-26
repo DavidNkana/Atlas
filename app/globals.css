@@ -120,3 +120,32 @@ html.atlas-light .hover\:border-zinc-600:hover { border-color: #a1a1aa !importan
   color: #fafafa !important;
   background: transparent !important;
 }
+
+/* Atlas — Auth gate modal smiley animation.
+   Gentle bounce + occasional blink, applied via inline classes on the
+   inline SVG in components/AuthGateModal.tsx. Zero JS, zero deps. */
+.atlas-smiley-bounce {
+  animation: atlas-smiley-bounce 3.2s ease-in-out infinite;
+  transform-origin: center;
+  will-change: transform;
+}
+@keyframes atlas-smiley-bounce {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-6px); }
+}
+.atlas-smiley-blink .atlas-eye-left,
+.atlas-smiley-blink .atlas-eye-right {
+  transform-origin: center;
+  animation: atlas-smiley-blink 4.5s ease-in-out infinite;
+}
+@keyframes atlas-smiley-blink {
+  0%, 92%, 100% { transform: scaleY(1); }
+  95%, 97%      { transform: scaleY(0.1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .atlas-smiley-bounce,
+  .atlas-smiley-blink .atlas-eye-left,
+  .atlas-smiley-blink .atlas-eye-right {
+    animation: none;
+  }
+}
