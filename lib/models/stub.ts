@@ -5,6 +5,7 @@ import { getRealSiteCandidates, type RealSite } from '../stub/real-sites';
 import { parseQuestion } from '../stub/question-parser';
 import { buildRationale } from '../stub/rationale-builder';
 import type { City } from '../stub/cities';
+import { mapCustomVertical } from '../scoring/custom-vertical';
 
 /**
  * Day 6 — location-aware curated stub.
@@ -115,35 +116,14 @@ export const curatedStub: Model = {
     const vertical = req.vertical as Vertical;
 
     // Map custom verticals to closest built-in vertical using keyword matching
+    // Day 25: custom vertical mapping is now shared with the
+    // scoring engine via lib/scoring/custom-vertical.ts. The keyword
+    // dictionary lives there as a single source of truth. We just call
+    // mapCustomVertical here to find the closest built-in match.
     let effectiveVertical: string = vertical;
     if (vertical.startsWith('custom:')) {
-      const customLabel = vertical.slice('custom:'.length).toLowerCase().trim();
-      const keywordMap: Record<string, string> = {
-        hospital: 'civic_land', clinic: 'civic_land', school: 'civic_land',
-        church: 'civic_land', mosque: 'civic_land', library: 'civic_land',
-        university: 'civic_land', college: 'civic_land', museum: 'civic_land',
-        park: 'civic_land', playground: 'civic_land', stadium: 'civic_land',
-        hotel: 'commercial_land', lodge: 'commercial_land', resort: 'commercial_land',
-        guesthouse: 'commercial_land', office: 'commercial_land',
-        mall: 'commercial_land', 'shopping centre': 'commercial_land',
-        farm: 'agricultural_land', 'game farm': 'agricultural_land',
-        factory: 'industrial_land', warehouse: 'warehouse', workshop: 'industrial_land',
-        'car wash': 'gas_station', 'truck stop': 'gas_station',
-        restaurant: 'restaurant', cafe: 'restaurant', bar: 'restaurant',
-        pub: 'restaurant', bakery: 'restaurant', 'fast food': 'restaurant',
-        shop: 'retail_shop', store: 'retail_shop', supermarket: 'retail_shop',
-        house: 'residential_land', home: 'residential_land', apartment: 'residential_land',
-        mansion: 'residential_land', estate: 'residential_land',
-      };
-      // Try exact match first, then substring match
-      let match = keywordMap[customLabel];
-      if (!match) {
-        for (const [kw, v] of Object.entries(keywordMap)) {
-          if (customLabel.includes(kw) || kw.includes(customLabel)) {
-            match = v; break;
-          }
-        }
-      }
+      const customLabel = vertical.slice('custom:'.length);
+      const match = mapCustomVertical(customLabel);
       if (match) effectiveVertical = match;
     }
 
