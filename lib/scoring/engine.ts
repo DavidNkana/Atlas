@@ -32,6 +32,10 @@ import type {
   VerticalWeights,
 } from "./types";
 import { VERTICAL_WEIGHTS } from "./types";
+import {
+  GENERIC_VERTICAL_WEIGHTS,
+  resolveCustomVertical,
+} from "./custom-vertical";
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
@@ -52,8 +56,33 @@ export function combine(
   signals: Signal[],
   vertical: Vertical,
 ): ScoreBreakdown {
-  const weights: VerticalWeights =
-    VERTICAL_WEIGHTS[vertical] ?? VERTICAL_WEIGHTS.gas_station;
+  // Day 25: resolve custom verticals (e.g. "custom:antique_furniture_store")
+  // to the closest built-in vertical via keyword mapping. If no keyword
+  // matches (e.g. "custom:quantum_research_lab"), fall back to GENERIC
+  // weights — balanced across signals so the user gets a useful score
+  // even when their vertical doesn't match anything.
+  //
+  // The resolvedVertical gets attached to the breakdown as
+  // customVerticalMatch so the UI can show e.g.
+  //   "antique_furniture_store → Retail Shop"
+  // and the user understands what scoring profile was applied.
+  let resolvedVertical: Vertical | null = null;
+  let customVerticalMatch: string | null = null;
+  let weights: VerticalWeights;
+  if (vertical.startsWith("custom:")) {
+    resolvedVertical = resolveCustomVertical(vertical);
+    if (resolvedVertical !== null) {
+      weights = VERTICAL_WEIGHTS[resolvedVertical];
+      customVerticalMatch =
+        vertical + " → " +
+        resolvedVertical.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
+    } else {
+      weights = GENERIC_VERTICAL_WEIGHTS as unknown as VerticalWeights;
+      customVerticalMatch = vertical + " → (generic)";
+    }
+  } else {
+    weights = VERTICAL_WEIGHTS[vertical] ?? GENERIC_VERTICAL_WEIGHTS as unknown as VerticalWeights;
+  }
 
   const factors: ScoreFactor[] = [];
   let signalScore = 0;
@@ -122,11 +151,15 @@ export function combine(
   // Final confidence is base + signal boost, clamped to [0, 1].
   const confidence = clamp(round2(aiSite.score + signalScore), 0, 1);
 
-  return {
+  const breakdown: ScoreBreakdown & { customVerticalMatch?: string } = {
     siteId: aiSite.id,
     baseScore: round2(aiSite.score),
     signalScore: round2(signalScore),
     confidence,
     factors,
   };
+  if (customVerticalMatch) {
+    breakdown.customVerticalMatch = customVerticalMatch;
+  }
+  return breakdown;
 }
