@@ -589,7 +589,7 @@ export default function HomePage() {
             </a>
             <a
               href="/calculator"
-              className="inline-flex items-center gap-1.5 rounded-full border border-atlas-accent/40 bg-atlas-accent/10 px-2.5 py-1 font-medium text-atlas-accent transition-colors hover:border-atlas-accent hover:bg-atlas-accent/20"
+              className="inline-flex items-center gap-1.5 rounded-full border border-transparent bg-atlas-accent px-2.5 py-1 font-medium text-white shadow-[0_2px_8px_rgba(99,102,241,0.25)] transition-colors hover:bg-atlas-accent2"
               title="Free property investment calculator — Bond, Buy-to-Let, ROI, Transfer Costs"
             >
               <svg
