@@ -587,7 +587,34 @@ export default function HomePage() {
             <a href="/investors" className="hover:text-atlas-accent">
               Investors
             </a>
-            <a href="/calculator" className="hover:text-atlas-accent">
+            <a
+              href="/calculator"
+              className="inline-flex items-center gap-1.5 rounded-full border border-atlas-accent/40 bg-atlas-accent/10 px-2.5 py-1 font-medium text-atlas-accent transition-colors hover:border-atlas-accent hover:bg-atlas-accent/20"
+              title="Free property investment calculator — Bond, Buy-to-Let, ROI, Transfer Costs"
+            >
+              <svg
+                width="11"
+                height="11"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <rect x="4" y="3" width="16" height="18" rx="2" />
+                <line x1="8" y1="7" x2="16" y2="7" />
+                <line x1="8" y1="11" x2="9.5" y2="11" />
+                <line x1="12" y1="11" x2="13.5" y2="11" />
+                <line x1="15" y1="11" x2="16" y2="11" />
+                <line x1="8" y1="14" x2="9.5" y2="14" />
+                <line x1="12" y1="14" x2="13.5" y2="14" />
+                <line x1="15" y1="14" x2="16" y2="14" />
+                <line x1="8" y1="17" x2="9.5" y2="17" />
+                <line x1="12" y1="17" x2="13.5" y2="17" />
+                <line x1="15" y1="17" x2="16" y2="17" />
+              </svg>
               Calculator
             </a>
           </div>
