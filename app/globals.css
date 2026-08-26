@@ -149,3 +149,17 @@ html.atlas-light .hover\:border-zinc-600:hover { border-color: #a1a1aa !importan
     animation: none;
   }
 }
+
+/* Atlas — Clerk form placeholder visibility.
+   Tailwind's placeholder: utility depends on Clerk rendering
+   placeholder as a data-attribute; in practice Clerk uses
+   native <input placeholder="..."> so we also need a CSS rule
+   that targets inputs inside the Clerk form card. The
+   atlas-muted/60 token = a1a1aa at 60% opacity — visible but
+   clearly subordinate to actual input text (#fafafa). */
+.cl-formFieldInput input::placeholder,
+input[class*="cl-"]::placeholder,
+input[placeholder] {
+  color: rgba(161, 161, 170, 0.6) !important;
+  opacity: 1 !important; /* override browser default ~0.7 */
+}
