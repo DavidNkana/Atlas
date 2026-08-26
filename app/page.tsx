@@ -580,6 +580,7 @@ export default function HomePage() {
             <a href="/demo" className="hover:text-atlas-accent">
               Demo
             </a>
+            <a href="/news" className="hover:text-atlas-accent">News</a>
             <a href="/pricing" className="hover:text-atlas-accent">
               Pricing
             </a>
