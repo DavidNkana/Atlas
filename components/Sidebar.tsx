@@ -93,7 +93,7 @@ export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boole
   // Per-item hide list — questions the user has confirmed to delete.
   // Local-only for v1; Day 30+ will move to a server-side DELETE.
   const [hiddenIds, setHiddenIds] = useState<string[]>([]);
-  const pins = usePins();
+  const pins = usePins(user?.id ?? null);
 
   // Restore collapsed preference from localStorage
   useEffect(() => {
@@ -216,7 +216,7 @@ export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boole
                   Atlas
                 </div>
                 <div className="truncate text-[10px] text-atlas-muted">
-                  Intelligence for South African investments
+                  Intelligence for African investments
                 </div>
               </div>
             )}
