@@ -15,10 +15,11 @@ export default function SignUpPage() {
         <div className="mb-6 flex flex-col items-center gap-2">
           <AtlasLogo size={48} />
           <h1 className="text-2xl font-semibold text-atlas-text">
-            Create your account
+            Start finding investment sites
           </h1>
           <p className="text-sm text-atlas-muted">
-            Free to start. No credit card required.
+            Join African investors, developers, and franchisees
+            using Atlas.
           </p>
         </div>
         <div className="rounded-xl border border-atlas-border bg-atlas-surface p-2">
@@ -27,25 +28,31 @@ export default function SignUpPage() {
               elements: {
                 rootBox: "w-full",
                 card: "bg-transparent shadow-none w-full",
+                // Clerk v6 renders its own welcomeHeader inside the card.
+                // Override the default ("Welcome! Please fill in the details
+                // to get started.") with Atlas-branded copy.
+                headerTitle: "text-atlas-text text-lg font-semibold",
+                headerSubtitle: "text-atlas-muted text-sm",
+                // Suppress Clerk's built-in welcome header so we don't
+                // double up with our own H1 above the card.
+                welcomeHeader: "hidden",
                 formButtonPrimary:
                   "bg-atlas-accent hover:bg-atlas-accent2 text-white font-medium",
-                footerActionLink:
-                  "text-atlas-accent hover:text-atlas-accent2 font-medium",
+                footerActionLink: "text-atlas-accent hover:text-atlas-accent2",
                 formFieldInput:
-                  "bg-atlas-surface2 border-atlas-border text-atlas-text placeholder:text-atlas-muted/60",
-                formFieldLabel:
-                  "text-atlas-text/80 font-medium text-xs",
+                  "bg-atlas-bg border-atlas-border text-atlas-text",
+                formFieldLabel: "text-atlas-muted",
                 identityPreviewText: "text-atlas-text",
                 identityPreviewEditButton: "text-atlas-accent",
                 formFieldAction: "text-atlas-accent",
                 socialButtonsBlockButton:
-                  "bg-atlas-surface2 border-atlas-border text-atlas-text hover:bg-atlas-surface",
+                  "bg-atlas-bg border-atlas-border text-atlas-text hover:bg-atlas-surface2",
                 socialButtonsBlockButtonText: "text-atlas-text",
                 dividerLine: "bg-atlas-border",
                 dividerText: "text-atlas-muted",
                 formResendCodeLink: "text-atlas-accent",
                 otpCodeFieldInput:
-                  "bg-atlas-surface2 border-atlas-border text-atlas-text",
+                  "bg-atlas-bg border-atlas-border text-atlas-text",
                 alert: "bg-red-500/10 border-red-500/30 text-red-300",
                 alertText: "text-red-300",
                 formFieldErrorText: "text-red-300",
