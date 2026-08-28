@@ -211,14 +211,10 @@ export default function HomePage() {
     setCustomInputOpen(false);
   }
 
-  // On mount: read user prefs, apply default model + vertical + showThinkingLoader
+  // On mount: read user prefs, apply default model + showThinkingLoader
   useEffect(() => {
     const p = readPrefs();
     if (p.defaultModel) setModelId(p.defaultModel);
-    if (p.defaultVertical) {
-      const found = BUILTIN_VERTICALS.find((v) => v.value === p.defaultVertical);
-      if (found) setVertical(found.value as BuiltinVertical);
-    }
     setShowThinkingLoader(p.showThinkingLoader);
   }, []);
 
@@ -252,10 +248,6 @@ export default function HomePage() {
     function onPrefs(e: Event) {
       const ce = e as CustomEvent<AtlasPrefs>;
       if (ce.detail.defaultModel) setModelId(ce.detail.defaultModel);
-      if (ce.detail.defaultVertical) {
-        const found = BUILTIN_VERTICALS.find((v) => v.value === ce.detail.defaultVertical);
-        if (found) setVertical(found.value as BuiltinVertical);
-      }
       if (typeof ce.detail.showThinkingLoader === "boolean") {
         setShowThinkingLoader(ce.detail.showThinkingLoader);
       }

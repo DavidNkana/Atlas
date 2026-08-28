@@ -7,7 +7,6 @@
  * the signed-in user configure:
  *   - Theme (dark / light / system)
  *   - Default model (the picker the command bar uses by default)
- *   - Default vertical
  *   - Show thinking loader (toggle)
  *
  * Theme and default-model settings persist to localStorage so the user's
@@ -26,14 +25,12 @@ import { AtlasLogo } from "./AtlasLogo";
 export type AtlasPrefs = {
   theme: "dark" | "light" | "system";
   defaultModel: string;
-  defaultVertical: string;
   showThinkingLoader: boolean;
 };
 
 export const DEFAULT_PREFS: AtlasPrefs = {
   theme: "dark",
   defaultModel: MODEL_INFO.find((m) => m.id === "curated-stub")?.id ?? MODEL_INFO[0]?.id ?? "curated-stub",
-  defaultVertical: "gas_station",
   showThinkingLoader: true,
 };
 
@@ -65,13 +62,6 @@ export function writePrefs(p: AtlasPrefs) {
     // localStorage may be disabled — silently no-op.
   }
 }
-
-const VERTICALS = [
-  { value: "gas_station", label: "Gas station" },
-  { value: "restaurant", label: "Restaurant" },
-  { value: "warehouse", label: "Warehouse" },
-  { value: "retail_shop", label: "Retail shop" },
-];
 
 export function SettingsDrawer({
   open,
@@ -202,29 +192,6 @@ export function SettingsDrawer({
               and offline use. Do not use it for actual property decisions.
             </p>
           )}
-        </section>
-
-        {/* Default vertical */}
-        <section className="mb-5">
-          <label className="mb-2 block text-[10px] font-semibold uppercase tracking-wider text-atlas-muted">
-            Default vertical
-          </label>
-          <div className="grid grid-cols-2 gap-2">
-            {VERTICALS.map((v) => (
-              <button
-                key={v.value}
-                type="button"
-                onClick={() => onChange({ ...prefs, defaultVertical: v.value })}
-                className={`rounded-md border px-2 py-1.5 text-xs transition-colors ${
-                  prefs.defaultVertical === v.value
-                    ? "border-atlas-accent bg-atlas-accent/10 text-atlas-text"
-                    : "border-atlas-border bg-atlas-bg text-atlas-muted hover:border-atlas-accent/50 hover:text-atlas-text"
-                }`}
-              >
-                {v.label}
-              </button>
-            ))}
-          </div>
         </section>
 
         {/* Show thinking loader */}
