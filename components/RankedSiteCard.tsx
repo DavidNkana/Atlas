@@ -25,6 +25,7 @@
 
 import { useState } from "react";
 import { StreetViewPanel } from "./StreetViewPanel";
+import { DecisionBlock } from "./DecisionBlock";
 
 type Signal = {
   id: string;
@@ -169,9 +170,17 @@ function generateExplanation(site: Site): string {
 
 export function RankedSiteCard({
   site,
+  vertical,
   fallbackLatLng,
 }: {
   site: Site;
+  /**
+   * The question's vertical ("gas_station", "residential_land", …).
+   * Drives the per-site Decision Block's cost/margin model. Optional
+   * so older callers keep compiling — DecisionBlock falls back to
+   * conservative generic SA economics when it's missing.
+   */
+  vertical?: string;
   /**
    * Day 12 v10: city-centre coordinates to use as the Street
    * View fallback if the exact site coordinates have no
@@ -441,6 +450,12 @@ export function RankedSiteCard({
               {explanation}
             </div>
           </section>
+
+          {/* Task 2 — the per-site Decision Block. Zoning, traffic,
+              catchment, economics and risks. Always renders: where
+              Atlas has no data it names the manual check instead of
+              showing nothing. */}
+          <DecisionBlock site={site} vertical={vertical ?? ""} />
 
           {/* Day 12 v9: live Google Street View for this site.
               Lets the user eyeball the area without driving out.

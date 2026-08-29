@@ -191,6 +191,77 @@ function statusBorder(status: string): string {
   return "border-rose-900 bg-rose-500/10 text-rose-400";
 }
 
+/**
+ * Task 2 — meta view over the per-site Decision Blocks.
+ *
+ * We do NOT instantiate <DecisionBlock/> server-side just to count
+ * things; we replay the same cheap predicates it uses over the raw
+ * site data. Kept deliberately in sync with components/DecisionBlock.tsx:
+ * a section counts as "full" when it has at least one real fact, and
+ * every gap becomes a manual check the developer has to run themselves.
+ */
+function summariseDecisionCoverage(sites: RankedSite[]): {
+  fullSites: number;
+  totalSites: number;
+  manualChecks: number;
+} {
+  let fullSites = 0;
+  let manualChecks = 0;
+
+  for (const s of sites) {
+    const site = s as any;
+    const signals: Array<{ type: string; weight: number }> = Array.isArray(
+      site.signals,
+    )
+      ? site.signals
+      : [];
+    const envSignal = signals.find((x) => x.type === "env_risk");
+    const envRisky = !!envSignal && envSignal.weight < 0.7;
+    const compSignal = signals.find((x) => x.type === "competitor_count");
+    const saturated = !!compSignal && compSignal.weight <= 0.25;
+    const trafficSignal = signals.find(
+      (x) =>
+        x.type === "traffic_count" ||
+        x.type === "vehicle_count" ||
+        (x as any).source === "sanral",
+    );
+    const hasCatchment =
+      site.medianIncome != null ||
+      signals.some(
+        (x) => x.type === "demographic_profile" || x.type === "median_income",
+      );
+    const hasTraffic =
+      !!trafficSignal || !!site.arterial || site.nearestHighwayKm != null;
+    const lowConfidence = (site.confidence ?? 0) < 0.6;
+
+    const realSections = [
+      !!site.zoning,
+      hasTraffic,
+      hasCatchment,
+      !!site.priceRange,
+      signals.length > 0, // risks are derived rather than boilerplate
+    ].filter(Boolean).length;
+    if (realSections >= 4) fullSites++;
+
+    // Zoning section always emits one callout (either "confirm scheme
+    // rights" or "no zoning on file"), plus the environmental line
+    // unless the env connector came back clean.
+    manualChecks += 1;
+    if (envRisky || !envSignal) manualChecks += 1;
+    if (!trafficSignal) manualChecks += 1; // traffic section
+    if (!hasCatchment) manualChecks += 1;
+    if (!site.priceRange) manualChecks += 1;
+    // Risks section: always-on planner/attorney line + conditionals.
+    manualChecks += 1;
+    if (saturated) manualChecks += 1;
+    if (lowConfidence) manualChecks += 1;
+    if (envRisky) manualChecks += 1;
+    if (!trafficSignal) manualChecks += 1;
+  }
+
+  return { fullSites, totalSites: sites.length, manualChecks };
+}
+
 export default async function ResultPage({
   params,
 }: {
@@ -710,7 +781,9 @@ export default async function ResultPage({
           >
             <div className="mb-3 flex items-baseline justify-between">
               <div className="flex items-baseline gap-3">
-                <h2 className="text-xs font-medium text-atlas-text">Decision Intelligence</h2>
+                <h2 className="text-xs font-medium text-atlas-text">
+                  Decision Intelligence
+                </h2>
                 {/* Day 17 v6: surface the intent classification so the
                     user sees which view Atlas picked as primary.
                     Clicking the link switches to the alternate view. */}
@@ -759,6 +832,34 @@ export default async function ResultPage({
                 })()}
               </div>
             </div>
+            {/* Task 2 — decision coverage summary. Sits ABOVE the source
+                grid because "how much of the decision do I actually have?"
+                matters more to a developer than "which connector ran". The
+                intelligence itself lives in the per-site Decision Blocks. */}
+            {rankedSites.length > 0 && (() => {
+              const cov = summariseDecisionCoverage(rankedSites);
+              return (
+                <div
+                  className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded border border-atlas-border bg-atlas-surface2/60 px-3 py-2 text-[11px]"
+                  data-testid="decision-coverage"
+                >
+                  <span className="text-atlas-text">
+                    <span className="font-semibold">{cov.fullSites}</span> of{" "}
+                    {cov.totalSites} site{cov.totalSites === 1 ? "" : "s"} have
+                    full decision data
+                  </span>
+                  <span className="text-atlas-muted">·</span>
+                  <span className="text-amber-400">
+                    <span aria-hidden="true">⚠</span> {cov.manualChecks} manual
+                    check{cov.manualChecks === 1 ? "" : "s"} flagged
+                  </span>
+                  <span className="ml-auto text-atlas-muted">
+                    expand any site below for its Decision Block
+                  </span>
+                </div>
+              );
+            })()}
+
             {/* Per-source checkmark row — addresses the property developer
                 feedback "I want to see 18 signals, not 1". Today we ship 10
                 sources; this row grows as we add more connectors. */}
@@ -895,6 +996,7 @@ export default async function ResultPage({
                   dataProvenance: (s as any).dataProvenance,
                   liveListings: (s as any).liveListings,
                 }}
+                vertical={questionVertical}
                 fallbackLatLng={streetViewAnchor}
               />
             ))}
