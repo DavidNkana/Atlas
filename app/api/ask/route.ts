@@ -676,9 +676,11 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
     })(), STEP_A_TIMEOUT_MS, "step_a");
 
   } catch (stepAErr) {
-    // Step A exhausted its 35s budget (or threw). Let the outer POST
-    // catch it and return 200 + partial_timeout.
-    throw stepAErr;
+    // Day 30 — DO NOT throw. If we throw, the curatedStub final
+    // guard below (line ~700) is unreachable, and the user gets an
+    // empty result page. Instead, log and fall through — rankedSites
+    // stays empty, which triggers the curatedStub guard.
+    console.warn(`[/api/ask] Step A timed out (${stepAErr instanceof Error ? stepAErr.message : String(stepAErr)}) — falling back to curatedStub`);
   }
 
   // Day 25 v26 — Defensive final guard.
