@@ -64,25 +64,32 @@ let partialUserId: string = "";
  * Step A's AI answer with connectorsError set. Only a Step A failure
  * throws and triggers the outer partial_timeout stub.
  *
- *   Step A: model fallback chain — 35s. Picks a model and returns
+  *   Step A: model fallback chain — 30s. Picks a model and returns
  *           ranked_sites. If this times out or all models fail, we
- *           throw and the outer POST returns 200 + partial_timeout.
- *   Step B: connector fan-out — 12s. Promise.allSettled so one slow
+ *           fall through to the curatedStub final guard (NOT throw —
+ *           see line ~681) so the user always gets a result.
+ *   Step B: connector fan-out — 25s. Promise.allSettled so one slow
  *           connector never blocks another. If this times out, we
  *           return Step A's result with connectorsError = "timeout".
+ *           The banner is gated on connectorsRun being empty (see
+ *           app/result/[id]/page.tsx) so partial results display
+ *           cleanly without a contradictory banner.
  *   Step C: persist + respond. Always runs.
  */
 // Day 12 v28: Vercel Pro hard-limits the function at 60s.
 // We need to fit: model call + Step B connectors + persist
 // + response. Budget:
 //   - gemini-search: 30s (long site-selection response needs time)
-//   - Step B: 5s (just city-aware validation now, no slow connectors)
+//   - Step B: 25s (12 connectors × N sites; the inner mirror
+//     fallback chain can take up to ~20s on a cold Overpass
+//     public mirror — 12s was killing the slowest fetch and
+//     surfacing "Signal data missing: timeout" on every result)
 //   - Persist + respond: 3s
 //   - Total: 58s (under the 60s Vercel ceiling)
 // HANDLER_TIMEOUT_MS matches Vercel exactly. STEP_A is the
 // budget for the model call + cascade.
-const STEP_A_TIMEOUT_MS = 55_000;
-const STEP_B_TIMEOUT_MS = 5_000;
+const STEP_A_TIMEOUT_MS = 30_000;
+const STEP_B_TIMEOUT_MS = 25_000;
 // Day 22 v12: Tavily live-listings needs its OWN budget because
 // 7 parallel portal searches + extracts take 6-10s. The original
 // STEP_B_TIMEOUT_MS=5_000 budget was killing the fetcher before

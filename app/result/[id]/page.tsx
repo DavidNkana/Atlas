@@ -784,7 +784,15 @@ export default async function ResultPage({
           );
         })()}
 
-        {connectorsError && (
+        {/* Only show the timeout banner when Step B actually failed AND
+            produced no connector data. A race between the body
+            completing and withTimeout firing at the 25s boundary can
+            set connectorsError="timeout" while connectorsRun is
+            already populated — showing the banner in that case
+            contradicts the live data right below. Gate on
+            connectorsRun.length === 0 so the banner only appears when
+            every connector truly failed. */}
+        {connectorsError && connectorsRun.length === 0 && (
           <div
             role="alert"
             data-testid="atlas-connectors-error"
