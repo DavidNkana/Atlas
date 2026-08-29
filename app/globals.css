@@ -188,3 +188,15 @@ input[placeholder] {
     opacity: 0.85;
   }
 }
+
+/* Atlas — QuestionGallery horizontal rows.
+   Each vertical's prompts scroll sideways. A visible scrollbar per
+   row would add 5 grey bars to an otherwise clean hero, so we hide
+   the bar and keep touch/trackpad/shift-wheel scrolling. */
+.atlas-gallery-row {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* old Edge */
+}
+.atlas-gallery-row::-webkit-scrollbar {
+  display: none;
+}

@@ -3,10 +3,12 @@
 /**
  * Atlas — Auth gate modal.
  *
- * Shown when an unauthenticated visitor tries to submit the ask
- * prompt. We don't send the question to /api/ask (the backend would
- * reject it with 401 + "Sign in required"); we show this friendly
- * modal first so the user knows exactly why their submit didn't go
+ * Growth v1: anonymous visitors get ONE free question. This modal is
+ * shown on their SECOND submit attempt (the counter lives in
+ * localStorage under `atlas:anonQuestionsUsed`, see app/page.tsx).
+ * We don't send the question to /api/ask (the backend would reject
+ * it with 401 + "Sign in required"); we show this friendly modal
+ * first so the user knows exactly why their submit didn't go
  * through, and what to do about it.
  *
  * Two outbound paths:
@@ -129,11 +131,19 @@ export function AuthGateModal({
           id="atlas-auth-gate-title"
           className="mb-2 text-center text-base font-semibold text-atlas-text"
         >
-          Sign in to ask Atlas
+          That was your free question
         </h2>
+
+        {/* Anon quota pill — states the exact cost of continuing. */}
+        <div className="mb-3 flex justify-center">
+          <span className="rounded-full border border-atlas-border bg-atlas-bg px-2.5 py-0.5 text-[10px] font-medium text-atlas-muted">
+            1 of 1 free questions used
+          </span>
+        </div>
+
         <p className="mb-5 text-center text-xs leading-relaxed text-atlas-muted">
-          You&apos;ll need a free account to chat with Atlas. We&apos;ll
-          keep your question history and saved sites safe. Already have
+          Create a free account to keep asking — unlimited questions,
+          plus your history, saved sites and exports. Already have
           one?{" "}
           <a
             href="/sign-in"

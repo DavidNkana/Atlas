@@ -10,10 +10,11 @@ import { AppShell } from "@/components/AppShell";
 import { ThinkingLoader } from "@/components/ThinkingLoader";
 import { ChatGPTThinking } from "@/components/ChatGPTThinking";
 import { ModelIcon } from "@/components/ModelIcon";
-import { OutOfScopeModal, useOutOfScopeGate } from "@/components/OutOfScopeModal";
-import { VerticalMismatchModal, suggestVertical } from "@/components/VerticalMismatchModal";
+import { suggestVertical } from "@/components/VerticalMismatchModal";
 import { AuthGateModal } from "@/components/AuthGateModal";
+import { QuestionGallery } from "@/components/QuestionGallery";
 import { readPrefs, DEFAULT_PREFS, type AtlasPrefs } from "@/components/SettingsDrawer";
+import { ATLAS_HOOK, ATLAS_SUBHOOK } from "@/lib/copy";
 
 /**
  * Atlas — Home.
@@ -44,6 +45,41 @@ type Vertical = BuiltinVertical | `custom:${string}`;
 const MAX_CUSTOM_VERTICAL_LEN = 40;
 const CUSTOM_VERTICAL_RE = /^[a-z][a-z0-9_]{1,39}$/;
 
+/**
+ * Growth v1 — anonymous question quota.
+ *
+ * A signed-out visitor gets ONE free question so they can see a real
+ * Atlas answer before being asked for anything. The counter lives in
+ * localStorage (no server state, no cookie banner) and is incremented
+ * only AFTER a successful submit, so a failed request never burns the
+ * free credit. Signed-in users are unlimited and never read it.
+ *
+ * This is a UX gate, not a security control — /api/ask does its own
+ * auth handling (defense in depth).
+ */
+const ANON_QUOTA_KEY = "atlas:anonQuestionsUsed";
+const ANON_FREE_QUESTIONS = 1;
+
+function readAnonUsed(): number {
+  if (typeof window === "undefined") return 0;
+  try {
+    const n = Number(window.localStorage.getItem(ANON_QUOTA_KEY) ?? "0");
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+  } catch {
+    // Private mode / storage disabled — fail open, don't gate.
+    return 0;
+  }
+}
+
+function writeAnonUsed(n: number): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(ANON_QUOTA_KEY, String(n));
+  } catch {
+    // Nothing we can do — the visitor just gets another free question.
+  }
+}
+
 function customVerticalLabel(value: string): string {
   // "custom:residential_land" -> "Residential land"
   const id = value.replace(/^custom:/, "");
@@ -55,6 +91,16 @@ function customVerticalLabel(value: string): string {
 
 function isCustomVertical(value: string): value is `custom:${string}` {
   return value.startsWith("custom:");
+}
+
+/**
+ * True for the 4 chip verticals. Anything else (a `custom:` token or
+ * one of the land verticals suggestVertical() can auto-switch us to,
+ * e.g. "residential_land") is rendered as its own pill so the chip
+ * row never looks like nothing is selected.
+ */
+function isBuiltinVertical(value: string): boolean {
+  return BUILTIN_VERTICALS.some((v) => v.value === value);
 }
 
 /**
@@ -147,15 +193,12 @@ export default function HomePage() {
   // Model picker flips up if there isn't enough space below the
   // button. We measure on open.
   const [modelPickerFlipUp, setModelPickerFlipUp] = useState<boolean>(false);
-  const [mismatchOpen, setMismatchOpen] = useState<boolean>(false);
   const [authGateOpen, setAuthGateOpen] = useState<boolean>(false);
-  const [mismatchData, setMismatchData] = useState<{
-    question: string;
-    current: string;
-    suggested: string;
-  } | null>(null);
+  // Anon free-question counter, mirrored from localStorage for the
+  // "1 of 1 free questions used" hint. Read on mount (never during
+  // render) so server and first client paint agree.
+  const [anonUsed, setAnonUsed] = useState<number>(0);
   const modelButtonRef = useRef<HTMLButtonElement | null>(null);
-  const outOfScope = useOutOfScopeGate();
   const [customInputOpen, setCustomInputOpen] = useState<boolean>(false);
   const [customInputValue, setCustomInputValue] = useState<string>("");
   const [customError, setCustomError] = useState<string | null>(null);
@@ -216,6 +259,17 @@ export default function HomePage() {
     const p = readPrefs();
     if (p.defaultModel) setModelId(p.defaultModel);
     setShowThinkingLoader(p.showThinkingLoader);
+  }, []);
+
+  // On mount (and whenever history changes): sync the anon quota
+  // counter from localStorage.
+  useEffect(() => {
+    setAnonUsed(readAnonUsed());
+    function onChanged() {
+      setAnonUsed(readAnonUsed());
+    }
+    window.addEventListener("atlas:history-changed", onChanged);
+    return () => window.removeEventListener("atlas:history-changed", onChanged);
   }, []);
 
   // Day 21: Onboarding gate. Authed users who haven't completed the
@@ -281,26 +335,6 @@ export default function HomePage() {
     inputRef.current?.focus();
   }, []);
 
-  // Listen for "atlas:use-example" events from the OutOfScopeModal
-  // so clicking an example in the modal fills the input.
-  useEffect(() => {
-    function onUseExample(e: Event) {
-      const ce = e as CustomEvent<string>;
-      if (typeof ce.detail === "string") {
-        setQuestion(ce.detail);
-        setTimeout(() => inputRef.current?.focus(), 50);
-      }
-    }
-    if (typeof window !== "undefined") {
-      window.addEventListener("atlas:use-example", onUseExample);
-    }
-    return () => {
-      if (typeof window !== "undefined") {
-        window.removeEventListener("atlas:use-example", onUseExample);
-      }
-    };
-  }, []);
-
   // Close model picker when clicking outside
   useEffect(() => {
     function onClick(e: MouseEvent) {
@@ -344,54 +378,47 @@ export default function HomePage() {
     e.preventDefault();
     if (!question.trim()) return;
 
-    // Auth gate — Day 17. Unauthed users see the friendly AuthGateModal
-    // instead of getting an inline 401. The /api/ask route still rejects
-    // unauth requests with 401 (defense in depth), but the user-facing
-    // experience is a clear next-step, not an error string.
-    if (!user) {
+    // Growth v1 — anon gate. A signed-out visitor gets ONE free
+    // question; on the second attempt we show the AuthGateModal
+    // BEFORE spending a request. Signed-in users skip this entirely.
+    const used = readAnonUsed();
+    if (!user && used >= ANON_FREE_QUESTIONS) {
+      setAnonUsed(used);
       setAuthGateOpen(true);
       return;
     }
 
-    // Out-of-scope prompt gate. If the question doesn't look like a
-    // location intelligence question, show the modal and don't submit.
-    if (outOfScope.checkQuestion(question.trim())) {
-      return;
-    }
+    // Growth v1 — the out-of-scope gate is gone. Blocking a submit on
+    // a keyword list punished valid questions the list didn't know
+    // about; a weak answer is a better failure mode than a wall.
 
-    // Vertical mismatch gate. If the question clearly points to a
-    // different vertical than the one selected, show the warning
-    // modal and let the user decide. Custom verticals are user-defined
-    // so we skip the check for those.
-    if (!vertical.startsWith("custom:")) {
+    // Vertical mismatch is now non-blocking: if the question clearly
+    // points at another vertical we silently switch to it and carry
+    // on. No modal, no decision to make. Custom verticals are
+    // user-defined, so we never second-guess those.
+    let effectiveVertical: Vertical = vertical;
+    if (!isCustomVertical(vertical)) {
       const suggested = suggestVertical(question.trim(), vertical);
       if (suggested) {
-        setMismatchData({
-          question: question.trim(),
-          current: vertical,
-          suggested,
-        });
-        setMismatchOpen(true);
-        return;
+        effectiveVertical = suggested as Vertical;
+        setVertical(effectiveVertical);
       }
     }
 
     setLoading(true);
     setError(null);
 
-    await doSubmit();
+    // Pass the vertical explicitly — setVertical() above won't have
+    // landed in this closure yet.
+    await doSubmit({ vertical: effectiveVertical });
   }
 
-  // Extracted so the "Ask anyway" override on the vertical-mismatch
-  // modal can also call it after the user dismisses the warning.
-  //
-  // Optional `override` argument lets the caller pass fresh values
-  // that should be used INSTEAD of the closed-over state. This
-  // matters for the "Switch to {suggested}" one-click flow: when
-  // the user clicks Switch we update state, but the closure inside
-  // this same handler still has the OLD values. Passing the new
-  // values explicitly here avoids a stale-state submit and a
-  // potential auth race that we were seeing.
+  // The actual request. Kept separate from onSubmit so the optional
+  // `override` argument can pass fresh values that should be used
+  // INSTEAD of the closed-over state — needed by the non-blocking
+  // vertical auto-switch, where setVertical() hasn't landed in this
+  // closure yet. Passing the new values explicitly avoids a
+  // stale-state submit.
   async function doSubmit(override?: { vertical?: string; question?: string }) {
     const v = override?.vertical ?? vertical;
     const q = (override?.question ?? question).trim();
@@ -437,6 +464,13 @@ export default function HomePage() {
 
       const data = await res.json();
       if (data.id) {
+        // Growth v1: burn the anon free question only now that we
+        // know the answer exists. A failed submit costs nothing.
+        if (!user) {
+          const next = readAnonUsed() + 1;
+          writeAnonUsed(next);
+          setAnonUsed(next);
+        }
         // Notify sidebar/history to refresh — new result is ready
         if (typeof window !== "undefined") {
           window.dispatchEvent(new CustomEvent("atlas:history-changed"));
@@ -473,95 +507,10 @@ export default function HomePage() {
 
   return (
     <AppShell>
-      <outOfScope.Modal />
-
       <AuthGateModal
         open={authGateOpen}
         onClose={() => setAuthGateOpen(false)}
       />
-
-
-      {mismatchOpen && mismatchData && (
-        <VerticalMismatchModal
-          question={mismatchData.question}
-          currentVertical={mismatchData.current}
-          onClose={() => {
-            setMismatchOpen(false);
-            setMismatchData(null);
-          }}
-          onUseExample={(newVertical, exampleQuestion) => {
-            // Day 12 v6: do NOT auto-submit on example click. The
-            // previous behaviour (added in Day 9 hotfix v2 to work
-            // around an auth race that has since been fixed in
-            // Day 9 v4) was: clicking an example chip replaces the
-            // user's typed question with the example text AND
-            // immediately submits. The auth race is gone — the
-            // 401s were from auth() vs getAuth() in the route
-            // handler, not from a double-submit.
-            //
-            // The auto-submit was causing data loss: David typed
-            // "Where in Nairobi for an industrial warehouse",
-            // the mismatch modal opened (because residential_land
-            // was selected and "industrial" hit industrial_land),
-            // he clicked an example to "dismiss" the modal, and
-            // the example "Where in Durban for a logistics
-            // warehouse?" was submitted instead. His Nairobi was
-            // silently replaced by Durban.
-            //
-            // New behaviour: clicking an example fills the input
-            // with the example, sets the new vertical, closes the
-            // modal, and lets the user edit + click Ask themselves.
-            // The user always sees the question that's about to be
-            // submitted because they see it in the input.
-            setVertical(newVertical as any);
-            setQuestion(exampleQuestion);
-            setMismatchOpen(false);
-            setMismatchData(null);
-            setError(null);
-            // Focus the question input so the user can edit
-            // (e.g. swap "Durban" for "Nairobi") and submit.
-            setTimeout(() => {
-              const input = document.getElementById("atlas-question-input");
-              if (input) {
-                input.focus();
-                // Place cursor at the end so they can keep typing.
-                const len = (input as HTMLInputElement).value.length;
-                (input as HTMLInputElement).setSelectionRange(len, len);
-              }
-            }, 50);
-          }}
-          onUseCustom={() => {
-            setVertical("custom:hospital" as any); // placeholder, opens input
-            setCustomInputOpen(true);
-            setTimeout(() => customInputRef.current?.focus(), 100);
-            setMismatchOpen(false);
-            setMismatchData(null);
-          }}
-          onSwitchVertical={(newVertical) => {
-            // Day 12 v6: the big "Switch to {suggested}" button
-            // only changes the vertical — the user's typed question
-            // stays in the input. The user then clicks Ask to
-            // submit with their actual prompt + the new vertical.
-            // No auto-fill of a pre-canned example, no auto-submit.
-            setVertical(newVertical as any);
-            setMismatchOpen(false);
-            setMismatchData(null);
-            setError(null);
-            // Focus the input so the user can immediately click Ask
-            // (or edit first if they want to refine the question).
-            setTimeout(() => {
-              const input = document.getElementById("atlas-question-input");
-              if (input) (input as HTMLInputElement).focus();
-            }, 50);
-          }}
-          onOverride={() => {
-            setMismatchOpen(false);
-            setMismatchData(null);
-            // Fire the actual submit now
-            void doSubmit();
-          }}
-        />
-      )}
 
       {/* Top bar: top-right links */}
       <header className="flex items-center justify-between gap-3 px-6 py-3 text-xs text-atlas-muted">
@@ -629,6 +578,43 @@ export default function HomePage() {
             )
           ) : (
             <>
+              {/* Anon landing hero — the value prop a signed-out
+                  visitor needs before they'll type anything. Hidden
+                  the moment they're signed in (they already know). */}
+              {!user && (
+                <div className="mb-6 flex max-w-2xl flex-col items-center text-center">
+                  {/* ⚑ HOOK COPY — swap ATLAS_HOOK in lib/copy.ts */}
+                  <h2 className="text-2xl font-bold tracking-tight text-atlas-text sm:text-3xl">
+                    {ATLAS_HOOK}
+                  </h2>
+                  <p className="mt-2 text-sm text-atlas-muted">
+                    {ATLAS_SUBHOOK}
+                  </p>
+                  {/* Offer pill. Once the free question is spent the
+                      quota pill under the command bar says so — no
+                      need to repeat it here. */}
+                  {anonUsed < ANON_FREE_QUESTIONS && (
+                    <span className="mt-3 rounded-full border border-atlas-accent/40 bg-atlas-accent/10 px-3 py-1 text-[11px] font-medium text-atlas-accent">
+                      1 free question · no card
+                    </span>
+                  )}
+                  <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5">
+                    {[
+                      "🇿🇦 SA-only data",
+                      "Live signals (OSM, Google Places, Tavily)",
+                      "Citation-grade answers",
+                    ].map((chip) => (
+                      <span
+                        key={chip}
+                        className="rounded-full border border-atlas-border bg-atlas-surface px-2.5 py-0.5 text-[10px] text-atlas-muted"
+                      >
+                        {chip}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="mb-8 text-center">
                 <h1 className="mb-2 text-4xl font-semibold tracking-tight text-atlas-text sm:text-5xl">
                   Hi {firstName}, I&apos;m Atlas.
@@ -658,8 +644,9 @@ export default function HomePage() {
                       {v.label}
                     </button>
                   ))}
-                  {/* Active custom vertical pill (if any) */}
-                  {isCustomVertical(vertical) && (
+                  {/* Active non-builtin vertical pill — a custom
+                      token OR a land vertical we auto-switched to. */}
+                  {!isBuiltinVertical(vertical) && (
                     <button
                       type="button"
                       onClick={() => setCustomInputOpen(true)}
@@ -670,7 +657,7 @@ export default function HomePage() {
                     </button>
                   )}
                   {/* + Custom button — opens an inline input */}
-                  {!isCustomVertical(vertical) && (
+                  {isBuiltinVertical(vertical) && (
                     <button
                       type="button"
                       onClick={() => {
@@ -975,30 +962,30 @@ export default function HomePage() {
                   </div>
                 </div>
 
-                {/* Quick-pick sample questions (when input is empty) */}
-                {!loading && question.length === 0 && (
-                  <div className="mt-4 flex flex-col items-center gap-2">
-                    <div className="text-[11px] uppercase tracking-wider text-atlas-muted">
-                      Try a sample
-                    </div>
-                    <div className="flex flex-wrap justify-center gap-2">
-                      {[
-                        "Where in Sandton for vacant land?",
-                        "Where in Lusaka for a logistics warehouse?",
-                        "Where in Cape Town for a family restaurant?",
-                        "Where in Nairobi for a school site?",
-                      ].map((q) => (
-                        <button
-                          key={q}
-                          type="button"
-                          onClick={() => setQuestion(q)}
-                          className="rounded-full border border-atlas-border bg-atlas-surface px-3 py-1.5 text-xs text-atlas-muted transition-colors hover:border-atlas-accent hover:text-atlas-text"
-                        >
-                          {q}
-                        </button>
-                      ))}
-                    </div>
+                {/* Quota hint — only after the free question is spent,
+                    and only for signed-out visitors. Stated once, quietly. */}
+                {!user && anonUsed >= ANON_FREE_QUESTIONS && (
+                  <div className="mt-2 flex justify-center">
+                    <span className="rounded-full border border-atlas-border bg-atlas-surface px-2.5 py-0.5 text-[10px] text-atlas-muted">
+                      1 of 1 free questions used ·{" "}
+                      <a href="/sign-up" className="text-atlas-accent hover:underline">
+                        create a free account
+                      </a>
+                    </span>
                   </div>
+                )}
+
+                {/* Question gallery — 20 SA-only prompts, grouped by
+                    vertical. Replaces the old 4 mixed-country chips. */}
+                {!loading && question.length === 0 && (
+                  <QuestionGallery
+                    onPick={(pick) => {
+                      setQuestion(pick.question);
+                      setVertical(pick.vertical as Vertical);
+                      setError(null);
+                      setTimeout(() => inputRef.current?.focus(), 50);
+                    }}
+                  />
                 )}
 
                 {error && (

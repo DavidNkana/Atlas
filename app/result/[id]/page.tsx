@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { auth } from "@clerk/nextjs/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/db";
@@ -17,6 +18,7 @@ import { ShareButton } from "@/components/ShareButton";
 import { detectCity } from "@/lib/stub/detect";
 import { REAL_SITE_CATALOG } from "@/lib/stub/real-sites";
 import { SUBURB_PROFILES } from "@/lib/demographics/suburbs";
+import { ATLAS_HOOK, ATLAS_ORIGIN } from "@/lib/copy";
 
 /**
  * Day 4 commit 1 + Day 5 commit 4:
@@ -30,6 +32,67 @@ import { SUBURB_PROFILES } from "@/lib/demographics/suburbs";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+
+/**
+ * Per-question metadata so a shared /result/[id] link unfurls with
+ * the real question + top pick instead of the generic site title.
+ * The image is rendered on demand by /api/og?id=... (see that route).
+ *
+ * Every failure path (bad id, deleted row, DB down) falls back to
+ * the generic Atlas card — a share link must never 500 a scraper.
+ */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  // ⚑ HOOK COPY — swap ATLAS_HOOK in lib/copy.ts
+  const fallback: Metadata = {
+    metadataBase: new URL(ATLAS_ORIGIN),
+    title: "Atlas — site intelligence for South African builders",
+    description: ATLAS_HOOK,
+  };
+
+  try {
+    const { id } = await params;
+    const row = await prisma.question.findUnique({
+      where: { id },
+      select: { questionText: true, responseJson: true },
+    });
+    if (!row) return fallback;
+
+    const body = (row.responseJson ?? {}) as ResponseBody;
+    const top = Array.isArray(body.ranked_sites) ? body.ranked_sites[0] : undefined;
+    const questionText = (row.questionText ?? "").trim();
+    const title = `Atlas · ${questionText.slice(0, 80)}`;
+    const cityHint = detectCity(questionText)?.name ?? "South Africa";
+    const topLine = top?.name
+      ? `Top pick: ${top.name} (score ${Math.round(top.score ?? 0)}).`
+      : ATLAS_HOOK;
+
+    const images = [`/api/og?id=${encodeURIComponent(id)}`];
+
+    return {
+      metadataBase: new URL(ATLAS_ORIGIN),
+      title,
+      description: `${topLine} ${cityHint}.`,
+      openGraph: {
+        title,
+        description: topLine,
+        type: "article",
+        images,
+      },
+      twitter: {
+        card: "summary_large_image",
+        title,
+        description: topLine,
+        images,
+      },
+    };
+  } catch {
+    return fallback;
+  }
+}
 
 type Signal = {
   id: string;
