@@ -191,7 +191,9 @@ export const curatedStub: Model = {
     for (const site of sites) {
       const s = site as any;
       if (s.advantages) continue;
-      const medIncome = s.medianIncome ? `R${Number(s.medianIncome).toLocaleString()}` : "varying";
+      // UNITS: catalog medianIncome is ZAR per MONTH — always suffix
+      // "/mo" so this prose can't be read as an annual figure.
+      const medIncome = s.medianIncome ? `R${Number(s.medianIncome).toLocaleString()}/mo` : "varying";
       const priceRange = s.priceRange ?? "market-related";
       const arterial = s.arterial ?? "major routes";
       const highway = s.nearestHighwayKm ? `${s.nearestHighwayKm}km` : "within reach";

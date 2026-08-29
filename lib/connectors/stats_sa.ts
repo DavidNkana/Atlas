@@ -140,10 +140,48 @@ function weightFor(profile: DemographicProfile | SuburbProfile): number {
   return Math.round((0.4 * growth + 0.4 * pro + 0.2 * zone) * 100) / 100;
 }
 
-function formatIncome(value: number, currency: string): string {
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M ${currency}`;
-  if (value >= 1_000) return `${Math.round(value / 1_000)}K ${currency}`;
-  return `${value} ${currency}`;
+/**
+ * UNITS — single source of truth for median household income.
+ *
+ * Atlas stores and displays median household income as MONTHLY local
+ * currency, everywhere. The site catalog (lib/stub/real-sites.ts)
+ * already documents `medianIncome` as ZAR/month and the ranked-site
+ * card renders "R 38k/mo", so monthly wins.
+ *
+ * The census tables behind CITY_DEMOGRAPHIC_PROFILES and
+ * SUBURB_PROFILES publish ANNUAL household income (e.g. R380,000/yr
+ * for Stellenbosch). Before this fix the connector passed that annual
+ * figure straight through, so one card said "R38,000" (monthly, from
+ * the catalog) and another said "380K ZAR" (annual, from here) for
+ * the same suburb — same magnitude of household, two different units.
+ *
+ * The conversion happens HERE, once, at the boundary between the
+ * annual source tables and the rest of the app. Anything downstream
+ * of this connector can assume monthly.
+ */
+const MONTHS_PER_YEAR = 12;
+
+/** Annual (as published in the census tables) → monthly, rounded to ZAR. */
+function toMonthlyIncome(annual: number): number {
+  return Math.round(annual / MONTHS_PER_YEAR);
+}
+
+/**
+ * Weight ceiling, expressed in MONTHLY currency so it matches the
+ * value we now store. R83,333/mo ≈ R1M/yr — the same ceiling the
+ * annual formula used, so scoring behaviour is unchanged by the unit
+ * fix.
+ */
+const INCOME_WEIGHT_CEILING_MONTHLY = 1_000_000 / MONTHS_PER_YEAR;
+
+/**
+ * Render a MONTHLY income figure. The `/mo` suffix is mandatory —
+ * an unlabelled income number is exactly what caused the units bug.
+ */
+function formatIncome(monthlyValue: number, currency: string): string {
+  if (monthlyValue >= 1_000_000) return `${(monthlyValue / 1_000_000).toFixed(1)}M ${currency}/mo`;
+  if (monthlyValue >= 1_000) return `${Math.round(monthlyValue / 1_000)}k ${currency}/mo`;
+  return `${monthlyValue} ${currency}/mo`;
 }
 
 export const statsSAConnector: Connector = {
@@ -168,7 +206,9 @@ export const statsSAConnector: Connector = {
     if (!profile) return [];
 
     const weight = weightFor(profile);
-    const incomeStr = formatIncome(profile.medianHouseholdIncome, city.currency);
+    // Source tables are ANNUAL; Atlas speaks MONTHLY. Convert once here.
+    const monthlyIncome = toMonthlyIncome(profile.medianHouseholdIncome);
+    const incomeStr = formatIncome(monthlyIncome, city.currency);
     const proPct = Math.round(profile.professionalShare * 100);
     const locationName = suburb ? `${suburb.name}, ${city.name}` : city.name;
     const fetchedAt = new Date().toISOString();
@@ -193,10 +233,11 @@ export const statsSAConnector: Connector = {
         type: "median_income",
         lat, lng,
         label: `${locationName}: median household income ${incomeStr}`,
-        value: profile.medianHouseholdIncome,
-        weight: Math.min(1, profile.medianHouseholdIncome / 1_000_000),
+        // Monthly — same unit as the label, the card, and the catalog.
+        value: monthlyIncome,
+        weight: Math.min(1, monthlyIncome / INCOME_WEIGHT_CEILING_MONTHLY),
         fetchedAt,
-        payload: { suburb: suburb?.name ?? null, city: city.name, currency: city.currency },
+        payload: { suburb: suburb?.name ?? null, city: city.name, currency: city.currency, incomePeriod: "month" },
       },
       {
         id: `stats_sa:${site.id}:growth`,

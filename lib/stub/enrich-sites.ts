@@ -134,6 +134,7 @@ interface EnrichedFields {
   arterial?: string;
   nearestHighwayKm?: number;
   competition?: string[];
+  /** Median household income in ZAR per MONTH (Atlas's canonical unit). */
   medianIncome?: number;
   dataProvenance?: string;
   suburb?: string;

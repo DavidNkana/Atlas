@@ -8,6 +8,17 @@ import { overpassBatch } from "./overpass-client";
 const RADIUS_M = 3_000;
 const MAX_HEALTH = 25;
 
+/**
+ * Hospitals and clinics are almost always mapped in OSM as a `way`
+ * (the grounds or building footprint), not a point. Querying
+ * `node[...]` only returned 0 for real Cape Town sites that have a
+ * mapped hospital 1km away. Union node + way, and also pick up
+ * `healthcare=*` which is the newer tagging scheme many SA imports
+ * use instead of `amenity=*`.
+ */
+const HEALTH_AMENITIES = "hospital|clinic|doctors|pharmacy|dentist";
+const HEALTH_CARE_TAGS = "hospital|clinic|doctor|pharmacy|dentist|centre";
+
 export const healthcareConnector: Connector = {
   id: "healthcare",
   name: "Healthcare (OpenStreetMap)",
@@ -21,7 +32,7 @@ export const healthcareConnector: Connector = {
     const count = await overpassBatch(lat, lng, [
       {
         key: "healthcare",
-        ql: `node["amenity"~"hospital|clinic|doctors|pharmacy|dentist"](around:${RADIUS_M},${lat},${lng});`,
+        ql: `(node["amenity"~"${HEALTH_AMENITIES}"](around:${RADIUS_M},${lat},${lng});way["amenity"~"${HEALTH_AMENITIES}"](around:${RADIUS_M},${lat},${lng});node["healthcare"~"${HEALTH_CARE_TAGS}"](around:${RADIUS_M},${lat},${lng});way["healthcare"~"${HEALTH_CARE_TAGS}"](around:${RADIUS_M},${lat},${lng}););`,
       },
     ]).then((c) => c.healthcare ?? 0);
 

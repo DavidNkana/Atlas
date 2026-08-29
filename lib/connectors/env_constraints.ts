@@ -26,12 +26,23 @@ export const envConstraintsConnector: Connector = {
 
     const counts = await overpassBatch(lat, lng, [
       {
+        // Lakes, pans and vleis are `way`s (already covered), but a
+        // river running through the site is a `waterway=river`
+        // linestring that `natural=water` never matches — and a river
+        // is the single most common flood-line constraint on SA
+        // erven. Added explicitly.
         key: "env_water",
-        ql: `(node["natural"~"water|wetland|marsh"](around:${RADIUS_M},${lat},${lng});way["natural"~"water|wetland|marsh"](around:${RADIUS_M},${lat},${lng}););`,
+        ql: `(node["natural"~"water|wetland|marsh"](around:${RADIUS_M},${lat},${lng});way["natural"~"water|wetland|marsh"](around:${RADIUS_M},${lat},${lng});way["waterway"~"river|stream"](around:${RADIUS_M},${lat},${lng}););`,
       },
       {
+        // Protected areas are overwhelmingly mapped as `relation`
+        // (multipolygon) in South Africa — SANParks, CapeNature and
+        // provincial reserves all import that way. Querying `way`
+        // only returned 0 next to Table Mountain NP. Union
+        // node/way/relation, and include `leisure=nature_reserve`,
+        // which is the tag most SA reserves actually carry.
         key: "env_protected",
-        ql: `way["boundary"="protected_area"](around:${RADIUS_M},${lat},${lng});`,
+        ql: `(node["boundary"="protected_area"](around:${RADIUS_M},${lat},${lng});way["boundary"="protected_area"](around:${RADIUS_M},${lat},${lng});relation["boundary"="protected_area"](around:${RADIUS_M},${lat},${lng});way["leisure"="nature_reserve"](around:${RADIUS_M},${lat},${lng});relation["leisure"="nature_reserve"](around:${RADIUS_M},${lat},${lng}););`,
       },
       {
         key: "env_hazards",

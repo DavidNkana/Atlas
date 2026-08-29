@@ -5,8 +5,40 @@
 import type { Connector, ConnectorContext, Signal } from "./types";
 import { overpassBatch } from "./overpass-client";
 
-const RADIUS_M = 1_000;
+/**
+ * Radius: 2.5km, not 1km.
+ *
+ * The road network that actually decides a site is wider than the
+ * walk-around. Fuel stations, drive-thrus and roadside retail are
+ * highway-interchange businesses: the ramps feeding the interchange
+ * and the arterials collecting traffic into it typically sit
+ * 1.5-2.5km out. At 1km we were measuring the service road and
+ * calling it "road access", which is why interchange sites near the
+ * N1/N7 came back with 0-2 roads and scored as if they were
+ * land-locked.
+ */
+const RADIUS_M = 2_500;
+/**
+ * TUNING DEBT (not changed here — needs a real distribution, Task 3).
+ * Now that overpass-client actually parses `out count;` (it never did
+ * before, see the ROOT CAUSE FIX comment there), a live probe of Cape
+ * Town City Bowl at 2.5km returns ~1,100 matching ways. Against
+ * MAX_ROADS = 50 that pins `weight` at 1.0 for every urban site, so
+ * the signal stops discriminating between sites. It is not a
+ * regression — the old value was pinned at 0.0 for the same reason —
+ * but this ceiling wants re-tuning against measured counts across
+ * urban / peri-urban / rural sites before it carries real score.
+ */
 const MAX_ROADS = 50;
+
+/**
+ * `*_link` ways are the on/off ramps. They are tagged separately from
+ * their parent motorway/trunk in OSM, so the old regex silently
+ * dropped every ramp — the single most decision-relevant piece of
+ * road geometry for an interchange site.
+ */
+const HIGHWAY_CLASSES =
+  "motorway|motorway_link|trunk|trunk_link|primary|primary_link|secondary|tertiary";
 
 export const roadsConnector: Connector = {
   id: "roads",
@@ -21,7 +53,7 @@ export const roadsConnector: Connector = {
     const count = await overpassBatch(lat, lng, [
       {
         key: "roads",
-        ql: `way["highway"~"motorway|trunk|primary|secondary|tertiary"](around:${RADIUS_M},${lat},${lng});`,
+        ql: `way["highway"~"${HIGHWAY_CLASSES}"](around:${RADIUS_M},${lat},${lng});`,
       },
     ]).then((c) => c.roads ?? 0);
 

@@ -82,11 +82,18 @@ export async function overpassBatch(
     return cached.counts;
   }
 
-  // Chain all queries with `;` then `out count;` per statement so we
-  // get per-query counts.
+  // Chain all queries, appending `out count;` per statement so we get
+  // per-query counts.
+  //
+  // Joined with "" — NOT ";". Every fragment already ends in `;` after
+  // the replace below, so joining on ";" produced `out count;;node[...`
+  // and Overpass rejects the empty statement with HTTP 400. The 400
+  // then hit the `4xx isn't a rate limit` branch, which breaks out of
+  // the mirror loop and returns zeros. Any batch with 2+ queries —
+  // env_constraints sends 3 — could therefore never return data.
   const chained = queries
     .map((q) => q.ql.replace(/;\s*$/, ";out count;"))
-    .join(";");
+    .join("");
   const fullQuery = `[out:json][timeout:25];${chained}`;
   const body = `data=${encodeURIComponent(fullQuery)}`;
 
@@ -98,7 +105,17 @@ export async function overpassBatch(
     try {
       const res = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          // overpass-api.de answers 406 Not Acceptable to requests
+          // without an identifying User-Agent / Accept pair (verified
+          // against the live mirror). 406 is not in the retry list
+          // below, so it broke the mirror loop and returned zeros.
+          // Identifying the client is also required by the Overpass
+          // usage policy.
+          "User-Agent": "Atlas/1.0 (+https://atlas.africa) site-intelligence",
+          Accept: "application/json",
+        },
         body,
         signal: controller.signal,
       });
@@ -123,14 +140,26 @@ export async function overpassBatch(
 
       // Map counts in the order they appear in the response (Overpass
       // returns them in the same order as the chained statements).
+      //
+      // ROOT CAUSE FIX: `out count;` does NOT emit `tags.count`. The
+      // real shape is
+      //   { type: "count", id: 0,
+      //     tags: { nodes: "30", ways: "7", relations: "0", total: "37" } }
+      // — four keys, and every value is a STRING. The old guard
+      // (`typeof el.tags?.count === "number"`) therefore never matched
+      // a single element, `counts` was left empty, and the
+      // fill-missing-with-0 loop below handed every caller a 0. That
+      // is why roads / healthcare / competitors / env_constraints all
+      // reported zero on live queries regardless of what was actually
+      // on the ground — the queries were fine, the parser was reading
+      // a field that does not exist.
       const counts: Record<string, number> = {};
       let qIdx = 0;
       for (const el of elements) {
-        if (el.type === "count" && typeof el.tags?.count === "number") {
-          const q = queries[qIdx];
-          if (q) counts[q.key] = el.tags.count;
-          qIdx++;
-        }
+        if (el.type !== "count") continue;
+        const q = queries[qIdx];
+        if (q) counts[q.key] = readCount(el.tags);
+        qIdx++;
       }
       // If we got fewer counts than queries, fill missing with 0.
       for (const q of queries) {
@@ -159,6 +188,29 @@ export async function overpassBatch(
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+/**
+ * Read the element total out of an Overpass `out count;` result.
+ *
+ * Overpass reports `total` alongside the per-type breakdown, and all
+ * values arrive as strings. We prefer `total` (it already covers the
+ * node + way + relation unions the connectors now issue) and fall
+ * back to summing the parts, then to a literal `count` key for any
+ * mirror that formats differently.
+ */
+function readCount(tags: Record<string, string | number> | undefined): number {
+  if (!tags) return 0;
+  const num = (v: string | number | undefined): number => {
+    const n = typeof v === "number" ? v : Number(v);
+    return Number.isFinite(n) ? n : 0;
+  };
+  if (tags.total !== undefined) return num(tags.total);
+  if (tags.nodes !== undefined || tags.ways !== undefined || tags.relations !== undefined) {
+    return num(tags.nodes) + num(tags.ways) + num(tags.relations);
+  }
+  if (tags.count !== undefined) return num(tags.count);
+  return 0;
 }
 
 interface OverpassElement {

@@ -51,6 +51,8 @@ function nearestSuburb(cityId: string, lat: number, lng: number): {
   name: string;
   distanceKm: number;
   population: number;
+  /** MONTHLY local currency. SUBURB_PROFILES publishes annual; we
+   *  convert on the way out so every consumer sees one unit. */
   medianIncome: number;
   zone: string;
 } | undefined {
@@ -70,7 +72,8 @@ function nearestSuburb(cityId: string, lat: number, lng: number): {
     name: best.name,
     distanceKm: Math.round(bestDist * 10) / 10,
     population: best.population,
-    medianIncome: best.medianHouseholdIncome,
+    // Annual (census) → monthly (Atlas's single income unit).
+    medianIncome: Math.round(best.medianHouseholdIncome / 12),
     zone: best.economicZone,
   };
 }
@@ -112,9 +115,12 @@ export function buildRationale(
     ? `Direct ${roadRef} frontage gives you the freight and commuter reach you need.`
     : "";
 
-  // Helper to build the suburb sentence
+  // Helper to build the suburb sentence.
+  // Income is rendered "R Nk/mo" — same unit and same shape as the
+  // ranked-site card, so the narrative and the badge can never
+  // disagree about whether a number is monthly or annual.
   const suburbSentence = suburb
-    ? `The nearest Stats SA suburb is ${suburb.name} (~${suburb.distanceKm} km from the site, ${suburb.population.toLocaleString()} residents, R ${suburb.medianIncome.toLocaleString()} median income).`
+    ? `The nearest Stats SA suburb is ${suburb.name} (~${suburb.distanceKm} km from the site, ${suburb.population.toLocaleString()} residents, R ${(suburb.medianIncome / 1000).toFixed(0)}k/mo median income).`
     : "";
 
   // Helper for the size hint

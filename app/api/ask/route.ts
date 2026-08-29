@@ -862,9 +862,17 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
               source: "stats_sa",
               type: "median_income",
               lat: s.lat, lng: s.lng,
-              label: `Median household income: R${s.medianIncome.toLocaleString()}`,
+              // UNITS: catalog `medianIncome` is ZAR per MONTH (see
+              // lib/stub/real-sites.ts). Label it as such — an
+              // unlabelled figure here read as annual next to the
+              // stats_sa signal and produced two units on one page.
+              // Weight normalises against R83k/mo (≈R1M/yr), the same
+              // ceiling lib/connectors/stats_sa.ts uses; the previous
+              // /1_000_000 divided a monthly value by an annual
+              // ceiling and flattened every site's income weight.
+              label: `Median household income: R${s.medianIncome.toLocaleString()}/mo`,
               value: s.medianIncome,
-              weight: Math.min(1, s.medianIncome / 1_000_000),
+              weight: Math.min(1, s.medianIncome / (1_000_000 / 12)),
               fetchedAt: new Date().toISOString(),
             });
           }
@@ -961,6 +969,38 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
           }
         });
       } catch { /* non-fatal */ }
+
+      // Day 29 — provenance honesty.
+      //
+      // The rationale prose is model-written and is free to name
+      // competitors ("Shell Boulevard Service Station (0m)") that no
+      // connector actually returned. When the competitors connector
+      // reports 0 and the paragraph above it lists three brands, the
+      // reader can't tell which one to believe — and stops believing
+      // both.
+      //
+      // We don't try to fix the prose here. We just state, per site,
+      // how many of the connectors that ran actually contributed a
+      // non-zero signal, and mark the narrative as AI text. A site
+      // reading "2/10 sources returned data · AI text" tells the
+      // developer exactly how much weight to put on the paragraph.
+      if (connectorsRun.length > 0) {
+        const sourcesAttempted = connectorsRun.length;
+        for (const site of rankedSites) {
+          const contributing = new Set(
+            (site.signals ?? [])
+              .filter((sig) => Number(sig.value) !== 0)
+              .map((sig) => sig.source),
+          );
+          const existing = (site as any).dataProvenance;
+          const base =
+            typeof existing === "string" && existing.trim().length > 0
+              ? existing.trim()
+              : "Atlas connectors";
+          (site as any).dataProvenance =
+            `${base} (${contributing.size}/${sourcesAttempted} sources returned data) · AI text`;
+        }
+      }
 
       allConnectorsFailed =
         connectorsRun.length > 0 &&

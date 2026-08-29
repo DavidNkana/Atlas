@@ -76,6 +76,7 @@ type Site = {
   arterial?: string;
   nearestHighwayKm?: number;
   competition?: string[];
+  /** Median household income in ZAR per MONTH (Atlas's canonical unit). */
   medianIncome?: number;
   dataProvenance?: string;
   // Day 22: live per-listing data from SA property portals via
@@ -299,8 +300,14 @@ export function RankedSiteCard({
               {site.medianIncome != null && (
                 <span
                   className="rounded border border-atlas-border bg-atlas-surface2 px-1.5 py-0.5 text-atlas-muted"
-                  title="Median household income, Stats SA Census 2022"
+                  title="Median household income per month, Stats SA Census 2022"
                 >
+                  {/* UNITS: site.medianIncome is ZAR per MONTH. This is
+                      Atlas's canonical income unit — the census tables
+                      publish annual and every producer (stats_sa
+                      connector, rationale builder, catalog) converts to
+                      monthly before it reaches here. Never render this
+                      value without the "/mo" suffix. */}
                   R {Math.round(site.medianIncome / 1000)}k/mo income
                 </span>
               )}
