@@ -24,9 +24,18 @@
  *
  * Everything here is derived from data the site already carries
  * (catalog enrichment + connector signals). This component adds no
- * new data sources — SANRAL traffic counts, live zoning and Property24
- * land comps land in a later pass, and the manual-check callouts are
- * written so they simply disappear once those signals start arriving.
+ * new data sources of its own.
+ *
+ * Task 3 — the three primary sources promised in that later pass have
+ * now landed, and exactly as designed the manual-check callouts they
+ * replace simply stopped rendering:
+ *   - Zoning    ← sa_zoning connector (CoCT / CoJ / eThekwini schemes)
+ *   - Traffic   ← sa_traffic connector (SANRAL / provincial AADT)
+ *   - Economics ← live Property24 + Private Property land prices
+ * Each still carries its own confirm-with-the-authority caveat,
+ * because screening data is not a zoning certificate, a segment
+ * average is not a count at your intersection, and an asking price is
+ * not a deeds transaction.
  */
 
 import { getEconomics, formatZAR, projectPayback } from "@/lib/decision/economics";
@@ -37,6 +46,8 @@ type DecisionSignal = {
   label: string;
   value: number;
   weight: number;
+  /** Structured metadata — sa_zoning and sa_traffic both use it. */
+  payload?: Record<string, unknown>;
 };
 
 export type DecisionBlockProps = {
@@ -54,6 +65,11 @@ export type DecisionBlockProps = {
     nearestHighwayKm?: number;
     plotSizeHectares?: number;
     priceRange?: string; // e.g. "R 2.2M - R 5M"
+    // Task 3 — land price derived from live portal listings by
+    // /api/ask. Outranks priceRange when present.
+    landPriceLowZAR?: number;
+    landPriceHighZAR?: number;
+    landPriceSource?: string; // "live_listings" | "catalog"
     medianIncome?: number; // ZAR/month
     competition?: string[];
     // raw signals, for derivation
@@ -99,6 +115,40 @@ function findSignal(
 ): DecisionSignal | undefined {
   return signals.find(predicate);
 }
+
+/* --- Task 3: typed reads off the new connectors' payloads --------- */
+
+/** Shape emitted by lib/connectors/sa_zoning.ts. */
+type ZoningPayload = {
+  metro?: string;
+  name?: string;
+  category?: string;
+  permittedUses?: string;
+};
+
+/** Shape emitted by lib/connectors/sa_traffic.ts. */
+type TrafficPayload = {
+  aadt?: number;
+  ref?: string;
+  segment?: string;
+  distanceKm?: number;
+  heavyVehiclePct?: number;
+  year?: number;
+  source?: string;
+};
+
+const METRO_LABEL: Record<string, string> = {
+  cape_town: "City of Cape Town",
+  johannesburg: "City of Johannesburg",
+  ethekwini: "eThekwini",
+};
+
+/**
+ * SA fuel-station feasibility rule of thumb: below roughly 15,000
+ * vehicles/day past the forecourt the volumes don't carry the site.
+ * Used only to flag, never to reject.
+ */
+const FUEL_VIABILITY_AADT = 15_000;
 
 /**
  * The env_constraints connector encodes its findings in the label:
@@ -219,16 +269,33 @@ export function DecisionBlock({ site, vertical }: DecisionBlockProps) {
   const envSignal = findSignal(signals, (s) => s.type === "env_risk");
   const envRisky = !!envSignal && envSignal.weight < 0.7;
 
-  // Traffic. No SANRAL connector exists yet, so this stays undefined
-  // and the manual-check branch renders. Once a traffic connector
-  // lands it will match here without touching this component.
-  const trafficSignal = findSignal(
+  // Zoning. Task 3: the sa_zoning connector resolves the scheme zone
+  // covering the site. Catalog `site.zoning` (erf-specific where we
+  // have it) and this (area-level, from the metro scheme) are
+  // complementary, so both render when both exist.
+  const zoningSignal = findSignal(
     signals,
-    (s) =>
-      s.type === "traffic_count" ||
-      s.type === "vehicle_count" ||
-      s.source === "sanral",
+    (s) => s.source === "sa_zoning" || s.type === "zoning_class",
   );
+  const zoning = (zoningSignal?.payload ?? {}) as ZoningPayload;
+
+  // Traffic. Task 3: the sa_traffic connector supplies AADT. The
+  // legacy predicate stays as a fallback so any other traffic source
+  // still lights this section up.
+  const aadtSignal = findSignal(
+    signals,
+    (s) => s.source === "sa_traffic" || s.type === "traffic_aadt",
+  );
+  const aadt = (aadtSignal?.payload ?? {}) as TrafficPayload;
+  const trafficSignal =
+    aadtSignal ??
+    findSignal(
+      signals,
+      (s) =>
+        s.type === "traffic_count" ||
+        s.type === "vehicle_count" ||
+        s.source === "sanral",
+    );
 
   // Competitor saturation. The competitors connector sets
   // weight = 1 - min(1, count / maxExpected), so a weight at or near
@@ -249,7 +316,24 @@ export function DecisionBlock({ site, vertical }: DecisionBlockProps) {
     site.medianIncome ??
     (incomeSignal && incomeSignal.value > 0 ? incomeSignal.value : null);
 
-  const price = parsePriceRange(site.priceRange);
+  /* --- Task 3: land price precedence ------------------------------
+   * Live portal listings (Property24 + Private Property, matched to
+   * this site by /api/ask) beat the catalog's curated band, because
+   * they are what the market is asking today. Catalog is the fallback,
+   * and "no price at all" still falls through to the manual check. */
+  const livePrice =
+    site.landPriceLowZAR != null && site.landPriceHighZAR != null
+      ? {
+          low: site.landPriceLowZAR,
+          high: site.landPriceHighZAR,
+          mid: (site.landPriceLowZAR + site.landPriceHighZAR) / 2,
+        }
+      : null;
+  const catalogPrice = parsePriceRange(site.priceRange);
+  const price = livePrice ?? catalogPrice;
+  const priceSource =
+    site.landPriceSource ??
+    (livePrice ? "live_listings" : catalogPrice ? "catalog" : undefined);
   const payback = price ? projectPayback(price.mid, vertical) : null;
 
   return (
@@ -280,19 +364,49 @@ export function DecisionBlock({ site, vertical }: DecisionBlockProps) {
       <div className="ml-6 space-y-2.5 rounded-md border border-atlas-border bg-atlas-surface2/40 p-3">
         {/* ---------------------------------------------------- 1. Zoning */}
         <Section title="Zoning" icon={ZoningIcon}>
-          {site.zoning ? (
+          {site.zoning || zoningSignal ? (
             <>
-              <Fact>
-                Zoned <span className="font-medium">{site.zoning}</span>
-                {site.plotSizeHectares != null && (
-                  <>
-                    {" · "}
-                    {site.plotSizeHectares >= 1
-                      ? `${site.plotSizeHectares} ha`
-                      : `${Math.round(site.plotSizeHectares * 10000)} m²`}
-                  </>
-                )}
-              </Fact>
+              {site.zoning && (
+                <Fact>
+                  Zoned <span className="font-medium">{site.zoning}</span>
+                  {site.plotSizeHectares != null && (
+                    <>
+                      {" · "}
+                      {site.plotSizeHectares >= 1
+                        ? `${site.plotSizeHectares} ha`
+                        : `${Math.round(site.plotSizeHectares * 10000)} m²`}
+                    </>
+                  )}
+                </Fact>
+              )}
+              {zoningSignal && (
+                <>
+                  <Fact>
+                    <span className="font-medium">
+                      {zoning.name ?? zoningSignal.label}
+                    </span>
+                    {/* Plot size normally rides on the catalog zoning
+                        line above; carry it here when the scheme zone
+                        is the only zoning fact we have. */}
+                    {!site.zoning && site.plotSizeHectares != null && (
+                      <>
+                        {" · "}
+                        {site.plotSizeHectares >= 1
+                          ? `${site.plotSizeHectares} ha`
+                          : `${Math.round(site.plotSizeHectares * 10000)} m²`}
+                      </>
+                    )}
+                    {zoning.permittedUses && <> · {zoning.permittedUses}</>}
+                  </Fact>
+                  <p className="text-atlas-muted">
+                    {zoning.metro
+                      ? `${METRO_LABEL[zoning.metro] ?? zoning.metro} town-planning scheme`
+                      : "Municipal town-planning scheme"}{" "}
+                    — area-level zoning, not the zoning certificate for this
+                    erf.
+                  </p>
+                </>
+              )}
               <ManualCheck>
                 Confirm the scheme rights and any consent-use conditions with
                 the municipal Land Use Management department before offer.
@@ -324,7 +438,35 @@ export function DecisionBlock({ site, vertical }: DecisionBlockProps) {
 
         {/* --------------------------------------------------- 2. Traffic */}
         <Section title="Traffic" icon={TrafficIcon}>
-          {trafficSignal ? (
+          {aadtSignal ? (
+            <>
+              <Fact>
+                <span className="font-medium">
+                  {(aadt.aadt ?? aadtSignal.value).toLocaleString()} veh/day
+                </span>
+                {aadt.ref && <> on {aadt.ref}</>}
+                {aadt.segment && <> ({aadt.segment})</>}
+                {aadt.distanceKm != null && (
+                  <> · {aadt.distanceKm.toFixed(1)}km from site</>
+                )}
+              </Fact>
+              {aadt.heavyVehiclePct != null && (
+                <Fact>{aadt.heavyVehiclePct}% heavy vehicles (freight share)</Fact>
+              )}
+              {site.arterial && <Fact>On {site.arterial}</Fact>}
+              {(aadt.aadt ?? aadtSignal.value) < FUEL_VIABILITY_AADT && (
+                <ManualCheck>
+                  Below the ~{FUEL_VIABILITY_AADT.toLocaleString()} veh/day
+                  rule-of-thumb floor for fuel-station viability.
+                </ManualCheck>
+              )}
+              <p className="text-atlas-muted">
+                {aadt.source ?? "SANRAL / provincial traffic counts"}
+                {aadt.year != null && ` (${aadt.year})`} — segment average, not
+                a count at this intersection.
+              </p>
+            </>
+          ) : trafficSignal ? (
             <Fact>{trafficSignal.label}</Fact>
           ) : site.arterial || site.nearestHighwayKm != null ? (
             <>
@@ -380,6 +522,11 @@ export function DecisionBlock({ site, vertical }: DecisionBlockProps) {
               <Fact>
                 Land: {formatZAR(price.low)}
                 {price.high !== price.low && <> – {formatZAR(price.high)}</>}
+                {livePrice ? (
+                  <> (live from Property24 + Private Property)</>
+                ) : (
+                  <> (from catalog)</>
+                )}
               </Fact>
               <Fact>
                 Build + setup: {formatZAR(econ.buildLowZAR)} –{" "}
@@ -410,6 +557,11 @@ export function DecisionBlock({ site, vertical }: DecisionBlockProps) {
                 </span>
               </Fact>
               <p className="text-atlas-muted">{econ.notes}</p>
+              {priceSource && (
+                <p className="text-[10px] text-atlas-muted">
+                  Source: {priceSource}
+                </p>
+              )}
             </>
           ) : (
             <>

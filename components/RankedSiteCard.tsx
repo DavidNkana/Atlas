@@ -72,6 +72,11 @@ type Site = {
   facing?: "N" | "S" | "E" | "W" | "NE" | "NW" | "SE" | "SW";
   plotSizeHectares?: number;
   priceRange?: string;
+  // Task 3: land price resolved by /api/ask — live Property24 +
+  // Private Property listings where available, catalog otherwise.
+  landPriceLowZAR?: number;
+  landPriceHighZAR?: number;
+  landPriceSource?: string;
   zoning?: string;
   titleType?: "freehold" | "leasehold";
   arterial?: string;

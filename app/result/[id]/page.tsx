@@ -210,35 +210,54 @@ function summariseDecisionCoverage(sites: RankedSite[]): {
 
   for (const s of sites) {
     const site = s as any;
-    const signals: Array<{ type: string; weight: number }> = Array.isArray(
-      site.signals,
-    )
-      ? site.signals
-      : [];
+    const signals: Array<{
+      type: string;
+      source?: string;
+      value?: number;
+      weight: number;
+      payload?: Record<string, unknown>;
+    }> = Array.isArray(site.signals) ? site.signals : [];
     const envSignal = signals.find((x) => x.type === "env_risk");
     const envRisky = !!envSignal && envSignal.weight < 0.7;
     const compSignal = signals.find((x) => x.type === "competitor_count");
     const saturated = !!compSignal && compSignal.weight <= 0.25;
-    const trafficSignal = signals.find(
-      (x) =>
-        x.type === "traffic_count" ||
-        x.type === "vehicle_count" ||
-        (x as any).source === "sanral",
+
+    // Task 3 — the sa_traffic and sa_zoning connectors are now the
+    // primary sources for these two sections. Same predicates as
+    // components/DecisionBlock.tsx, deliberately.
+    const aadtSignal = signals.find(
+      (x) => x.source === "sa_traffic" || x.type === "traffic_aadt",
     );
+    const trafficSignal =
+      aadtSignal ??
+      signals.find(
+        (x) =>
+          x.type === "traffic_count" ||
+          x.type === "vehicle_count" ||
+          x.source === "sanral",
+      );
+    const zoningSignal = signals.find(
+      (x) => x.source === "sa_zoning" || x.type === "zoning_class",
+    );
+
     const hasCatchment =
       site.medianIncome != null ||
       signals.some(
         (x) => x.type === "demographic_profile" || x.type === "median_income",
       );
+    const hasZoning = !!site.zoning || !!zoningSignal;
     const hasTraffic =
       !!trafficSignal || !!site.arterial || site.nearestHighwayKm != null;
+    // Live listing prices outrank the catalog band (see /api/ask).
+    const hasLandPrice =
+      site.landPriceLowZAR != null || !!site.priceRange;
     const lowConfidence = (site.confidence ?? 0) < 0.6;
 
     const realSections = [
-      !!site.zoning,
+      hasZoning,
       hasTraffic,
       hasCatchment,
-      !!site.priceRange,
+      hasLandPrice,
       signals.length > 0, // risks are derived rather than boilerplate
     ].filter(Boolean).length;
     if (realSections >= 4) fullSites++;
@@ -248,9 +267,17 @@ function summariseDecisionCoverage(sites: RankedSite[]): {
     // unless the env connector came back clean.
     manualChecks += 1;
     if (envRisky || !envSignal) manualChecks += 1;
-    if (!trafficSignal) manualChecks += 1; // traffic section
+    // Traffic section. With an AADT count the section is filled and
+    // emits nothing — except the viability flag on genuinely thin
+    // traffic. Without one, both the arterial-only and the no-data
+    // branches emit exactly one callout.
+    if (aadtSignal) {
+      if ((aadtSignal.value ?? 0) < 15_000) manualChecks += 1;
+    } else if (!trafficSignal) {
+      manualChecks += 1;
+    }
     if (!hasCatchment) manualChecks += 1;
-    if (!site.priceRange) manualChecks += 1;
+    if (!hasLandPrice) manualChecks += 1;
     // Risks section: always-on planner/attorney line + conditionals.
     manualChecks += 1;
     if (saturated) manualChecks += 1;

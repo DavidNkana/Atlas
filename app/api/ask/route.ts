@@ -14,7 +14,7 @@ import type { Plan } from "@/lib/plan/types";
 import { classifyIntent } from "@/lib/intent/classify";
 import { enrichSitesWithCatalog } from "@/lib/stub/enrich-sites";
 import { supplementMissingCatalogSites } from "@/lib/stub/enrich-sites";
-import { fetchLiveListings, type LiveListing } from "@/lib/connectors/tavily-listings";
+import { fetchLiveListings, parsePrice, type LiveListing } from "@/lib/connectors/tavily-listings";
 import { fetchNearbyCompetitors, geocodePlaceName } from "@/lib/connectors/google-places";
 import { withTimeout } from "@/lib/util/timeout";
 import { sanitizeForJson } from "@/lib/util/json-sanitize";
@@ -330,6 +330,42 @@ function deriveLocation(sites: RankedSite[]): {
   }
   // Lusaka CBD fallback
   return { lat: -15.3875, lng: 28.3228, label: "Lusaka CBD (fallback)" };
+}
+
+/**
+ * Task 3 — derive a land price band from the live portal listings
+ * matched to a site.
+ *
+ * Property24 and Private Property are the prices SA developers
+ * actually transact against, so when we have live listings for a
+ * suburb they outrank the catalog's hand-curated `priceRange` band in
+ * the Decision Block's economics section.
+ *
+ * Two guards, both deliberate:
+ *  - `MIN_PLAUSIBLE_LAND_ZAR` drops rentals ("R 18 500 pm") and
+ *    parse noise. A monthly rent read as a purchase price would put
+ *    the whole payback calculation out by three orders of magnitude.
+ *  - listings without a parseable price are skipped entirely rather
+ *    than defaulted, so a single unparsed listing can't drag the band.
+ *
+ * Returns null when nothing usable survives, and the caller falls
+ * back to the catalog band.
+ */
+const MIN_PLAUSIBLE_LAND_ZAR = 100_000;
+
+function deriveLandPriceFromListings(
+  listings: Array<{ price?: string | null; priceAmount?: number | null }>,
+): { low: number; high: number } | null {
+  const amounts: number[] = [];
+  for (const l of listings) {
+    const amount =
+      typeof l.priceAmount === "number" && Number.isFinite(l.priceAmount)
+        ? l.priceAmount
+        : parsePrice(l.price);
+    if (amount != null && amount >= MIN_PLAUSIBLE_LAND_ZAR) amounts.push(amount);
+  }
+  if (amounts.length === 0) return null;
+  return { low: Math.min(...amounts), high: Math.max(...amounts) };
 }
 
 /**
@@ -1178,6 +1214,27 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
       if (matched && matched.length > 0) {
         (site as any).liveListings = matched.slice(0, 3);
       }
+    }
+  }
+
+  // Task 3 — promote live listings to the PRIMARY land price.
+  //
+  // Runs for every site, listings or not, so `landPriceSource` is
+  // always set and the Decision Block can attribute the number it
+  // renders. Precedence: live portal listings > catalog band > nothing
+  // (which keeps the existing manual-check callout).
+  for (const site of rankedSites) {
+    const s = site as any;
+    const listings = Array.isArray(s.liveListings) ? s.liveListings : [];
+    const live = deriveLandPriceFromListings(listings);
+    if (live) {
+      s.landPriceLowZAR = live.low;
+      s.landPriceHighZAR = live.high;
+      s.landPriceSource = "live_listings";
+    } else if (s.priceRange) {
+      // Numbers stay unset — the Decision Block parses the catalog
+      // band itself — but the attribution is still honest.
+      s.landPriceSource = "catalog";
     }
   }
 

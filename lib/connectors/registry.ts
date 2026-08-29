@@ -1,7 +1,7 @@
 /**
  * Day 5 — Connector registry.
  *
- * Atlas knows about N connectors. Today there are 10. To add another:
+ * Atlas knows about N connectors. Today there are 12. To add another:
  * create lib/connectors/<name>.ts, then append it to ALL_CONNECTORS.
  * The registry stays the only file the planner and API route need to touch.
  */
@@ -17,6 +17,8 @@ import { healthcareConnector } from "./healthcare";
 import { roadsConnector } from "./roads";
 import { competitorDensityConnector } from "./competitors";
 import { envConstraintsConnector } from "./env_constraints";
+import { saTrafficConnector } from "./sa_traffic";
+import { saZoningConnector } from "./sa_zoning";
 
 /**
  * The full list of connectors Atlas will consider running. Order matters:
@@ -47,6 +49,13 @@ export const ALL_CONNECTORS: Connector[] = [
   roadsConnector,             // major roads within 1km
   competitorDensityConnector, // same-vertical competition (saturation penalty)
   envConstraintsConnector,    // water/wetland/protected/hazards risk
+  // Task 3 — primary decision data. Both are offline lookups over
+  // curated public data (SANRAL/provincial AADT, metro town-planning
+  // schemes), so they add no latency and cannot fail. They fill the
+  // two Decision Block sections that previously only ever rendered a
+  // manual-check callout.
+  saTrafficConnector,         // AADT on the nearest counted highway segment
+  saZoningConnector,          // zoning class from the metro scheme
 ];
 
 /** O(1) lookup by connector id. Throws if unknown so callers fail loudly. */
