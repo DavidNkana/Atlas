@@ -4,6 +4,7 @@
 
 import type { Connector, ConnectorContext, Signal } from "./types";
 import { overpassBatch } from "./overpass-client";
+import { coordinatorFetch, registerModule, type CoordinatorCtx } from "./overpass-coordinator";
 
 const RADIUS_M = 1_000;
 const MAX_STOPS = 40;

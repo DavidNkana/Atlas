@@ -4,6 +4,7 @@
 
 import type { Connector, ConnectorContext, Signal } from "./types";
 import { overpassBatch } from "./overpass-client";
+import { coordinatorFetch, registerModule, type CoordinatorCtx } from "./overpass-coordinator";
 
 /**
  * Radius: 2.5km, not 1km.

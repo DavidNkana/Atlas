@@ -8,6 +8,7 @@
 import type { Connector, ConnectorContext, Signal } from "./types";
 import type { Vertical } from "@/lib/models/types";
 import { overpassBatch } from "./overpass-client";
+import { coordinatorFetch, registerModule, type CoordinatorCtx } from "./overpass-coordinator";
 
 interface CompetitorProfile {
   ql: (lat: number, lng: number) => string;
