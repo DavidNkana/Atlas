@@ -20,6 +20,16 @@ const MAX_HEALTH = 25;
 const HEALTH_AMENITIES = "hospital|clinic|doctors|pharmacy|dentist";
 const HEALTH_CARE_TAGS = "hospital|clinic|doctor|pharmacy|dentist|centre";
 
+registerModule({
+  id: "healthcare",
+  buildQueries: (lat, lng, ctx) => [
+    {
+      key: "healthcare",
+      ql: `(node["amenity"~"${HEALTH_AMENITIES}"](around:${ctx?.radius ?? RADIUS_M},${lat},${lng});way["amenity"~"${HEALTH_AMENITIES}"](around:${ctx?.radius ?? RADIUS_M},${lat},${lng});node["healthcare"~"${HEALTH_CARE_TAGS}"](around:${ctx?.radius ?? RADIUS_M},${lat},${lng});way["healthcare"~"${HEALTH_CARE_TAGS}"](around:${ctx?.radius ?? RADIUS_M},${lat},${lng}););`,
+    },
+  ],
+});
+
 export const healthcareConnector: Connector = {
   id: "healthcare",
   name: "Healthcare (OpenStreetMap)",
@@ -30,12 +40,11 @@ export const healthcareConnector: Connector = {
     const lng = site.lng;
     if (typeof lat !== "number" || typeof lng !== "number") return [];
 
-    const count = await overpassBatch(lat, lng, [
-      {
-        key: "healthcare",
-        ql: `(node["amenity"~"${HEALTH_AMENITIES}"](around:${RADIUS_M},${lat},${lng});way["amenity"~"${HEALTH_AMENITIES}"](around:${RADIUS_M},${lat},${lng});node["healthcare"~"${HEALTH_CARE_TAGS}"](around:${RADIUS_M},${lat},${lng});way["healthcare"~"${HEALTH_CARE_TAGS}"](around:${RADIUS_M},${lat},${lng}););`,
-      },
-    ]).then((c) => c.healthcare ?? 0);
+    const all = await coordinatorFetch(lat, lng, {
+      radius: RADIUS_M,
+      vertical: ctx.vertical as string,
+    });
+    const count = all["healthcare:healthcare"] ?? 0;
 
     const weight = Math.max(0, Math.min(1, count / MAX_HEALTH));
 

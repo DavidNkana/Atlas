@@ -41,6 +41,16 @@ const MAX_ROADS = 50;
 const HIGHWAY_CLASSES =
   "motorway|motorway_link|trunk|trunk_link|primary|primary_link|secondary|tertiary";
 
+registerModule({
+  id: "roads",
+  buildQueries: (lat, lng, ctx) => [
+    {
+      key: "roads",
+      ql: `way["highway"~"${HIGHWAY_CLASSES}"](around:${ctx?.radius ?? RADIUS_M},${lat},${lng});`,
+    },
+  ],
+});
+
 export const roadsConnector: Connector = {
   id: "roads",
   name: "Road network (OpenStreetMap)",
@@ -51,12 +61,11 @@ export const roadsConnector: Connector = {
     const lng = site.lng;
     if (typeof lat !== "number" || typeof lng !== "number") return [];
 
-    const count = await overpassBatch(lat, lng, [
-      {
-        key: "roads",
-        ql: `way["highway"~"${HIGHWAY_CLASSES}"](around:${RADIUS_M},${lat},${lng});`,
-      },
-    ]).then((c) => c.roads ?? 0);
+    const all = await coordinatorFetch(lat, lng, {
+      radius: RADIUS_M,
+      vertical: ctx.vertical as string,
+    });
+    const count = all["roads:roads"] ?? 0;
 
     const weight = Math.max(0, Math.min(1, count / MAX_ROADS));
 

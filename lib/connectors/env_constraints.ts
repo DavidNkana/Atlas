@@ -15,6 +15,24 @@ import { coordinatorFetch, registerModule, type CoordinatorCtx } from "./overpas
 
 const RADIUS_M = 2_000;
 
+registerModule({
+  id: "env_constraints",
+  buildQueries: (lat, lng, ctx) => [
+    {
+      key: "env_water",
+      ql: `(node["natural"~"water|wetland|marsh"](around:${ctx?.radius ?? RADIUS_M},${lat},${lng});way["natural"~"water|wetland|marsh"](around:${ctx?.radius ?? RADIUS_M},${lat},${lng});way["waterway"~"river|stream"](around:${ctx?.radius ?? RADIUS_M},${lat},${lng}););`,
+    },
+    {
+      key: "env_protected",
+      ql: `(node["boundary"="protected_area"](around:${ctx?.radius ?? RADIUS_M},${lat},${lng});way["boundary"="protected_area"](around:${ctx?.radius ?? RADIUS_M},${lat},${lng});relation["boundary"="protected_area"](around:${ctx?.radius ?? RADIUS_M},${lat},${lng});way["leisure"="nature_reserve"](around:${ctx?.radius ?? RADIUS_M},${lat},${lng});relation["leisure"="nature_reserve"](around:${ctx?.radius ?? RADIUS_M},${lat},${lng}););`,
+    },
+    {
+      key: "env_hazards",
+      ql: `(node["power"="plant"](around:${ctx?.radius ?? RADIUS_M},${lat},${lng});way["landuse"="industrial"](around:${ctx?.radius ?? RADIUS_M},${lat},${lng}););`,
+    },
+  ],
+});
+
 export const envConstraintsConnector: Connector = {
   id: "env_constraints",
   name: "Environmental constraints (OpenStreetMap)",
@@ -25,35 +43,14 @@ export const envConstraintsConnector: Connector = {
     const lng = site.lng;
     if (typeof lat !== "number" || typeof lng !== "number") return [];
 
-    const counts = await overpassBatch(lat, lng, [
-      {
-        // Lakes, pans and vleis are `way`s (already covered), but a
-        // river running through the site is a `waterway=river`
-        // linestring that `natural=water` never matches — and a river
-        // is the single most common flood-line constraint on SA
-        // erven. Added explicitly.
-        key: "env_water",
-        ql: `(node["natural"~"water|wetland|marsh"](around:${RADIUS_M},${lat},${lng});way["natural"~"water|wetland|marsh"](around:${RADIUS_M},${lat},${lng});way["waterway"~"river|stream"](around:${RADIUS_M},${lat},${lng}););`,
-      },
-      {
-        // Protected areas are overwhelmingly mapped as `relation`
-        // (multipolygon) in South Africa — SANParks, CapeNature and
-        // provincial reserves all import that way. Querying `way`
-        // only returned 0 next to Table Mountain NP. Union
-        // node/way/relation, and include `leisure=nature_reserve`,
-        // which is the tag most SA reserves actually carry.
-        key: "env_protected",
-        ql: `(node["boundary"="protected_area"](around:${RADIUS_M},${lat},${lng});way["boundary"="protected_area"](around:${RADIUS_M},${lat},${lng});relation["boundary"="protected_area"](around:${RADIUS_M},${lat},${lng});way["leisure"="nature_reserve"](around:${RADIUS_M},${lat},${lng});relation["leisure"="nature_reserve"](around:${RADIUS_M},${lat},${lng}););`,
-      },
-      {
-        key: "env_hazards",
-        ql: `(node["power"="plant"](around:${RADIUS_M},${lat},${lng});way["landuse"="industrial"](around:${RADIUS_M},${lat},${lng}););`,
-      },
-    ]);
+    const counts = await coordinatorFetch(lat, lng, {
+      radius: RADIUS_M,
+      vertical: ctx.vertical as string,
+    });
 
-    const water = counts.env_water ?? 0;
-    const protectedAreas = counts.env_protected ?? 0;
-    const hazards = counts.env_hazards ?? 0;
+    const water = counts["env_constraints:env_water"] ?? 0;
+    const protectedAreas = counts["env_constraints:env_protected"] ?? 0;
+    const hazards = counts["env_constraints:env_hazards"] ?? 0;
 
     let severity = 0;
     const flags: string[] = [];

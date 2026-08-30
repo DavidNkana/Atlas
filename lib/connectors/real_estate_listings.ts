@@ -23,6 +23,24 @@ const VERTICAL_LANDUSE: Record<string, string> = {
 
 const RADIUS_M = 2_000;
 
+registerModule({
+  id: "real_estate_listings",
+  buildQueries: (lat, lng, ctx) => [
+    {
+      key: "real_estate_landuse",
+      ql: `(way["landuse"~"residential|commercial|industrial|retail"](around:${ctx?.radius ?? RADIUS_M},${lat},${lng}););`,
+    },
+    {
+      key: "real_estate_buildings",
+      ql: `(way["building"~"residential|commercial|industrial|retail|apartments|house|detached"](around:${ctx?.radius ?? RADIUS_M},${lat},${lng}););`,
+    },
+    {
+      key: "real_estate_vacant",
+      ql: `(way["landuse"~"brownfield|greenfield|construction"](around:${ctx?.radius ?? RADIUS_M},${lat},${lng});way["landuse"="vacant"](around:${ctx?.radius ?? RADIUS_M},${lat},${lng}););`,
+    },
+  ],
+});
+
 export const realEstateListingsConnector: Connector = {
   id: "real_estate_listings",
   name: "Real estate listings (OpenStreetMap)",
@@ -34,24 +52,14 @@ export const realEstateListingsConnector: Connector = {
     if (typeof lat !== "number" || typeof lng !== "number") return [];
 
     const targetLanduse = VERTICAL_LANDUSE[vertical as string] ?? "residential";
-    const counts = await overpassBatch(lat, lng, [
-      {
-        key: "real_estate_landuse",
-        ql: `(way["landuse"~"residential|commercial|industrial|retail"](around:${RADIUS_M},${lat},${lng}););`,
-      },
-      {
-        key: "real_estate_buildings",
-        ql: `(way["building"~"residential|commercial|industrial|retail|apartments|house|detached"](around:${RADIUS_M},${lat},${lng}););`,
-      },
-      {
-        key: "real_estate_vacant",
-        ql: `(way["landuse"~"brownfield|greenfield|construction"](around:${RADIUS_M},${lat},${lng});way["landuse"="vacant"](around:${RADIUS_M},${lat},${lng}););`,
-      },
-    ]);
+    const counts = await coordinatorFetch(lat, lng, {
+      radius: RADIUS_M,
+      vertical: vertical as string,
+    });
 
-    const landuse = counts.real_estate_landuse ?? 0;
-    const buildings = counts.real_estate_buildings ?? 0;
-    const vacant = counts.real_estate_vacant ?? 0;
+    const landuse = counts["real_estate_listings:real_estate_landuse"] ?? 0;
+    const buildings = counts["real_estate_listings:real_estate_buildings"] ?? 0;
+    const vacant = counts["real_estate_listings:real_estate_vacant"] ?? 0;
     const fetchedAt = new Date().toISOString();
 
     const signals: Signal[] = [

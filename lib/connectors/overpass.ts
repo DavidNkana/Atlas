@@ -15,7 +15,14 @@
 
 import type { Connector, ConnectorContext, Signal } from "./types";
 import { overpassBatch } from "./overpass-client";
-import { coordinatorFetch, registerModule, type CoordinatorCtx } from "./overpass-coordinator";
+import { coordinatorFetch, registerModule } from "./overpass-coordinator";
+
+// Hack to register only once even though this module is imported twice in tests.
+declare module "./types" {
+  interface Connector {
+    __registered?: boolean;
+  }
+}
 
 const MAX_EXPECTED: Record<string, number> = {
   gas_station: 20,
@@ -54,29 +61,46 @@ export const overpassConnector: Connector = {
     if (typeof lat !== "number" || typeof lng !== "number") return [];
 
     const radius = RADIUS_M[vertical as string] ?? 1500;
-    const counts = await overpassBatch(lat, lng, [
-      {
-        key: "overpass_amenities",
-        ql: `node["amenity"~"restaurant|cafe|bar|fast_food|school|hospital|clinic|park|place_of_worship|supermarket|bank|pharmacy|fuel|warehouse|industrial"](around:${radius},${lat},${lng});`,
-      },
-      {
-        key: "overpass_retail",
-        ql: `node["shop"~"supermarket|convenience|mall|department_store|bakery|butcher"](around:${radius},${lat},${lng});`,
-      },
-      {
-        key: "overpass_fuel",
-        ql: `node["amenity"="fuel"](around:${radius},${lat},${lng});`,
-      },
-      {
-        key: "overpass_transport",
-        ql: `node["highway"~"bus_stop|traffic_signals|motorway_junction"](around:${radius},${lat},${lng});`,
-      },
-    ]);
+    // Day 31 — register all 4 sub-queries with the bundling coordinator.
+    // They share one chained Overpass HTTP call per site with all
+    // the other Overpass-based connectors' queries.
+    if (!overpassConnector.__registered) {
+      registerModule({
+        id: "overpass",
+        buildQueries: (lat, lng, ctx) => {
+          const r = ctx?.radius ?? 1500;
+          return [
+            {
+              key: "overpass_amenities",
+              ql: `node["amenity"~"restaurant|cafe|bar|fast_food|school|hospital|clinic|park|place_of_worship|supermarket|bank|pharmacy|fuel|warehouse|industrial"](around:${r},${lat},${lng});`,
+            },
+            {
+              key: "overpass_retail",
+              ql: `node["shop"~"supermarket|convenience|mall|department_store|bakery|butcher"](around:${r},${lat},${lng});`,
+            },
+            {
+              key: "overpass_fuel",
+              ql: `node["amenity"="fuel"](around:${r},${lat},${lng});`,
+            },
+            {
+              key: "overpass_transport",
+              ql: `node["highway"~"bus_stop|traffic_signals|motorway_junction"](around:${r},${lat},${lng});`,
+            },
+          ];
+        },
+      });
+      overpassConnector.__registered = true;
+    }
 
-    const amenities = counts.overpass_amenities ?? 0;
-    const retail = counts.overpass_retail ?? 0;
-    const fuel = counts.overpass_fuel ?? 0;
-    const transport = counts.overpass_transport ?? 0;
+    const counts = await coordinatorFetch(lat, lng, {
+      radius,
+      vertical: vertical as string,
+    });
+
+    const amenities = counts["overpass:overpass_amenities"] ?? 0;
+    const retail = counts["overpass:overpass_retail"] ?? 0;
+    const fuel = counts["overpass:overpass_fuel"] ?? 0;
+    const transport = counts["overpass:overpass_transport"] ?? 0;
 
     const max = MAX_EXPECTED[vertical as string] ?? 20;
     const fetchedAt = new Date().toISOString();

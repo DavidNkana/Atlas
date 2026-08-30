@@ -86,6 +86,17 @@ const COMPETITOR_PROFILES: Record<string, CompetitorProfile> = {
   },
 };
 
+// Register all vertical-specific competitor queries with the bundling
+// coordinator so they share one Overpass HTTP call per site.
+for (const [verticalKey, p] of Object.entries(COMPETITOR_PROFILES)) {
+  registerModule({
+    id: "competitors",
+    buildQueries: (lat, lng, _ctx) => [
+      { key: verticalKey, ql: p.ql(lat, lng) },
+    ],
+  });
+}
+
 export const competitorDensityConnector: Connector = {
   id: "competitors",
   name: "Competitor density (OpenStreetMap)",
@@ -105,9 +116,11 @@ export const competitorDensityConnector: Connector = {
       maxExpected: 25,
     };
 
-    const count = await overpassBatch(lat, lng, [
-      { key: "competitors", ql: profile.ql(lat, lng) },
-    ]).then((c) => c.competitors ?? 0);
+    const all = await coordinatorFetch(lat, lng, {
+      radius: profile.radius,
+      vertical: vertical as string,
+    });
+    const count = all[`competitors:${vertical as string}`] ?? 0;
 
     // `count` is the size of the node + way union (points AND
     // building/forecourt polygons), so it is a true competitor count

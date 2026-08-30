@@ -12,6 +12,18 @@ import { coordinatorFetch, registerModule, type CoordinatorCtx } from "./overpas
 const RADIUS_M = 2_000;
 const MAX_SCHOOLS = 15;
 
+// Register query with the bundling coordinator so all Overpass-based
+// connectors share one HTTP call per site instead of N separate calls.
+registerModule({
+  id: "schools",
+  buildQueries: (lat, lng, ctx) => [
+    {
+      key: "schools",
+      ql: `node["amenity"~"school|college|university|kindergarten"](around:${ctx?.radius ?? RADIUS_M},${lat},${lng});`,
+    },
+  ],
+});
+
 export const schoolsConnector: Connector = {
   id: "schools",
   name: "Schools (OpenStreetMap)",
@@ -22,12 +34,12 @@ export const schoolsConnector: Connector = {
     const lng = site.lng;
     if (typeof lat !== "number" || typeof lng !== "number") return [];
 
-    const count = await overpassBatch(lat, lng, [
-      {
-        key: "schools",
-        ql: `node["amenity"~"school|college|university|kindergarten"](around:${RADIUS_M},${lat},${lng});`,
-      },
-    ]).then((c) => c.schools ?? 0);
+    // Read count from the pre-fetched coordinator results.
+    const all = await coordinatorFetch(lat, lng, {
+      radius: RADIUS_M,
+      vertical: ctx.vertical as string,
+    });
+    const count = all["schools:schools"] ?? 0;
 
     const weight = Math.max(0, Math.min(1, count / MAX_SCHOOLS));
 
