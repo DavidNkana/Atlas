@@ -342,6 +342,47 @@ function ChartTooltip({
   );
 }
 
+// Day 31 — friendly display labels for connector factor names. The
+// raw signal types are machine-oriented ("amenity_density",
+// "demographic_profile") and read awkwardly when truncated. This
+// map gives them a human-readable short label.
+const FACTOR_LABEL: Record<string, string> = {
+  amenity_density: "Amenities",
+  fuel_stations_nearby: "Fuel stations",
+  retail_density: "Retail",
+  transport_access: "Transit",
+  landuse_count: "Land use",
+  building_density: "Buildings",
+  demographic_profile: "Demographics",
+  median_income: "Median income",
+  population_growth: "Pop. growth",
+  economic_zone: "Econ. zone",
+  arterial_access: "Road access",
+  landuse: "Land use",
+  price_range: "Land price",
+  plot_size: "Plot size",
+  corner_stand: "Corner stand",
+  facing: "Orientation",
+  market_position: "Market pos.",
+  dev_potential: "Dev. potential",
+  affordability_index: "Affordability",
+  catchment_strength: "Catchment",
+  competition_saturation: "Competition",
+  nearest_highway: "Highway",
+  roads_count: "Roads",
+  transit_count: "Transit",
+  schools_count: "Schools",
+  healthcare_count: "Healthcare",
+  env_risk: "Env. risk",
+};
+
+function shortFactorLabel(name: string): string {
+  if (FACTOR_LABEL[name]) return FACTOR_LABEL[name];
+  // Fallback: split on underscores, cap to two words.
+  const parts = name.replace(/_/g, " ").split(" ");
+  return parts.slice(0, 2).join(" ");
+}
+
 function FactorChart({ sites }: { sites: Site[] }) {
   // If no site has a score breakdown, hide this section entirely.
   if (sites.every((s) => !s.scoreBreakdown || s.scoreBreakdown.factors.length === 0)) {
@@ -433,7 +474,8 @@ function FactorChart({ sites }: { sites: Site[] }) {
           0
         </text>
 
-        {/* X-axis labels */}
+        {/* X-axis labels — Day 31: friendly short labels (no
+            truncation, mapped to readable names via FACTOR_LABEL). */}
         {factorNames.map((name, i) => (
           <g key={name}>
             <line
@@ -452,8 +494,10 @@ function FactorChart({ sites }: { sites: Site[] }) {
               fontSize="9"
               fill="currentColor"
               className="text-atlas-muted"
+              data-label={name}
             >
-              {truncate(name, 14)}
+              <title>{name}</title>
+              {shortFactorLabel(name)}
             </text>
           </g>
         ))}
