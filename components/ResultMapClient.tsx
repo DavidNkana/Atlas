@@ -141,6 +141,7 @@ export interface CatalogListingMarker {
 export default function ResultMapClient({
   rankedSites,
   plots = [],
+  liveListings = [],
   catalogListings = [],
   status,
   city,
@@ -149,6 +150,7 @@ export default function ResultMapClient({
 }: {
   rankedSites: RankedSite[];
   plots?: PlotMarker[];
+  liveListings?: Array<{ id?: string; title?: string; suburb?: string | null; city?: string; price?: string | null; priceAmount?: number | null; url?: string; portal?: string; lat?: number | null; lng?: number | null }>;
   /**
    * Day 22 v2: catalog-derived listings. Each REAL_SITE_CATALOG entry
    * becomes a yellow marker so every map has a baseline density.
@@ -269,6 +271,53 @@ export default function ResultMapClient({
         catalogPlaced += 1;
       }
 
+      // Day 34: actual Tavily/Property24 live listings — yellow markers
+      // with real lat/lng stamped by the API when matched to a site.
+      let livePlaced = 0;
+      for (const listing of liveListings) {
+        if (
+          typeof listing.lat !== "number" ||
+          typeof listing.lng !== "number" ||
+          Number.isNaN(listing.lat) ||
+          Number.isNaN(listing.lng)
+        ) {
+          continue;
+        }
+        const lngLat: [number, number] = [listing.lng, listing.lat];
+        const el = document.createElement("div");
+        el.style.width = "10px";
+        el.style.height = "10px";
+        el.style.borderRadius = "50%";
+        el.style.background = "#eab308";
+        el.style.border = "1.5px solid #1c1917";
+        el.style.boxShadow = "0 1px 3px rgba(0,0,0,0.5)";
+        el.style.cursor = "pointer";
+        el.title = `${listing.title ?? listing.suburb ?? "Listing"}${listing.price ? " · " + listing.price : ""}`;
+        const portalLabel = listing.portal ?? "portal";
+        const priceStr = listing.price ?? "Price on request";
+        const linkStr = listing.url
+          ? `<a href="${escapeHtml(listing.url)}" target="_blank" rel="noopener" style="color:#eab308;text-decoration:underline;display:inline-block;margin-top:4px;">View listing →</a>`
+          : "";
+        const popupHtml =
+          `<h3 style="margin:0 0 4px;font-size:13px;font-weight:600;color:#eab308;">${escapeHtml(
+            listing.title ?? listing.suburb ?? "Listing",
+          )}</h3>` +
+          `<p style="margin:0 0 2px;font-size:11px;color:#a1a1aa;">${escapeHtml(
+            portalLabel,
+          )}</p>` +
+          `<p style="margin:0 0 4px;font-size:12px;font-weight:600;color:#fafafa;">${escapeHtml(
+            priceStr,
+          )}</p>` +
+          linkStr;
+        const marker = new mapboxgl.Marker({ element: el })
+          .setLngLat(lngLat)
+          .setPopup(new mapboxgl.Popup({ offset: 10 }).setHTML(popupHtml))
+          .addTo(map);
+        markersRef.current.push(marker);
+        bounds.extend(lngLat);
+        livePlaced += 1;
+      }
+
       // Day 10+ Path 4: user-added listings. Day 22 update: now YELLOW
       // markers (vs. indigo for AI recommendations) so the developer
       // can visually distinguish "Atlas's recommendation" (big indigo)
@@ -344,7 +393,7 @@ export default function ResultMapClient({
       map.remove();
       mapRef.current = null;
     };
-  }, [rankedSites, plots, catalogListings]);
+  }, [rankedSites, plots, liveListings, catalogListings]);
 
   function flyToSite(site: RankedSite) {
     const map = mapRef.current;

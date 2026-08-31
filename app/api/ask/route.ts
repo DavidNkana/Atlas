@@ -1217,11 +1217,16 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
       }
       unassignedIndex += 1;
     }
-    // Apply map back to sites
+    // Apply map back to sites — and stamp each listing with the
+    // site's lat/lng so the map can plot real listing locations.
     for (const site of rankedSites) {
       const matched = siteListingsMap.get(site.rank);
       if (matched && matched.length > 0) {
-        (site as any).liveListings = matched.slice(0, 3);
+        (site as any).liveListings = matched.slice(0, 3).map((l: any) => ({
+          ...l,
+          lat: site.lat,
+          lng: site.lng,
+        }));
       }
     }
   }

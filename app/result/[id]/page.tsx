@@ -947,6 +947,7 @@ export default async function ResultPage({
           <ResultMapClient
             rankedSites={rankedSites}
             plots={plotsForMap}
+            liveListings={tavilyListingsForOverlay}
             catalogListings={catalogListingsForMap}
             status={responseStatus}
             city={stubCity}
