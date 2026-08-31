@@ -29,6 +29,7 @@
 
 import type { Vertical } from "@/lib/models/types";
 import { REAL_SITE_CATALOG, type RealSite } from "./real-sites";
+import { getSuburbProfile } from "./sa-data";
 
 /**
  * Day 28 — supplement AI-ranked sites with catalog entries the AI
@@ -213,6 +214,27 @@ function findEnrichment(
       }
     }
   }
+
+  // Day 32 — fallback to the real SA suburb profile table. If no
+  // catalog entry matches (some suburbs aren't in REAL_SITE_CATALOG
+  // yet) but we recognise the suburb name from public SA data,
+  // apply the suburb profile so the user at least sees real
+  // median-income + arterial data on the site card.
+  const profile = getSuburbProfile(siteName);
+  if (profile) {
+    return {
+      fields: {
+        medianIncome: profile.medianIncomeZAR,
+        priceRange: profile.landPriceRangeZAR,
+        plotSizeHectares: profile.medianPlotHa,
+        arterial: profile.arterial,
+        dataProvenance: `Stats SA Census 2022 + ${profile.displaySuburb} municipal profile`,
+        suburb: profile.displaySuburb,
+      },
+      matchedName: `SA suburb profile: ${profile.displaySuburb}`,
+    };
+  }
+
   return undefined;
 }
 
