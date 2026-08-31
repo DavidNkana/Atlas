@@ -288,7 +288,7 @@ export default function ResultMapClient({
         el.style.width = "10px";
         el.style.height = "10px";
         el.style.borderRadius = "50%";
-        el.style.background = "#eab308";
+        el.style.background = "#f97316";
         el.style.border = "1.5px solid #1c1917";
         el.style.boxShadow = "0 1px 3px rgba(0,0,0,0.5)";
         el.style.cursor = "pointer";
@@ -296,10 +296,10 @@ export default function ResultMapClient({
         const portalLabel = listing.portal ?? "portal";
         const priceStr = listing.price ?? "Price on request";
         const linkStr = listing.url
-          ? `<a href="${escapeHtml(listing.url)}" target="_blank" rel="noopener" style="color:#eab308;text-decoration:underline;display:inline-block;margin-top:4px;">View listing →</a>`
+          ? `<a href="${escapeHtml(listing.url)}" target="_blank" rel="noopener" style="display:inline-block;margin-top:6px;padding:4px 10px;font-size:11px;font-weight:600;background:#f97316;color:#fff;border-radius:4px;text-decoration:none;">View listing →</a>`
           : "";
         const popupHtml =
-          `<h3 style="margin:0 0 4px;font-size:13px;font-weight:600;color:#eab308;">${escapeHtml(
+          `<h3 style="margin:0 0 4px;font-size:13px;font-weight:600;color:#f97316;">${escapeHtml(
             listing.title ?? listing.suburb ?? "Listing",
           )}</h3>` +
           `<p style="margin:0 0 2px;font-size:11px;color:#a1a1aa;">${escapeHtml(
