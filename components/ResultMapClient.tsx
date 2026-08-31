@@ -367,10 +367,29 @@ export default function ResultMapClient({
         el.style.boxShadow = "0 1px 4px rgba(0,0,0,0.5)";
         el.style.cursor = "pointer";
         el.title = `${plot.suburb} · ${priceStr}`;
+        const popup = new mapboxgl.Popup({ offset: 10, closeButton: true }).setHTML(popupHtml);
         const marker = new mapboxgl.Marker({ element: el })
           .setLngLat(lngLat)
-          .setPopup(new mapboxgl.Popup({ offset: 12 }).setHTML(popupHtml))
+          .setPopup(popup)
           .addTo(map);
+        // Open popup on hover instead of click
+        let closeTimer: ReturnType<typeof setTimeout> | null = null;
+        el.addEventListener("mouseenter", () => {
+          if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; }
+          // Close any other open popups first
+          document.querySelectorAll(".mapboxgl-popup").forEach((p) => {
+            if (p !== popup.getElement()) p.remove();
+          });
+          marker.togglePopup();
+        });
+        el.addEventListener("mouseleave", () => {
+          // Small delay so user can move cursor into the popup
+          closeTimer = setTimeout(() => {
+            const popupEl = popup.getElement();
+            if (popupEl && popupEl.matches(":hover")) return;
+            marker.togglePopup();
+          }, 200);
+        });
         markersRef.current.push(marker);
         bounds.extend(lngLat);
         plotsPlaced += 1;
