@@ -500,7 +500,7 @@ export default function ResultMapClient({
             </div>
             <div className="rounded-md border border-zinc-800 bg-zinc-800 px-2.5 py-2">
               <div className="text-[9px] font-semibold uppercase tracking-wider text-zinc-500">
-                Signals used
+                Total signals (incl. catalog)
               </div>
               <div className="mt-0.5 font-mono text-sm font-semibold text-zinc-100">
                 {rankedSites.reduce(
