@@ -108,6 +108,15 @@ export function combine(
     economic_zone: "demographics",
     median_income: "demographics",
     population_growth: "demographics",
+    // Sep 2026 MVP rebuild — TomTom Places connector signal types.
+    // Most map to existing weights; new ones for lodging/services.
+    retail_density: "amenityDensity",
+    lodging_density: "amenityDensity",
+    services_density: "amenityDensity",
+    amenity_mix: "amenityDensity",
+    traffic_cameras: "landuse",      // proxy for "monitored corridor"
+    traffic_alerts: "landuse",       // proxy for "currently active traffic"
+    fuel_stations_nearby: "landuse",
   };
 
   // Signal types that are INVERTED — high value = BAD for the user's
