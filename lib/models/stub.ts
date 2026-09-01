@@ -266,6 +266,15 @@ export const curatedStub: Model = {
       ranked_sites: sites,
       raw: 'stub_demo',
       __stub: payload,
+      // DEBUG Sep 2026 — verify catalog is loaded correctly on Vercel
+      _debug: {
+        cityId: city.id,
+        cityName: city.name,
+        vertical: effectiveVertical,
+        realSitesCount: realSites?.length ?? 0,
+        finalSitesCount: sites.length,
+        usingRealCatalog,
+      },
     };
   },
 };
