@@ -117,6 +117,9 @@ export function combine(
     traffic_cameras: "landuse",      // proxy for "monitored corridor"
     traffic_alerts: "landuse",       // proxy for "currently active traffic"
     fuel_stations_nearby: "landuse",
+    // TomTom Traffic Incidents connector
+    traffic_incidents: "landuse",    // live incident density
+    congestion_density: "landuse",   // jams + closures + roadworks
   };
 
   // Signal types that are INVERTED — high value = BAD for the user's

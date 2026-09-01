@@ -22,6 +22,7 @@ import { saZoningConnector } from "./sa_zoning";
 import { iTrafficConnector } from "./i_traffic";
 import { buildingDensityConnector } from "./building_density";
 import { tomtomPlacesConnector } from "./tomtom_places";
+import { tomtomIncidentsConnector } from "./tomtom_traffic";
 
 /**
  * The full list of connectors Atlas will consider running. Order matters:
@@ -64,6 +65,7 @@ export const ALL_CONNECTORS: Connector[] = [
   buildingDensityConnector,   // pre-computed OSM building footprints (2km radius)
   // MVP rebuild Sep 2026 — free tier POI density (replaces most Google Places calls)
   tomtomPlacesConnector,      // 5,000 calls/month free, vertical-aware categories
+  tomtomIncidentsConnector,   // live traffic incidents (accidents, jams, closures) within 5km
 ];
 
 /** O(1) lookup by connector id. Throws if unknown so callers fail loudly. */

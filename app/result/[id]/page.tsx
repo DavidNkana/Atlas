@@ -205,7 +205,8 @@ function freshnessFor(
     "sa_zoning",       // Metro town-planning schemes, snapshotted
     "sa_traffic",      // SANRAL/ITP counts, annual
     "building_density", // Pre-computed OSM building counts (see sa-building-density.ts)
-    "tomtom_places",    // 5-min in-memory cache — effectively real-time but stale within the cache window
+    "tomtom_places",   // 5-min in-memory cache — effectively real-time but stale within the cache window
+    "tomtom_traffic",  // 5-min in-memory cache, same as tomtom_places
   ]);
   if (CATALOG_SOURCES.has(id)) return "static";
 
