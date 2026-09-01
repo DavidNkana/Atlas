@@ -134,6 +134,10 @@ export const curatedStub: Model = {
 
     // Day 12 v12: prefer the REAL site catalog.
     const realSites = getRealSiteCandidates(city.id, effectiveVertical as Vertical);
+    // DEBUG Sep 2026 — trace why some prompts return 0 sites
+    console.log(
+      `[stub] city=${city.id} vertical=${effectiveVertical} realSites=${realSites?.length ?? "undefined"}`,
+    );
     let sites: RankedSite[];
     let usingRealCatalog = false;
     if (realSites && realSites.length > 0) {
