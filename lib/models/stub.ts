@@ -138,6 +138,8 @@ export const curatedStub: Model = {
     console.log(
       `[stub] city=${city.id} vertical=${effectiveVertical} realSites=${realSites?.length ?? "undefined"}`,
     );
+    const debugLog: string[] = [];
+    debugLog.push(`catalog=${realSites?.length ?? 0}`);
     let sites: RankedSite[];
     let usingRealCatalog = false;
     if (realSites && realSites.length > 0) {
@@ -263,7 +265,8 @@ export const curatedStub: Model = {
     // DEBUG Sep 2026 — verify catalog is loaded correctly on Vercel.
     // We add this AFTER the payload so the stubReason's DEBUG prefix
     // doesn't capture a stale value if the catalog is empty here.
-    payload.stubReason = `[DEBUG realCatalog=${realSites?.length ?? 0} finalSites=${sites.length} usingRealCatalog=${usingRealCatalog}] ` + payload.stubReason;
+    const confidenceValues = sites.map((s: any) => s.confidence).join(",");
+    payload.stubReason = `[DEBUG realCatalog=${realSites?.length ?? 0} finalSites=${sites.length} usingRealCatalog=${usingRealCatalog} confs=[${confidenceValues}]] ` + payload.stubReason;
 
     return {
       ok: true,
