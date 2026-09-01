@@ -56,9 +56,12 @@ function cacheKey(lat: number, lng: number, moduleIds: string[]): string {
   return `${r(lat)}:${r(lng)}:${moduleIds.slice().sort().join("|")}`;
 }
 
+// Mirror chain — kept in sync with overpass-client.ts.
+// Primary: private.coffee (no rate limit). Secondary: VK Maps.
+// Fallback: openstreetmap.fr.
 const MIRRORS = [
-  "https://overpass-api.de/api/interpreter",
-  "https://overpass.kumi.systems/api/interpreter",
+  "https://overpass.private.coffee/api/interpreter",
+  "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
   "https://overpass.openstreetmap.fr/api/interpreter",
 ] as const;
 

@@ -736,11 +736,20 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   // no-answer half of that tradeoff. Users see an honest
   // "insufficient confidence — we don't have enough data to score
   // this" response instead of fabricated-looking rankings.
+  //
+  // Sep 2026 MVP fix: do NOT include catalog-supplement sites in the
+  // average. The curated stub returns 5 sites with confidence 0.72-0.88;
+  // supplementMissingCatalogSites() then appends catalog entries with
+  // hardcoded confidence 0.5. If we average everything, a healthy 5-site
+  // pool becomes 5×0.8 + 3×0.5 = 0.69 (just under the bar) or worse, and
+  // a perfectly fine response gets wiped. Gate only on sites that
+  // arrived from the model.
   const CONFIDENCE_THRESHOLD = 0.6;
-  if (rankedSites.length > 0) {
+  const modelSites = rankedSites.filter((s: any) => !s._catalogSupplement);
+  if (modelSites.length > 0) {
     const avgConfidence =
-      rankedSites.reduce((sum: number, s: any) => sum + (s.confidence ?? 0), 0) /
-      rankedSites.length;
+      modelSites.reduce((sum: number, s: any) => sum + (s.confidence ?? 0), 0) /
+      modelSites.length;
     if (avgConfidence < CONFIDENCE_THRESHOLD) {
       rankedSites = []; // Trigger the no-data path below
       modelError = `Low confidence: average ${avgConfidence.toFixed(2)} < ${CONFIDENCE_THRESHOLD} threshold. Atlas declined to score this query because supporting data was insufficient.`;

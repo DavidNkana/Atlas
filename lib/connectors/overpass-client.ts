@@ -30,9 +30,17 @@
  *      Cuts response size by ~95%.
  */
 
+// MVP rebuild Sep 2026 — switched mirror chain to public instances
+// that are reliable from South Africa. As of Aug 2026:
+//   - overpass-api.de         → overloaded (10k/day soft cap, frequent 429s)
+//   - overpass.kumi.systems   → DEAD (rebranded to private.coffee)
+//   - overpass.openstreetmap.fr → intermittent
+//   - overpass.private.coffee → no rate limit, 4×20-core / 256 GB (preferred primary)
+//   - maps.mail.ru/osm/tools/overpass → VK Maps, 2×56-core, no rate limit
+// Send a courtesy email to support@private.coffee if we push heavy load.
 const MIRRORS = [
-  "https://overpass-api.de/api/interpreter",
-  "https://overpass.kumi.systems/api/interpreter",
+  "https://overpass.private.coffee/api/interpreter",
+  "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
   "https://overpass.openstreetmap.fr/api/interpreter",
 ] as const;
 

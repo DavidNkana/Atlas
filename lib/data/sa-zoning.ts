@@ -569,6 +569,10 @@ export function findMetroFor(
     const d = dLat * dLat + dLng * dLng;
     if (!best || d < best.d) best = { metro: m, d };
   }
+  // DEBUG Sep 2026 — diagnosing why sa_zoning returns 0 signals.
+  console.log(
+    `[sa_zoning] findMetroFor(${lat}, ${lng}) -> ${best ? best.metro.metro : "null"}`,
+  );
   return best ? best.metro : null;
 }
 
@@ -601,5 +605,23 @@ export function findZoning(
   for (const zone of block.zones) {
     if (pointInPolygon(lat, lng, zone.polygon)) return zone;
   }
+  // DEBUG Sep 2026 — find nearest zone for diagnostics when polygon misses.
+  let nearestZone: ZoningZone | null = null;
+  let nearestDist = Infinity;
+  for (const zone of block.zones) {
+    const c = zone.polygon[0];
+    const cLat = (zone.polygon[0][0] + zone.polygon[2][0]) / 2;
+    const cLng = (zone.polygon[0][1] + zone.polygon[2][1]) / 2;
+    const d = Math.sqrt(
+      Math.pow(cLat - lat, 2) + Math.pow(cLng - lng, 2),
+    );
+    if (d < nearestDist) {
+      nearestDist = d;
+      nearestZone = zone;
+    }
+  }
+  console.log(
+    `[sa_zoning] findZoning(${metro}, ${lat}, ${lng}) -> null (polygon miss). Nearest zone: ${nearestZone?.name ?? "none"} @ ${nearestDist.toFixed(6)}deg`,
+  );
   return null;
 }
