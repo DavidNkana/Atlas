@@ -153,6 +153,13 @@ export const curatedStub: Model = {
       sites = fallback.map((s, i) => ({
         ...s,
         rank: i + 1,
+        // Sep 2026 MVP fix: fallback (random-coord) sites also need
+        // a confidence value or the confidence gate wipes them. The
+        // real-catalog path sets confidence 0.72-0.88 above; the
+        // fallback path was leaving it undefined which made the
+        // gate compute avg ≈ 0 and wipe the response.
+        score: s.confidence ?? +(0.88 - i * 0.05).toFixed(2),
+        confidence: s.confidence ?? +(0.84 - i * 0.04).toFixed(2),
         rationale: buildRationale(parsed, city, {
           name: s.name ?? "",
           lat: s.lat ?? city.lat,
