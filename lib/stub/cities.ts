@@ -36,12 +36,13 @@ export type City = {
 export const CITIES: City[] = [
   // South Africa — most-asked cluster
   { id: "sandton",       name: "Sandton",        aliases: ["sandton", "sand city", "sandton city"],                                       country: "South Africa", lat: -26.1075, lng: 28.0567, countryCode: "ZA", currency: "ZAR" },
-  { id: "johannesburg",  name: "Johannesburg",   aliases: ["johannesburg", "joburg", "jozi", "jhb"],                                       country: "South Africa", lat: -26.2041, lng: 28.0473, countryCode: "ZA", currency: "ZAR" },
-  { id: "pretoria",      name: "Pretoria",       aliases: ["pretoria", "tshwane"],                                                         country: "South Africa", lat: -25.7479, lng: 28.2293, countryCode: "ZA", currency: "ZAR" },
-  { id: "cape_town",     name: "Cape Town",      aliases: ["cape town", "capetown", "kaapstad"],                                        country: "South Africa", lat: -33.9249, lng: 18.4241, countryCode: "ZA", currency: "ZAR" },
-  { id: "durban",        name: "Durban",         aliases: ["durban", "ethekwini"],                                                        country: "South Africa", lat: -29.8587, lng: 31.0218, countryCode: "ZA", currency: "ZAR" },
+  { id: "johannesburg",  name: "Johannesburg",   aliases: ["johannesburg", "joburg", "jozi", "jhb", "soweto", "maboneng", "orange farm"],     country: "South Africa", lat: -26.2041, lng: 28.0473, countryCode: "ZA", currency: "ZAR" },
+  { id: "pretoria",      name: "Pretoria",       aliases: ["pretoria", "tshwane", "hatfield", "menlyn", "pretoria east", "pretoria west"],         country: "South Africa", lat: -25.7479, lng: 28.2293, countryCode: "ZA", currency: "ZAR" },
+  { id: "cape_town",     name: "Cape Town",      aliases: ["cape town", "capetown", "kaapstad", "northern suburbs", "bo-kaap", "bokaap", "epping", "canal walk", "constantia", "menlyn"], country: "South Africa", lat: -33.9249, lng: 18.4241, countryCode: "ZA", currency: "ZAR" },
+  { id: "durban",        name: "Durban",         aliases: ["durban", "ethekwini", "umhlanga", "cato ridge", "morningside durban", "berea"],                  country: "South Africa", lat: -29.8587, lng: 31.0218, countryCode: "ZA", currency: "ZAR" },
   { id: "port_elizabeth",name: "Port Elizabeth", aliases: ["port elizabeth", "gqeberha"],                                                  country: "South Africa", lat: -33.9580, lng: 25.6000, countryCode: "ZA", currency: "ZAR" },
   { id: "bloemfontein",  name: "Bloemfontein",   aliases: ["bloemfontein", "mangaung"],                                                    country: "South Africa", lat: -29.0852, lng: 26.1596, countryCode: "ZA", currency: "ZAR" },
+  { id: "midrand",       name: "Midrand",        aliases: ["midrand", "halfway house", "waterfall"],                                          country: "South Africa", lat: -25.9980, lng: 28.1270, countryCode: "ZA", currency: "ZAR" },
 
   // Zambia — home market
   { id: "lusaka",        name: "Lusaka",         aliases: ["lusaka"],                                                                     country: "Zambia",       lat: -15.3875, lng: 28.3228, countryCode: "ZM", currency: "ZMW" },
