@@ -19,6 +19,8 @@ import { competitorDensityConnector } from "./competitors";
 import { envConstraintsConnector } from "./env_constraints";
 import { saTrafficConnector } from "./sa_traffic";
 import { saZoningConnector } from "./sa_zoning";
+import { iTrafficConnector } from "./i_traffic";
+import { buildingDensityConnector } from "./building_density";
 
 /**
  * The full list of connectors Atlas will consider running. Order matters:
@@ -56,6 +58,9 @@ export const ALL_CONNECTORS: Connector[] = [
   // manual-check callout.
   saTrafficConnector,         // AADT on the nearest counted highway segment
   saZoningConnector,          // zoning class from the metro scheme
+  // MVP rebuild Sep 2026 — free SA-local traffic proxy
+  iTrafficConnector,          // cameras + active alerts near site
+  buildingDensityConnector,   // pre-computed OSM building footprints (2km radius)
 ];
 
 /** O(1) lookup by connector id. Throws if unknown so callers fail loudly. */

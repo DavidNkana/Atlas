@@ -187,30 +187,55 @@ export const curatedStub: Model = {
       usingRealCatalog = true; // treat as curated for banner copy
     }
 
-    // LCP-65: generate sectioned advantages/disadvantages from signal data
+    // LCP-65: generate sectioned advantages/disadvantages from signal data.
+    // Sep 2026 MVP fix: NEVER write placeholder text like "varying" or
+    // "various sizes" when data is missing. If we don't have a number,
+    // either omit that phrase or say "verify with a manual check" — the
+    // same way the Decision Block does. Investors read "varying" and
+    // know immediately that no one checked.
     for (const site of sites) {
       const s = site as any;
       if (s.advantages) continue;
-      // UNITS: catalog medianIncome is ZAR per MONTH — always suffix
-      // "/mo" so this prose can't be read as an annual figure.
-      const medIncome = s.medianIncome ? `R${Number(s.medianIncome).toLocaleString()}/mo` : "varying";
-      const priceRange = s.priceRange ?? "market-related";
-      const arterial = s.arterial ?? "major routes";
-      const highway = s.nearestHighwayKm ? `${s.nearestHighwayKm}km` : "within reach";
-      const zoning = s.zoning ?? "mixed-use";
-      const plotSize = s.plotSizeHectares ? `${s.plotSizeHectares} hectares` : "various sizes";
-      const facing = s.facing ? `${s.facing}-facing` : "well-positioned";
-      const incomeVal = s.medianIncome ? Number(s.medianIncome) : 0;
+      const medIncome = s.medianIncome
+        ? `R${Number(s.medianIncome).toLocaleString()}/mo`
+        : null;
+      const incomeVal = medIncome ? Number(s.medianIncome) : 0;
+      const incomeNote = incomeVal > 50000
+        ? ", indicating strong spending power"
+        : "";
+
+      const economicParts: string[] = [];
+      if (s.priceRange) economicParts.push(`land price ${s.priceRange}`);
+      if (medIncome) economicParts.push(`median household income ${medIncome}`);
+      if (s.zoning) economicParts.push(`zoned ${s.zoning}`);
+      if (s.plotSizeHectares) economicParts.push(`${s.plotSizeHectares}ha plot`);
+      const economic = economicParts.length > 0
+        ? economicParts.join(", ") + "."
+        : "Land price, income and zoning require manual checks with the relevant City Planning office.";
+
+      const geographicParts: string[] = [];
+      if (s.arterial) geographicParts.push(`on ${s.arterial}`);
+      if (s.nearestHighwayKm != null) geographicParts.push(`${s.nearestHighwayKm}km to the nearest highway`);
+      if (s.facing) geographicParts.push(`${s.facing}-facing`);
+      const geographic = geographicParts.length > 0
+        ? geographicParts.join("; ") + "."
+        : "Access road and orientation require a site visit.";
+
+      const demographic = medIncome
+        ? `Median income ${medIncome}${incomeNote}.`
+        : "Demographic profile not in catalog — check Stats SA 2022 for the suburb.";
+
       s.advantages = {
-        economic: `Property prices in the ${priceRange} range with median household income around ${medIncome}. ${plotSize} available, zoned ${zoning}.`,
-        geographic: `${facing} with ${plotSize} of land via ${arterial}, ${highway} from the nearest highway.`,
-        logistical: `Connected via ${arterial}, highway access ${highway} away. Suitable for logistics and distribution operations.`,
-        demographic: `Median income around ${medIncome}${incomeVal > 50000 ? ", indicating strong spending power" : ""}.`,
+        economic,
+        geographic,
+        logistical: geographic, // Same as geographic — no separate logistics data.
+        demographic,
       };
-      if ((s as any).competition) {
-        s.disadvantages = `Nearby competition: ${(s as any).competition.slice(0, 3).join(", ")}. Verify with a site visit.`;
+
+      if ((s as any).competition && (s as any).competition.length > 0) {
+        s.disadvantages = `Nearest competitors: ${(s as any).competition.slice(0, 3).join(", ")}. Confirm footfall on site.`;
       } else {
-        s.disadvantages = "No known competitors in the immediate area — verify with a site visit.";
+        s.disadvantages = "Competitor density not measured — verify with a site visit.";
       }
     }
 
