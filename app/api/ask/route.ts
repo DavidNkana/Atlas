@@ -642,6 +642,27 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
 
   try {
     await withTimeout((async () => {
+      // Day 34 — When user explicitly picks curated-stub, skip the
+      // live model race entirely. Racing 3 models that will all fail
+      // wastes 30s, pushing the total pipeline past the 58s handler
+      // timeout and returning partial_timeout with 0 sites.
+      if (requestedIsStub) {
+        pushAttempted("curated-stub");
+        const stubResult = await callModel(curatedStub);
+        if (stubResult.ok && stubResult.sites.length > 0) {
+          rankedSites = enrichSitesWithCatalog(stubResult.sites);
+          raw = stubResult.raw;
+          if (stubResult.answer) modelAnswer = stubResult.answer;
+          if (stubResult.sources && stubResult.sources.length > 0) modelSources = stubResult.sources;
+          activeInfo = curatedStub.info; activeModel = curatedStub;
+          if (stubResult.__stub) { stubMeta = stubResult.__stub; responseStatus = "stub_demo"; }
+          console.log(`[/api/ask] requestedIsStub — using curated-stub directly`);
+        } else {
+          modelError = "curated-stub returned 0 sites";
+        }
+        return;
+      }
+
       if (liveModels.length === 0) { modelError = "No live models"; return; }
       liveModels.forEach((m: Model) => pushAttempted(m.info.id));
 
