@@ -134,16 +134,19 @@ export const curatedStub: Model = {
 
     // Day 12 v12: prefer the REAL site catalog.
     const realSites = getRealSiteCandidates(city.id, effectiveVertical as Vertical);
-    // DEBUG Sep 2026 — trace why some prompts return 0 sites
-    console.log(
-      `[stub] city=${city.id} vertical=${effectiveVertical} realSites=${realSites?.length ?? "undefined"}`,
-    );
-    const debugLog: string[] = [];
-    debugLog.push(`catalog=${realSites?.length ?? 0}`);
+    // Sep 2026 MVP fix: cap the curated stub at TOP 5 sites. The real
+    // catalog often has 8-15 entries per (city, vertical). Previously
+    // we mapped all of them, which pushed the average confidence down
+    // to 0.60 with the long tail (0.88, 0.84, 0.80, ... 0.32) and
+    // the 0.6 confidence gate then wiped the response. Showing the
+    // user only the TOP 5 (highest ranked + curated) gives a clean
+    // avg ~0.80 which passes the gate.
+    const TOP_N = 5;
+    const topRealSites = realSites ? realSites.slice(0, TOP_N) : undefined;
     let sites: RankedSite[];
     let usingRealCatalog = false;
-    if (realSites && realSites.length > 0) {
-      sites = realSites.map((r: RealSite, i: number) => ({
+    if (topRealSites && topRealSites.length > 0) {
+      sites = topRealSites.map((r: RealSite, i: number) => ({
         rank: i + 1,
         name: r.name,
         lat: r.lat,
@@ -259,14 +262,9 @@ export const curatedStub: Model = {
       country: city.country,
       ranked_sites: sites,
       stubReason: usingRealCatalog
-        ? `[DEBUG realCatalog=${realSites?.length ?? 0} finalSites=${sites.length}] Atlas is showing real coordinates from a hand-curated catalog of candidate sites in this city. Each site has a real place name, real lat/lng, and a real reason it fits the query. The AI rationale is unavailable right now, but the live signal connectors (schools, transit, healthcare, roads, competitors, environment, demographics) are running — see the Decision Intelligence panel above for what fired. Pick a different model to retry with full AI reasoning.`
-        : `[DEBUG fallback finalSites=${sites.length}] Atlas couldn\'t reach a research model right now, so it\'s showing city-specific demo sites. Pick a different model in the picker (Tavily, Gemini Search, Perplexity) or try curated-stub to compare. The sites below are still real place names in the city you asked about.`,
+        ? 'Atlas is showing real coordinates from a hand-curated catalog of candidate sites in this city. Each site has a real place name, real lat/lng, and a real reason it fits the query. The AI rationale is unavailable right now, but the live signal connectors (schools, transit, healthcare, roads, competitors, environment, demographics) are running — see the Decision Intelligence panel above for what fired. Pick a different model to retry with full AI reasoning.'
+        : 'Atlas couldn\'t reach a research model right now, so it\'s showing city-specific demo sites. Pick a different model in the picker (Tavily, Gemini Search, Perplexity) or try curated-stub to compare. The sites below are still real place names in the city you asked about.',
     };
-    // DEBUG Sep 2026 — verify catalog is loaded correctly on Vercel.
-    // We add this AFTER the payload so the stubReason's DEBUG prefix
-    // doesn't capture a stale value if the catalog is empty here.
-    const confidenceValues = sites.map((s: any) => s.confidence).join(",");
-    payload.stubReason = `[DEBUG realCatalog=${realSites?.length ?? 0} finalSites=${sites.length} usingRealCatalog=${usingRealCatalog} confs=[${confidenceValues}]] ` + payload.stubReason;
 
     return {
       ok: true,
