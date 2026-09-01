@@ -189,7 +189,7 @@ export const tomtomPlacesConnector: Connector = {
         source: "tomtom_places",
         type: "amenity_density",
         lat, lng,
-        label: "DEBUG: TOMTOM_API_KEY not set in Vercel env vars",
+        label: "DEBUG v4 (93128b3): TOMTOM_API_KEY not set in Vercel env vars",
         value: 0, weight: 0, fetchedAt: new Date().toISOString(),
       }];
     }
