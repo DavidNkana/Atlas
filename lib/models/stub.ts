@@ -138,14 +138,6 @@ export const curatedStub: Model = {
     console.log(
       `[stub] city=${city.id} vertical=${effectiveVertical} realSites=${realSites?.length ?? "undefined"}`,
     );
-    // DEBUG: also expose in the stubMeta so we can see it in the API response
-    if (process.env.NODE_ENV !== "production" || process.env.ATLAS_DEBUG === "1") {
-      (payload as any)._debug = {
-        city: city.id,
-        vertical: effectiveVertical,
-        realSites: realSites?.length ?? 0,
-      };
-    }
     let sites: RankedSite[];
     let usingRealCatalog = false;
     if (realSites && realSites.length > 0) {
@@ -268,21 +260,16 @@ export const curatedStub: Model = {
         ? `[DEBUG realCatalog=${realSites?.length ?? 0} finalSites=${sites.length}] Atlas is showing real coordinates from a hand-curated catalog of candidate sites in this city. Each site has a real place name, real lat/lng, and a real reason it fits the query. The AI rationale is unavailable right now, but the live signal connectors (schools, transit, healthcare, roads, competitors, environment, demographics) are running — see the Decision Intelligence panel above for what fired. Pick a different model to retry with full AI reasoning.`
         : `[DEBUG fallback finalSites=${sites.length}] Atlas couldn\'t reach a research model right now, so it\'s showing city-specific demo sites. Pick a different model in the picker (Tavily, Gemini Search, Perplexity) or try curated-stub to compare. The sites below are still real place names in the city you asked about.`,
     };
+    // DEBUG Sep 2026 — verify catalog is loaded correctly on Vercel.
+    // We add this AFTER the payload so the stubReason's DEBUG prefix
+    // doesn't capture a stale value if the catalog is empty here.
+    payload.stubReason = `[DEBUG realCatalog=${realSites?.length ?? 0} finalSites=${sites.length} usingRealCatalog=${usingRealCatalog}] ` + payload.stubReason;
 
     return {
       ok: true,
       ranked_sites: sites,
       raw: 'stub_demo',
       __stub: payload,
-      // DEBUG Sep 2026 — verify catalog is loaded correctly on Vercel
-      _debug: {
-        cityId: city.id,
-        cityName: city.name,
-        vertical: effectiveVertical,
-        realSitesCount: realSites?.length ?? 0,
-        finalSitesCount: sites.length,
-        usingRealCatalog,
-      },
-    };
+    } as any;
   },
 };
