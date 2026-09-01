@@ -48,6 +48,10 @@ export interface ScoreBreakdown {
   confidence: number;
   factors: ScoreFactor[];
   customVerticalMatch?: string;
+  /** Sep 2026 MVP — how much we penalised confidence for sparse data. */
+  coverageMultiplier?: number;
+  /** Sep 2026 MVP — number of distinct connector sources that fired. */
+  distinctSources?: number;
 }
 
 /**

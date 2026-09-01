@@ -862,10 +862,6 @@ function isPlausibleListing(l: LiveListing): boolean {
   }
 
   return true;
-  } catch (err) {
-    console.error("[tavily-listings] fetch error:", err);
-    return [];
-  }
 }
 
 /**
