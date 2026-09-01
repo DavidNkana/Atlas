@@ -35,7 +35,8 @@ import { withTimeout } from "@/lib/util/timeout";
 
 const BASE_URL = "https://api.tomtom.com/search/2/nearbySearch";
 const FETCH_TIMEOUT_MS = 6_000;
-const CACHE_TTL_MS = 5 * 60 * 1_000;
+// Sep 2026: shortened from 5min to 60s while we verify the URL fix.
+const CACHE_TTL_MS = 60 * 1_000;
 
 /** Category ID → human label for the signal type field. */
 interface TomtomCategory {
@@ -127,6 +128,10 @@ interface TomtomResponse {
 /** In-memory cache keyed by bbox + categories to amortise calls. */
 const cache = new Map<string, { fetchedAt: number; results: TomtomPlace[] }>();
 
+// Bumped when the URL/params change so a failed request from an older
+// URL shape doesn't poison the cache for the fixed URL.
+const CACHE_NAMESPACE = "v2-nearbySearch-";
+
 function cacheKey(
   lat: number,
   lng: number,
@@ -134,7 +139,7 @@ function cacheKey(
   categoryIds: string[],
 ): string {
   // ~1km grid for cache hits on nearby sites.
-  return `${lat.toFixed(3)}:${lng.toFixed(3)}:${radius}:${categoryIds.sort().join(",")}`;
+  return `${CACHE_NAMESPACE}${lat.toFixed(3)}:${lng.toFixed(3)}:${radius}:${categoryIds.sort().join(",")}`;
 }
 
 async function fetchCategoryNearby(

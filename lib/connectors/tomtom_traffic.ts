@@ -106,8 +106,12 @@ function haversineKm(
 /** In-memory cache keyed by 1km grid + resource. */
 const cache = new Map<string, { fetchedAt: number; incidents: IncidentFeature[] }>();
 
+// Bump the namespace whenever request shape changes so old cached
+// failures don't poison the cache for the fixed URL.
+const CACHE_NAMESPACE = "v2-";
+
 function cacheKey(lat: number, lng: number): string {
-  return `${lat.toFixed(3)}:${lng.toFixed(3)}`;
+  return `${CACHE_NAMESPACE}${lat.toFixed(3)}:${lng.toFixed(3)}`;
 }
 
 /** Build a bbox covering RADIUS_KM around a point. */
