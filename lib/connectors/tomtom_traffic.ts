@@ -155,7 +155,17 @@ export const tomtomIncidentsConnector: Connector = {
     if (typeof lat !== "number" || typeof lng !== "number") return [];
 
     const apiKey = process.env.TOMTOM_API_KEY;
-    if (!apiKey) return [];
+    if (!apiKey) {
+      console.warn("[tomtom_traffic] TOMTOM_API_KEY not set in Vercel env");
+      return [{
+        id: `tomtom_traffic:${site.id}:debug`,
+        source: "tomtom_traffic",
+        type: "traffic_incidents",
+        lat, lng,
+        label: "DEBUG: TOMTOM_API_KEY not set in Vercel env vars",
+        value: 0, weight: 0, fetchedAt: new Date().toISOString(),
+      }];
+    }
 
     const fetchedAt = new Date().toISOString();
     const controller = new AbortController();
@@ -285,7 +295,16 @@ export const tomtomIncidentsConnector: Connector = {
           e instanceof Error ? e.message : String(e)
         }`,
       );
-      return [];
+      return [{
+        id: `tomtom_traffic:${site.id}:debug`,
+        source: "tomtom_traffic",
+        type: "traffic_incidents",
+        lat, lng,
+        label: `DEBUG: TomTom traffic error — ${
+          e instanceof Error ? e.message.slice(0, 80) : String(e).slice(0, 80)
+        }`,
+        value: 0, weight: 0, fetchedAt: new Date().toISOString(),
+      }];
     } finally {
       clearTimeout(timer);
     }

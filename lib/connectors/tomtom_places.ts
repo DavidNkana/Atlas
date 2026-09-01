@@ -181,7 +181,18 @@ export const tomtomPlacesConnector: Connector = {
     if (typeof lat !== "number" || typeof lng !== "number") return [];
 
     const apiKey = process.env.TOMTOM_API_KEY;
-    if (!apiKey) return [];
+    if (!apiKey) {
+      console.warn("[tomtom_places] TOMTOM_API_KEY not set in Vercel env");
+      // Sep 2026 debug — surface the reason so the user can see why.
+      return [{
+        id: `tomtom_places:${site.id}:debug`,
+        source: "tomtom_places",
+        type: "amenity_density",
+        lat, lng,
+        label: "DEBUG: TOMTOM_API_KEY not set in Vercel env vars",
+        value: 0, weight: 0, fetchedAt: new Date().toISOString(),
+      }];
+    }
 
     const categories =
       CATEGORIES_BY_VERTICAL[vertical as string] ?? CATEGORIES_DEFAULT;
@@ -258,7 +269,17 @@ export const tomtomPlacesConnector: Connector = {
           e instanceof Error ? e.message : String(e)
         }`,
       );
-      return [];
+      // Surface the error so the result page shows why the connector is empty.
+      return [{
+        id: `tomtom_places:${site.id}:debug`,
+        source: "tomtom_places",
+        type: "amenity_density",
+        lat, lng,
+        label: `DEBUG: TomTom error — ${
+          e instanceof Error ? e.message.slice(0, 80) : String(e).slice(0, 80)
+        }`,
+        value: 0, weight: 0, fetchedAt: new Date().toISOString(),
+      }];
     } finally {
       clearTimeout(timer);
     }
