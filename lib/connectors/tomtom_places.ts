@@ -33,7 +33,7 @@
 import type { Connector, ConnectorContext, Signal } from "./types";
 import { withTimeout } from "@/lib/util/timeout";
 
-const BASE_URL = "https://api.tomtom.com/search/2/places/searchNearby";
+const BASE_URL = "https://api.tomtom.com/search/2/nearbySearch";
 const FETCH_TIMEOUT_MS = 6_000;
 const CACHE_TTL_MS = 5 * 60 * 1_000;
 
