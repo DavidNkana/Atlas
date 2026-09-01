@@ -135,6 +135,7 @@ type ConnectorRun = {
   id: string;
   status: "ok" | "error" | "timeout";
   signalCount: number;
+  fetchedAt?: string;
 };
 
 type PlanStep = {
@@ -184,6 +185,39 @@ type ResponseBody = {
     conversational: string[];
   };
 };
+
+/**
+ * Sep 2026 MVP — convert a connector's last-fetched timestamp into a
+ * short human label like "just now", "12m ago", "live", or "stale".
+ *
+ * Connectors that load from a static catalog (stats_sa, sa_zoning,
+ * sa_traffic, building_density) are not really "live" — they're the
+ * freshest version of that file. Surface that explicitly so investors
+ * can see which numbers are real-time and which are reference data.
+ */
+function freshnessFor(
+  id: string,
+  fetchedAt: string | undefined,
+): string | null {
+  // Catalog-backed sources — not live, by design.
+  const CATALOG_SOURCES = new Set([
+    "stats_sa",        // Stats SA Census 2022
+    "sa_zoning",       // Metro town-planning schemes, snapshotted
+    "sa_traffic",      // SANRAL/ITP counts, annual
+    "building_density", // Pre-computed OSM building counts (see sa-building-density.ts)
+  ]);
+  if (CATALOG_SOURCES.has(id)) return "static";
+
+  if (!fetchedAt) return null;
+
+  const ageMs = Date.now() - new Date(fetchedAt).getTime();
+  if (ageMs < 0) return "live";
+  if (ageMs < 60_000) return "live";
+  if (ageMs < 60 * 60_000) return `${Math.floor(ageMs / 60_000)}m`;
+  if (ageMs < 24 * 60 * 60_000) return `${Math.floor(ageMs / (60 * 60_000))}h`;
+  if (ageMs < 30 * 24 * 60 * 60_000) return `${Math.floor(ageMs / (24 * 60 * 60_000))}d`;
+  return "stale";
+}
 
 function statusBorder(status: string): string {
   if (status === "ok") return "border-emerald-900 bg-emerald-500/10 text-emerald-400";
@@ -897,12 +931,15 @@ export default async function ResultPage({
 
             {/* Per-source checkmark row — addresses the property developer
                 feedback "I want to see 18 signals, not 1". Today we ship 10
-                sources; this row grows as we add more connectors. */}
+                sources; this row grows as we add more connectors.
+                Sep 2026 MVP: also surface freshness so the reader can
+                tell live data from catalog data at a glance. */}
             <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-3 md:grid-cols-5">
               {connectorsRun.map((c) => {
                 const live = c.status === "ok" && c.signalCount > 0;
                 const partial = c.status === "ok" && c.signalCount === 0;
                 const failed = c.status === "error" || c.status === "timeout";
+                const freshnessLabel = freshnessFor(c.id, c.fetchedAt);
                 return (
                   <div
                     key={c.id}
@@ -919,8 +956,13 @@ export default async function ResultPage({
                     <span className={live ? "text-atlas-text" : failed ? "text-amber-400" : "text-atlas-muted"}>
                       {c.id}
                     </span>
-                    <span className="ml-auto text-[10px] text-atlas-muted">
-                      {c.signalCount}
+                    <span className="ml-auto flex items-center gap-1 text-[10px] text-atlas-muted">
+                      <span>{c.signalCount}</span>
+                      {freshnessLabel && (
+                        <span className="text-[9px]" title={`Last fetched ${c.fetchedAt ?? "unknown"}`}>
+                          · {freshnessLabel}
+                        </span>
+                      )}
                     </span>
                   </div>
                 );

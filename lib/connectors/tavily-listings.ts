@@ -782,7 +782,86 @@ export async function fetchLiveListings(
     }
 
     // Step 4: rank by suburb match
-    return rankListingsByMatch(listings, opts.suburb, opts.city.name).slice(0, maxListings);
+    let ranked = rankListingsByMatch(listings, opts.suburb, opts.city.name);
+
+    // Sep 2026 MVP filter: drop listings that obviously aren't real
+    // property listings (the previous code happily returned things
+    // like the Nelson Mandela Square logo or social media posts).
+    ranked = ranked.filter(isPlausibleListing);
+
+    return ranked.slice(0, maxListings);
+  } catch (err) {
+    console.error("[tavily-listings] fetch error:", err);
+    return [];
+  }
+}
+
+/**
+ * Sep 2026 MVP — listing quality gate.
+ *
+ * Rejects obviously-not-property content that slipped past the URL
+ * hint filter. Tunable list of patterns that mean "this is editorial,
+ * social media, or the wrong vertical entirely".
+ *
+ * Conservative on purpose: false negatives (dropping a real listing)
+ * are better than false positives (showing a logo or tweet as a
+ * property). The Tavily quota means we'd rather show 2 real ones
+ * than 5 noisy ones.
+ */
+function isPlausibleListing(l: LiveListing): boolean {
+  const url = (l.url ?? "").toLowerCase();
+  const title = (l.title ?? "").toLowerCase();
+
+  // Social-media posts are not listings.
+  const SOCIAL_DOMAINS = [
+    "facebook.com",
+    "instagram.com",
+    "twitter.com",
+    "x.com",
+    "linkedin.com",
+    "youtube.com",
+    "tiktok.com",
+    "reddit.com",
+    "pinterest.com",
+    "bit.ly",
+    "tinyurl.com",
+  ];
+  if (SOCIAL_DOMAINS.some((d) => url.includes(d))) return false;
+
+  // Pure-news / editorial indicators in title or url.
+  if (/\b(press release|news article|blog post|opinion|tips and advice|how to)\b/i.test(title)) {
+    return false;
+  }
+  if (/\b(post|update|tweet|share|comment)\b/i.test(title) && url.includes("/post")) {
+    return false;
+  }
+
+  // Listings without a price AND without erf size are usually junk.
+  // Real SA property portals always include one or the other.
+  const hasPrice = !!l.priceAmount && l.priceAmount > 100_000;
+  const hasSize = !!l.erfSize && l.erfSize.length > 0;
+  if (!hasPrice && !hasSize) return false;
+
+  // Listings with a price under R50,000 are almost certainly not real
+  // property (usually an auction deposit, levy, or a social-media
+  // giveaway like the "R400k Aucor post" the user flagged).
+  if (l.priceAmount != null && l.priceAmount > 0 && l.priceAmount < 50_000) {
+    return false;
+  }
+
+  // Title that is just a website name (logo, marketing splash) —
+  // e.g. "Nelson Mandela Square" with no other listing markers.
+  if (
+    !hasPrice &&
+    (title.endsWith("square") ||
+      title.endsWith("mall") ||
+      title.endsWith("centre") ||
+      title.endsWith("center"))
+  ) {
+    return false;
+  }
+
+  return true;
   } catch (err) {
     console.error("[tavily-listings] fetch error:", err);
     return [];

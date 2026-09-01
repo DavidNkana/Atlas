@@ -193,6 +193,8 @@ type ConnectorRun = {
   id: string;
   status: "ok" | "error" | "timeout";
   signalCount: number;
+  /** ISO timestamp of the most recent signal fetched by this connector. */
+  fetchedAt?: string;
 };
 
 type ModelBlock = {
@@ -888,9 +890,36 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
         id,
         status: sigs.length === 0 && anyConnectorFailed ? ("error" as const) : ("ok" as const),
         signalCount: sigs.length,
+        // Sep 2026 MVP: surface freshness so the UI can show
+        // "live just now" / "stale (last fetched Nh ago)".
+        fetchedAt:
+          sigs.length > 0
+            ? sigs.reduce(
+                (latest, s) =>
+                  s.fetchedAt > latest ? s.fetchedAt : latest,
+                sigs[0].fetchedAt,
+              )
+            : undefined,
       }));
 
       // Apply scoring engine to every site.
+      //
+      // Sep 2026 MVP fix: confidence must reflect evidence quality.
+      // Previous code set site.score = breakdown.confidence directly,
+      // which means a site with 0 connector signals could still score
+      // 0.85 purely on the stub's base score. Investors saw "88%
+      // confidence" on a site with "0 amenities, 0 buildings" and
+      // correctly walked away. Now we apply a data-coverage penalty:
+      // sites with very few signals get capped lower than sites with
+      // rich evidence.
+      //
+      // Penalty schedule (calibrated so that the old 0.6 confidence
+      // gate still passes for sites with at least 1 strong signal):
+      //   >= 8 distinct sources: no penalty
+      //   5-7 sources:           0.85 multiplier
+      //   3-4 sources:           0.75 multiplier
+      //   1-2 sources:           0.65 multiplier
+      //   0 sources:             confidence capped at 0.4
       for (const site of rankedSites) {
         const siteId = String(site.rank);
         const signals = signalsBySite[siteId] ?? [];
@@ -899,7 +928,21 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
           signals,
           effectiveVertical,
         );
-        site.score = breakdown.confidence;
+        const distinctSources = new Set(signals.map((s) => s.source)).size;
+        let coverageMultiplier = 1;
+        if (distinctSources === 0) coverageMultiplier = 0.4;
+        else if (distinctSources <= 2) coverageMultiplier = 0.65;
+        else if (distinctSources <= 4) coverageMultiplier = 0.75;
+        else if (distinctSources <= 7) coverageMultiplier = 0.85;
+        const finalConfidence = Math.min(
+          0.99,
+          breakdown.confidence * coverageMultiplier,
+        );
+        breakdown.coverageMultiplier = coverageMultiplier;
+        breakdown.distinctSources = distinctSources;
+        breakdown.confidence = finalConfidence;
+        site.score = finalConfidence;
+        site.confidence = finalConfidence;
         site.signals = signals;
         site.scoreBreakdown = breakdown;
 
