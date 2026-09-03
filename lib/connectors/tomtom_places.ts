@@ -188,19 +188,17 @@ export const tomtomPlacesConnector: Connector = {
     // BUILD v6-marker-f01fdd1 — this comment verifies the build
     if (typeof lat !== "number" || typeof lng !== "number") return [];
 
-    // Sep 2026 BUILD MARKER — always emit so we can verify which
-    // build is actually running on Vercel.
-    if (!apiKey) {
-      console.warn("[tomtom_places] TOMTOM_API_KEY not set in Vercel env");
-      return [{
-        id: `tomtom_places:${site.id}:build`,
-        source: "tomtom_places",
-        type: "amenity_density",
-        lat: lat, lng: lng,
-        label: `BUILD ${debugMarker} TOMTOM_API_KEY=MISSING`,
-        value: 0, weight: 0, fetchedAt: new Date().toISOString(),
-      }];
-    }
+    // Sep 2026 NUCLEAR DEBUG — return IMMEDIATELY with a hard-coded
+    // marker that must appear in the response if this code is running.
+    // No API calls, no retries, just a constant signal.
+    return [{
+      id: `tomtom_places:${site.id}:NUCLEAR`,
+      source: "tomtom_places",
+      type: "amenity_density",
+      lat: lat, lng: lng,
+      label: `BUILD ${debugMarker} NUCLEAR key=${apiKey ? "set" : "MISSING"} cats=${(CATEGORIES_BY_VERTICAL[vertical as string] ?? CATEGORIES_DEFAULT).length}`,
+      value: 42, weight: 1, fetchedAt: new Date().toISOString(),
+    }];
 
     const categories =
       CATEGORIES_BY_VERTICAL[vertical as string] ?? CATEGORIES_DEFAULT;
