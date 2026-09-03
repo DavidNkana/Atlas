@@ -262,6 +262,16 @@ export const tomtomPlacesConnector: Connector = {
           .map((p) => `${p.name} (${p.distM}m)`)
           .join(", ");
 
+        // Sep 2026 BUILD MARKER inside the loop — fires for every category.
+        signals.push({
+          id: `tomtom_places:${site.id}:${cat.id}:loop`,
+          source: "tomtom_places",
+          type: "amenity_density",
+          lat, lng,
+          label: `BUILD ${debugMarker} LOOP cat=${cat.id} count=${count}`,
+          value: 999, weight: 1, fetchedAt,
+        });
+
         signals.push({
           id: `tomtom_places:${site.id}:${cat.id}`,
           source: "tomtom_places",
