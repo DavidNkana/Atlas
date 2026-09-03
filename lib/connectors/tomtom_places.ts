@@ -183,7 +183,19 @@ export const tomtomPlacesConnector: Connector = {
     const { site, vertical } = ctx;
     const lat = site.lat;
     const lng = site.lng;
+    // BUILD v6-marker-f01fdd1 — this comment verifies the build
     if (typeof lat !== "number" || typeof lng !== "number") return [];
+
+    // Sep 2026 BUILD MARKER — always emit so we can verify which
+    // build is actually running on Vercel.
+    return [{
+      id: `tomtom_places:${site.id}:build_marker`,
+      source: "tomtom_places",
+      type: "amenity_density",
+      lat: lat, lng: lng,
+      label: "BUILD v6-f01fdd1 build=" + (process.env.ATLAS_BUILD || "unknown") + " key=" + (process.env.TOMTOM_API_KEY ? "set" : "MISSING"),
+      value: 0, weight: 0, fetchedAt: new Date().toISOString(),
+    }];
 
     const apiKey = process.env.TOMTOM_API_KEY;
     const debugMarker = process.env.ATLAS_BUILD || "unknown";
