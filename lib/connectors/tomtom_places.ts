@@ -196,7 +196,7 @@ export const tomtomPlacesConnector: Connector = {
       source: "tomtom_places",
       type: "amenity_density",
       lat: lat, lng: lng,
-      label: `BUILD ${debugMarker} NUCLEAR key=${apiKey ? "set" : "MISSING"} cats=${(CATEGORIES_BY_VERTICAL[vertical as string] ?? CATEGORIES_DEFAULT).length}`,
+      label: `BUILD ${debugMarker} NUCLEAR key=${process.env.TOMTOM_API_KEY ? "set" : "MISSING"} cats=${(CATEGORIES_BY_VERTICAL[vertical as string] ?? CATEGORIES_DEFAULT).length}`,
       value: 42, weight: 1, fetchedAt: new Date().toISOString(),
     }];
 
@@ -225,7 +225,7 @@ export const tomtomPlacesConnector: Connector = {
       const responses = await withTimeout(
         Promise.all(
           categories.map((cat) =>
-            fetchCategoryNearby(lat, lng, 1500, cat.ids, apiKey, controller.signal)
+            fetchCategoryNearby(lat, lng, 1500, cat.ids, apiKey || "missing", controller.signal)
               .then((places) => ({ cat, places }))
               .catch((e) => {
                 console.warn(`[tomtom] ${cat.id} failed: ${String(e)}`);
