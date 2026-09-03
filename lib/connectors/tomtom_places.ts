@@ -186,6 +186,7 @@ export const tomtomPlacesConnector: Connector = {
     if (typeof lat !== "number" || typeof lng !== "number") return [];
 
     const apiKey = process.env.TOMTOM_API_KEY;
+    const debugMarker = process.env.ATLAS_BUILD || "unknown";
     if (!apiKey) {
       console.warn("[tomtom_places] TOMTOM_API_KEY not set in Vercel env");
       // Sep 2026 debug — surface the reason so the user can see why.
@@ -194,7 +195,7 @@ export const tomtomPlacesConnector: Connector = {
         source: "tomtom_places",
         type: "amenity_density",
         lat, lng,
-        label: "DEBUG v4 (93128b3): TOMTOM_API_KEY not set in Vercel env vars",
+        label: "DEBUG v5 (f084dad): TOMTOM_API_KEY not set in Vercel env vars",
         value: 0, weight: 0, fetchedAt: new Date().toISOString(),
       }];
     }
@@ -202,6 +203,19 @@ export const tomtomPlacesConnector: Connector = {
     const categories =
       CATEGORIES_BY_VERTICAL[vertical as string] ?? CATEGORIES_DEFAULT;
     const fetchedAt = new Date().toISOString();
+
+    // Sep 2026 DEBUG: always emit a marker so we can confirm the
+    // connector is being invoked and on which build.
+    const callMarker: Signal = {
+      id: `tomtom_places:${site.id}:called`,
+      source: "tomtom_places",
+      type: "amenity_density",
+      lat, lng,
+      label: `DEBUG v5 (f084dad) called v=${debugMarker} cats=${categories.length}`,
+      value: categories.length,
+      weight: 0,
+      fetchedAt,
+    };
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -267,7 +281,7 @@ export const tomtomPlacesConnector: Connector = {
         });
       }
 
-      return signals;
+      return [callMarker, ...signals];
     } catch (e) {
       console.warn(
         `[tomtom_places] fetch failed for ${lat},${lng}: ${
@@ -276,12 +290,12 @@ export const tomtomPlacesConnector: Connector = {
       );
       // Surface the error so the result page shows why the connector is empty.
       return [{
-        id: `tomtom_places:${site.id}:debug`,
+        id: `tomtom_places:${site.id}:called`,
         source: "tomtom_places",
         type: "amenity_density",
         lat, lng,
-        label: `DEBUG: TomTom error — ${
-          e instanceof Error ? e.message.slice(0, 80) : String(e).slice(0, 80)
+        label: `DEBUG v5 (f084dad) CATCH: TomTom error — ${
+          e instanceof Error ? e.message.slice(0, 60) : String(e).slice(0, 60)
         }`,
         value: 0, weight: 0, fetchedAt: new Date().toISOString(),
       }];
