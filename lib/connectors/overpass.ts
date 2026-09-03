@@ -148,10 +148,20 @@ export const overpassConnector: Connector = {
         lat, lng,
         label: `${transport} bus stops/junctions within ${(radius/1000).toFixed(1)}km`,
         value: transport,
-        weight: Math.min(1, transport / 10),
+        weight: Math.max(0, Math.min(1, transport / 10)),
         fetchedAt,
       });
     }
+
+    // Sep 2026 BUILD MARKER on overpass — if this appears, route works.
+    signals.push({
+      id: `overpass:${site.id}:build_marker_v6`,
+      source: "overpass",
+      type: "amenity_density",
+      lat: lat, lng: lng,
+      label: "BUILD v6 overpass marker",
+      value: 99, weight: 1, fetchedAt,
+    });
 
     return signals;
   },
