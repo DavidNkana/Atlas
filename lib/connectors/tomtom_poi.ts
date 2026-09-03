@@ -1,26 +1,24 @@
 /**
  * MVP rebuild Sep 2026 — TomTom Places Search Nearby connector.
  *
- * Free-tier replacement for Google Places Nearby Search. Atlas now
- * fires TomTom first (free) and falls back to Google Places only when
- * TomTom returns nothing.
+ * Free-tier replacement for Google Places Nearby Search.
  *
  * Free tier (Sep 2026): 5,000 Places Search calls/month, plus
  * 20,000 reverse geocoding and 20,000 traffic flow segments/month.
  * With caching keyed by bbox-grid, Atlas stays well inside this.
  *
  * Endpoints used:
- *   - searchNearby: GET /search/2/places/searchNearby/{QUERY}.json
+ *   - searchNearby: GET /search/2/nearbySearch/.json
  *     with lat, lon, radius, categorySet, limit, key
  *
- * TomTom category IDs (vs Google Places primary types):
+ * TomTom category IDs:
  *   7315  Restaurant
  *   7311  Cafe
  *   7314  Bar/Pub
  *   9361  Hotel/Lodging
  *   7320  Shopping/Retail
  *   7321  Supermarket/Grocery
- *   7339  Gas Station (Petrol Station)
+ *   7339  Gas Station
  *   7335  School
  *   7376  Hospital/Clinic
  *   7372  Bank
@@ -35,19 +33,15 @@ import { withTimeout } from "@/lib/util/timeout";
 
 const BASE_URL = "https://api.tomtom.com/search/2/nearbySearch";
 const FETCH_TIMEOUT_MS = 6_000;
-// Sep 2026: shortened from 5min to 60s while we verify the URL fix.
-const CACHE_TTL_MS = 60 * 1_000;
+const CACHE_TTL_MS = 5 * 60 * 1_000;
+const RADIUS_KM = 5;
 
 /** Category ID → human label for the signal type field. */
 interface TomtomCategory {
   id: string;
-  /** TomTom category-set numeric ID. */
   ids: string[];
-  /** Signal type this contributes to. */
   signalType: string;
-  /** Display label. */
   label: string;
-  /** Vertical-specific weight max — used to scale `value` → `weight`. */
   expectedMax: number;
 }
 
@@ -112,6 +106,9 @@ function haversineM(
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
+/** In-memory cache keyed by bbox + categories to amortise calls. */
+const cache = new Map<string, { fetchedAt: number; results: TomtomPlace[] }>();
+
 interface TomtomPlace {
   id: string;
   poi?: { name?: string; categorySet?: Array<{ id: number }> };
@@ -122,15 +119,7 @@ interface TomtomPlace {
 
 interface TomtomResponse {
   results: TomtomPlace[];
-  summary?: { totalResults?: number; numResults?: number };
 }
-
-/** In-memory cache keyed by bbox + categories to amortise calls. */
-const cache = new Map<string, { fetchedAt: number; results: TomtomPlace[] }>();
-
-// Bumped when the URL/params change so a failed request from an older
-// URL shape doesn't poison the cache for the fixed URL.
-const CACHE_NAMESPACE = "v2-nearbySearch-";
 
 function cacheKey(
   lat: number,
@@ -139,7 +128,7 @@ function cacheKey(
   categoryIds: string[],
 ): string {
   // ~1km grid for cache hits on nearby sites.
-  return `${CACHE_NAMESPACE}${lat.toFixed(3)}:${lng.toFixed(3)}:${radius}:${categoryIds.sort().join(",")}`;
+  return `${lat.toFixed(3)}:${lng.toFixed(3)}:${radius}:${categoryIds.sort().join(",")}`;
 }
 
 async function fetchCategoryNearby(
@@ -177,45 +166,20 @@ async function fetchCategoryNearby(
 
 export const tomtomPlacesConnector: Connector = {
   id: "tomtom_places",
-  name: "TomTom POI v7-NUCLEAR-" + Date.now().toString(36),
+  name: "Live POI density (TomTom)",
   vertical: "all",
   async fetch(ctx: ConnectorContext): Promise<Signal[]> {
     const { site, vertical } = ctx;
     const lat = site.lat;
     const lng = site.lng;
-    const apiKey = process.env.TOMTOM_API_KEY;
-    const debugMarker = process.env.ATLAS_BUILD || "v6-f01fdd1";
-    // BUILD v6-marker-f01fdd1 — this comment verifies the build
     if (typeof lat !== "number" || typeof lng !== "number") return [];
 
-    // Sep 2026 NUCLEAR DEBUG — return IMMEDIATELY with a hard-coded
-    // marker that must appear in the response if this code is running.
-    // No API calls, no retries, just a constant signal.
-    return [{
-      id: `tomtom_places:${site.id}:NUCLEAR`,
-      source: "tomtom_places",
-      type: "amenity_density",
-      lat: lat, lng: lng,
-      label: `BUILD ${debugMarker} NUCLEAR key=${process.env.TOMTOM_API_KEY ? "set" : "MISSING"} cats=${(CATEGORIES_BY_VERTICAL[vertical as string] ?? CATEGORIES_DEFAULT).length}`,
-      value: 42, weight: 1, fetchedAt: new Date().toISOString(),
-    }];
+    const apiKey = process.env.TOMTOM_API_KEY;
+    if (!apiKey) return [];
 
     const categories =
       CATEGORIES_BY_VERTICAL[vertical as string] ?? CATEGORIES_DEFAULT;
     const fetchedAt = new Date().toISOString();
-
-    // Sep 2026 DEBUG: always emit a marker so we can confirm the
-    // connector is being invoked and on which build.
-    const callMarker: Signal = {
-      id: `tomtom_places:${site.id}:called`,
-      source: "tomtom_places",
-      type: "amenity_density",
-      lat, lng,
-      label: `DEBUG v5 (f084dad) called v=${debugMarker} cats=${categories.length}`,
-      value: categories.length,
-      weight: 0,
-      fetchedAt,
-    };
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -225,7 +189,7 @@ export const tomtomPlacesConnector: Connector = {
       const responses = await withTimeout(
         Promise.all(
           categories.map((cat) =>
-            fetchCategoryNearby(lat, lng, 1500, cat.ids, apiKey || "missing", controller.signal)
+            fetchCategoryNearby(lat, lng, 1500, cat.ids, apiKey, controller.signal)
               .then((places) => ({ cat, places }))
               .catch((e) => {
                 console.warn(`[tomtom] ${cat.id} failed: ${String(e)}`);
@@ -239,7 +203,6 @@ export const tomtomPlacesConnector: Connector = {
 
       const signals: Signal[] = [];
       for (const { cat, places } of responses) {
-        // Sort by distance to site.
         const enriched = places
           .map((p) => {
             const pLat = p.position?.lat ?? lat;
@@ -259,16 +222,6 @@ export const tomtomPlacesConnector: Connector = {
           .slice(0, 3)
           .map((p) => `${p.name} (${p.distM}m)`)
           .join(", ");
-
-        // Sep 2026 BUILD MARKER inside the loop — fires for every category.
-        signals.push({
-          id: `tomtom_places:${site.id}:${cat.id}:loop`,
-          source: "tomtom_places",
-          type: "amenity_density",
-          lat, lng,
-          label: `BUILD ${debugMarker} LOOP cat=${cat.id} count=${count}`,
-          value: 999, weight: 1, fetchedAt,
-        });
 
         signals.push({
           id: `tomtom_places:${site.id}:${cat.id}`,
@@ -291,16 +244,14 @@ export const tomtomPlacesConnector: Connector = {
         });
       }
 
-      return [callMarker, ...signals];
+      return signals;
     } catch (e) {
-      return [{
-        id: `tomtom_places:${site.id}:catch`,
-        source: "tomtom_places",
-        type: "amenity_density",
-        lat: lat, lng: lng,
-        label: `BUILD ${debugMarker} CATCH: ${(e as Error)?.message?.slice(0, 60) ?? String(e).slice(0, 60)}`,
-        value: 0, weight: 0, fetchedAt: new Date().toISOString(),
-      }];
+      console.warn(
+        `[tomtom_places] fetch failed for ${lat},${lng}: ${
+          e instanceof Error ? e.message : String(e)
+        }`,
+      );
+      return [];
     } finally {
       clearTimeout(timer);
     }
