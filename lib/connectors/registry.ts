@@ -21,7 +21,7 @@ import { saTrafficConnector } from "./sa_traffic";
 import { saZoningConnector } from "./sa_zoning";
 import { iTrafficConnector } from "./i_traffic";
 import { buildingDensityConnector } from "./building_density";
-import { tomtomPlacesConnector } from "./tomtom_places";
+import { tomtomPlacesConnector } from "./tomtom_poi";
 import { tomtomIncidentsConnector } from "./tomtom_traffic";
 
 /**
