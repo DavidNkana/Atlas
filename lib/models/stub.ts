@@ -262,7 +262,7 @@ export const curatedStub: Model = {
       country: city.country,
       ranked_sites: sites,
       stubReason: usingRealCatalog
-        ? 'Atlas is showing real coordinates from a hand-curated catalog of candidate sites in this city. Each site has a real place name, real lat/lng, and a real reason it fits the query. The AI rationale is unavailable right now, but the live signal connectors (schools, transit, healthcare, roads, competitors, environment, demographics) are running — see the Decision Intelligence panel above for what fired. Pick a different model to retry with full AI reasoning.'
+        ? '[BUILD-v6] Atlas is showing real coordinates from a hand-curated catalog of candidate sites in this city. Each site has a real place name, real lat/lng, and a real reason it fits the query. The AI rationale is unavailable right now, but the live signal connectors (schools, transit, healthcare, roads, competitors, environment, demographics) are running — see the Decision Intelligence panel above for what fired. Pick a different model to retry with full AI reasoning.'
         : 'Atlas couldn\'t reach a research model right now, so it\'s showing city-specific demo sites. Pick a different model in the picker (Tavily, Gemini Search, Perplexity) or try curated-stub to compare. The sites below are still real place names in the city you asked about.',
     };
 
