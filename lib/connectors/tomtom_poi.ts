@@ -177,7 +177,7 @@ async function fetchCategoryNearby(
 
 export const tomtomPlacesConnector: Connector = {
   id: "tomtom_places",
-  name: "Live POI density (TomTom)",
+  name: "TomTom POI v7-NUCLEAR-" + Date.now().toString(36),
   vertical: "all",
   async fetch(ctx: ConnectorContext): Promise<Signal[]> {
     const { site, vertical } = ctx;
