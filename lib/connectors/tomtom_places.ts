@@ -183,31 +183,21 @@ export const tomtomPlacesConnector: Connector = {
     const { site, vertical } = ctx;
     const lat = site.lat;
     const lng = site.lng;
+    const apiKey = process.env.TOMTOM_API_KEY;
+    const debugMarker = process.env.ATLAS_BUILD || "v6-f01fdd1";
     // BUILD v6-marker-f01fdd1 — this comment verifies the build
     if (typeof lat !== "number" || typeof lng !== "number") return [];
 
     // Sep 2026 BUILD MARKER — always emit so we can verify which
     // build is actually running on Vercel.
-    return [{
-      id: `tomtom_places:${site.id}:build_marker`,
-      source: "tomtom_places",
-      type: "amenity_density",
-      lat: lat, lng: lng,
-      label: "BUILD v6-f01fdd1 build=" + (process.env.ATLAS_BUILD || "unknown") + " key=" + (process.env.TOMTOM_API_KEY ? "set" : "MISSING"),
-      value: 0, weight: 0, fetchedAt: new Date().toISOString(),
-    }];
-
-    const apiKey = process.env.TOMTOM_API_KEY;
-    const debugMarker = process.env.ATLAS_BUILD || "unknown";
     if (!apiKey) {
       console.warn("[tomtom_places] TOMTOM_API_KEY not set in Vercel env");
-      // Sep 2026 debug — surface the reason so the user can see why.
       return [{
-        id: `tomtom_places:${site.id}:debug`,
+        id: `tomtom_places:${site.id}:build`,
         source: "tomtom_places",
         type: "amenity_density",
-        lat, lng,
-        label: "DEBUG v5 (f084dad): TOMTOM_API_KEY not set in Vercel env vars",
+        lat: lat, lng: lng,
+        label: `BUILD ${debugMarker} TOMTOM_API_KEY=MISSING`,
         value: 0, weight: 0, fetchedAt: new Date().toISOString(),
       }];
     }
@@ -295,20 +285,12 @@ export const tomtomPlacesConnector: Connector = {
 
       return [callMarker, ...signals];
     } catch (e) {
-      console.warn(
-        `[tomtom_places] fetch failed for ${lat},${lng}: ${
-          e instanceof Error ? e.message : String(e)
-        }`,
-      );
-      // Surface the error so the result page shows why the connector is empty.
       return [{
-        id: `tomtom_places:${site.id}:called`,
+        id: `tomtom_places:${site.id}:catch`,
         source: "tomtom_places",
         type: "amenity_density",
-        lat, lng,
-        label: `DEBUG v5 (f084dad) CATCH: TomTom error — ${
-          e instanceof Error ? e.message.slice(0, 60) : String(e).slice(0, 60)
-        }`,
+        lat: lat, lng: lng,
+        label: `BUILD ${debugMarker} CATCH: ${e instanceof Error ? e.message.slice(0, 60) : String(e).slice(0, 60)}`,
         value: 0, weight: 0, fetchedAt: new Date().toISOString(),
       }];
     } finally {
