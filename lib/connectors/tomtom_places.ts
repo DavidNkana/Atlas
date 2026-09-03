@@ -298,7 +298,7 @@ export const tomtomPlacesConnector: Connector = {
         source: "tomtom_places",
         type: "amenity_density",
         lat: lat, lng: lng,
-        label: `BUILD ${debugMarker} CATCH: ${e instanceof Error ? e.message.slice(0, 60) : String(e).slice(0, 60)}`,
+        label: `BUILD ${debugMarker} CATCH: ${(e as Error)?.message?.slice(0, 60) ?? String(e).slice(0, 60)}`,
         value: 0, weight: 0, fetchedAt: new Date().toISOString(),
       }];
     } finally {
