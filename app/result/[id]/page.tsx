@@ -582,11 +582,10 @@ export default async function ResultPage({
 
   return (
     <AppShell>
-      {/* Sep 2026 MVP — minimal Ndebele wrapper for result page. Discrete
-          corner motifs like the SAFAI reference. Dark page dominates,
-          patterns are decoration only. */}
+      {/* Sep 2026 MVP — minimal Ndebele wrapper for result page. BIG corner
+          motifs as bold accents (~220px). */}
       <div className="relative -mx-4 sm:-mx-6 lg:-mx-8 -mt-4 sm:-mt-6 lg:-mt-8 mb-2 overflow-hidden">
-        <NdebeleCorners which={["top-left", "top-right", "bottom-left", "bottom-right"]} size={130} opacity={0.4} />
+        <NdebeleCorners which={["top-left", "top-right", "bottom-left", "bottom-right"]} size={220} opacity={0.5} />
       </div>
       {/* Sep 2026 MVP — Ndebele zigzag strip. Subtle orange+green accent
           that immediately signals "Atlas" without text. */}

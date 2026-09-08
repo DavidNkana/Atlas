@@ -565,14 +565,13 @@ export default function HomePage() {
 
       {/* Center stage */}
       {/* Sep 2026 MVP — minimal Ndebele wrapper. Dark page dominates;
-          small discrete motifs float in corners/edges as accents
-          (inspired by the SAFAI reference: patterns as decoration,
-          not wallpaper). */}
+          BIG corner motifs as bold accents (like the SAFAI reference,
+          but bigger — ~280px so the triangles are unmistakable). */}
       <div className="relative flex flex-1 flex-col items-center justify-center overflow-hidden bg-atlas-bg px-6">
-        {/* Four SMALL corner motifs — ~130px, accent-only. Top-left orange
-            triangle, top-right green zigzag, bottom-left orange stepped,
+        {/* Four BIG corner motifs — ~280px. Top-left orange triangle,
+            top-right green zigzag, bottom-left orange stepped,
             bottom-right green diamonds. */}
-        <NdebeleCorners which={["top-left", "top-right", "bottom-left", "bottom-right"]} size={130} opacity={0.42} />
+        <NdebeleCorners which={["top-left", "top-right", "bottom-left", "bottom-right"]} size={280} opacity={0.55} />
           {loading ? (
             showThinkingLoader ? (
               <ChatGPTThinking
