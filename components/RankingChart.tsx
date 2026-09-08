@@ -384,7 +384,7 @@ function FactorChart({ sites }: { sites: Site[] }) {
   const yFor = (v: number) =>
     FP.top + (1 - (v - yMin) / (yMax - yMin || 1)) * FH_INNER;
 
-  const siteColors = ["#818cf8", "#34d399", "#fbbf24"];
+  const siteColors = ["#ea7a1f", "#34d399", "#fbbf24"];
 
   return (
     <div className="mt-4 border-t border-atlas-border pt-4">

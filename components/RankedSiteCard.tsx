@@ -123,7 +123,7 @@ const PORTAL_BADGE: Record<string, string> = {
   bidx1: "bg-amber-500/15 text-amber-300",
   pamgolding: "bg-rose-500/15 text-rose-300",
   seeff: "bg-cyan-500/15 text-cyan-300",
-  chaseveritt: "bg-indigo-500/15 text-indigo-300",
+  chaseveritt: "bg-green-500/15 text-green-300",
 };
 
 const SOURCE_LABEL: Record<string, string> = {

@@ -219,7 +219,7 @@ export default function ResultMapClient({
             2
           )} &middot; Confidence ${site.confidence.toFixed(2)}</small>` +
           `<br><a href=\"https://www.google.com/maps?q=${site.lat},${site.lng}\" target=\"_blank\" rel=\"noopener\" style=\"display:inline-block;margin-top:6px;padding:3px 8px;font-size:11px;font-weight:600;background:#4F46E5;color:#fff;border-radius:4px;text-decoration:none;\">View on Google Maps →</a>`;
-        const marker = new mapboxgl.Marker({ color: "#6366f1" })
+        const marker = new mapboxgl.Marker({ color: "#ea7a1f" })
           .setLngLat(lngLat)
            .setPopup(new mapboxgl.Popup({ offset: 18 }).setHTML(popupHtml))
            .addTo(map);
@@ -489,7 +489,7 @@ export default function ResultMapClient({
                     disabled={!hasCoords}
                     className="flex w-full items-start gap-2 rounded-md border border-zinc-800 bg-zinc-800 px-3 py-2 text-left text-xs text-zinc-100 transition-colors hover:bg-zinc-700 hover:border-zinc-600 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-[10px] font-semibold text-white">
+                    <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-orange-600 text-[10px] font-semibold text-white">
                       {site.rank}
                     </span>
                     <span className="flex-1">

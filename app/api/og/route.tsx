@@ -29,7 +29,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const BG = "#0a0a0f"; // atlas-bg
-const INDIGO = "#6366f1"; // atlas-accent
+const INDIGO = "#ea7a1f"; // atlas-accent (Ndebele orange)
 const MUTED = "#8b8b9e";
 
 const MAX_QUESTION_CHARS = 120;

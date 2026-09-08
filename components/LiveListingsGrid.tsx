@@ -48,7 +48,7 @@ const PORTAL_BADGE: Record<string, string> = {
   bidx1: "bg-amber-500/15 text-amber-300 border-amber-500/30",
   pamgolding: "bg-rose-500/15 text-rose-300 border-rose-500/30",
   seeff: "bg-cyan-500/15 text-cyan-300 border-cyan-500/30",
-  chaseveritt: "bg-indigo-500/15 text-indigo-300 border-indigo-500/30",
+  chaseveritt: "bg-green-500/15 text-green-300 border-green-500/30",
 };
 
 export default function LiveListingsGrid({

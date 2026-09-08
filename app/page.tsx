@@ -13,6 +13,7 @@ import { ModelIcon } from "@/components/ModelIcon";
 import { suggestVertical } from "@/components/VerticalMismatchModal";
 import { AuthGateModal } from "@/components/AuthGateModal";
 import { QuestionGallery } from "@/components/QuestionGallery";
+import { AtlasBadge } from "@/components/patterns/NdebelePatterns";
 import { readPrefs, DEFAULT_PREFS, type AtlasPrefs } from "@/components/SettingsDrawer";
 import { ATLAS_HOOK, ATLAS_SUBHOOK } from "@/lib/copy";
 
@@ -530,7 +531,7 @@ export default function HomePage() {
             </a>
             <a
               href="/calculator"
-              className="inline-flex items-center gap-1.5 rounded-full border border-transparent bg-atlas-accent px-2.5 py-1 font-medium text-white shadow-[0_2px_8px_rgba(99,102,241,0.25)] transition-colors hover:bg-atlas-accent2"
+              className="inline-flex items-center gap-1.5 rounded-full border border-transparent bg-atlas-accent px-2.5 py-1 font-medium text-white shadow-[0_2px_8px_rgba(234,122,31,0.25)] transition-colors hover:bg-atlas-accent2"
               title="Free property investment calculator — Bond, Buy-to-Let, ROI, Transfer Costs"
             >
               <svg
@@ -562,7 +563,20 @@ export default function HomePage() {
         </header>
 
       {/* Center stage */}
-      <div className="flex flex-1 flex-col items-center justify-center px-6">
+      {/* Sep 2026 MVP — Ndebele-pattern hero wrapper. The full-bleed
+          triangle pattern sits at 6% opacity behind the hero so the
+          motifs whisper rather than shout. */}
+      <div className="relative flex flex-1 flex-col items-center justify-center overflow-hidden bg-atlas-bg px-6">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 bg-pattern-triangles opacity-[0.06]"
+        />
+        {/* Orange→green gradient halo at the top — the new brand
+            gradient replacing the old indigo wash. */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-atlas-accent/10 via-atlas-accent/5 to-transparent"
+        />
           {loading ? (
             showThinkingLoader ? (
               <ChatGPTThinking
@@ -624,7 +638,13 @@ export default function HomePage() {
                 </p>
               </div>
 
-              <form onSubmit={onSubmit} className="w-full max-w-2xl">
+              <form onSubmit={onSubmit} className="relative w-full max-w-2xl">
+              {/* Sep 2026 MVP — AtlasBadge as the visual identity of the
+                  question input. Floats top-left, decorative. */}
+              <AtlasBadge
+                className="pointer-events-none absolute -left-14 -top-12 hidden h-20 w-20 opacity-90 sm:block"
+                size={80}
+              />
                 {/* Vertical picker as a row of chips ABOVE the command bar */}
                 <div className="mb-2 flex flex-wrap items-center gap-1.5">
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-atlas-muted">

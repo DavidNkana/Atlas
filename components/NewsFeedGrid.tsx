@@ -66,7 +66,7 @@ const SENTIMENT_LABEL: Record<NonNullable<NewsArticle["sentiment"]>, string> = {
 
 // Per-category accent color for the hero placeholder gradient
 const HERO_GRADIENT: Record<NewsCategory, string> = {
-  all: "from-indigo-600/40 via-atlas-bg to-atlas-bg",
+  all: "from-orange-600/40 via-atlas-bg to-atlas-bg",
   stocks: "from-emerald-600/40 via-atlas-bg to-atlas-bg",
   crypto: "from-amber-600/40 via-atlas-bg to-atlas-bg",
   investments: "from-sky-600/40 via-atlas-bg to-atlas-bg",

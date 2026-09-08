@@ -13,6 +13,7 @@ import { RankingChart } from "@/components/RankingChart";
 import { ListingsOverlay } from "@/components/ListingsOverlay";
 import { ResultChatPanel } from "@/components/ResultChatPanel";
 import { ResultChatButton } from "@/components/ResultChatButton";
+import { DuoZigzagPattern, TrianglePattern } from "@/components/patterns/NdebelePatterns";
 import { ResultExportButton } from "@/components/ResultExportButton";
 import { ShareButton } from "@/components/ShareButton";
 import { detectCity } from "@/lib/stub/detect";
@@ -580,6 +581,12 @@ export default async function ResultPage({
 
   return (
     <AppShell>
+      {/* Sep 2026 MVP — Ndebele zigzag strip. Subtle orange+green accent
+         that immediately signals "Atlas" without text. */}
+      <div
+        className="h-2 w-full bg-pattern-zigzag-duo"
+        aria-hidden
+      />
       <header className="flex items-center justify-between gap-3 border-b border-atlas-border px-6 py-4">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
@@ -847,9 +854,20 @@ export default async function ResultPage({
 
         {connectorsRun.length > 0 && (
           <section
-            className="mb-6 rounded-md border border-atlas-border bg-atlas-surface p-4"
+            className="relative mb-6 overflow-hidden rounded-md border border-atlas-border bg-atlas-surface p-4"
             data-testid="atlas-connectors-row"
           >
+            {/* Sep 2026 MVP — Ndebele stepped-triangle corner motif. Sits in
+                the top-left corner as a visual signature. */}
+            <div
+              className="pointer-events-none absolute -left-1 -top-1 h-10 w-10 bg-pattern-stepped-triangles opacity-90"
+              aria-hidden
+            />
+            {/* Subtle orange top-border accent */}
+            <div
+              className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-orange-500 via-atlas-accent to-green-500"
+              aria-hidden
+            />
             <div className="mb-3 flex items-baseline justify-between">
               <div className="flex items-baseline gap-3">
                 <h2 className="text-xs font-medium text-atlas-text">

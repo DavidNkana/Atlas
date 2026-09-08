@@ -4,6 +4,13 @@
 
 :root {
   color-scheme: dark;
+  /* Sep 2026 MVP rebuild: Ndebele palette — warm orange + earthy green.
+     These are the canonical Ndebele house-painting colors derived from
+     natural pigments: ochre/clay (orange) and vegetation (green). */
+  --atlas-accent: #ea7a1f;        /* Ndebele warm orange */
+  --atlas-accent-soft: #f59e3d;   /* lighter orange for hovers */
+  --atlas-green: #3f8d4e;          /* Ndebele green */
+  --atlas-green-soft: #5cb568;     /* lighter green for hovers */
 }
 
 html,
@@ -17,7 +24,10 @@ body {
 
 /* Day 8 redesign: light mode preview. Triggered by the Settings drawer
    when the user picks "light" or "system" + OS preference is light. The
-   palette mirrors the dark theme but with white surfaces. */
+   palette mirrors the dark theme but with white surfaces.
+
+   Sep 2026: light mode accent stays Ndebele orange + green — they read
+   well on white surfaces. */
 html.atlas-light,
 html.atlas-light body {
   background: #fafafa;
@@ -50,7 +60,7 @@ html.atlas-light .hover\:bg-atlas-surface2:hover {
   background-color: #f4f4f5 !important;
 }
 html.atlas-light .bg-atlas-accent\/10 {
-  background-color: rgba(99, 102, 241, 0.1) !important;
+  background-color: rgba(234, 122, 31, 0.1) !important;
 }
 
 /* Day 12 v7: comprehensive zinc/gray overrides for the light theme.
@@ -87,13 +97,12 @@ html.atlas-light .hover\:bg-zinc-700:hover,
 html.atlas-light .hover\:bg-zinc-800:hover { background-color: #f4f4f5 !important; }
 html.atlas-light .hover\:border-zinc-600:hover { border-color: #a1a1aa !important; }
 
-/* Brand color buttons (bg-atlas-accent) keep their indigo in light
-   mode but we lift the white-on-accent text slightly so it doesn't
-   feel over-saturated on a near-white page. */
+/* Brand color buttons keep their orange in light mode. The white-on-accent
+   text is already readable — no override needed. */
 
-/* Subtle focus ring, Atlas brand color */
+/* Subtle focus ring, Ndebele orange */
 :focus-visible {
-  outline: 2px solid #6366f1;
+  outline: 2px solid #ea7a1f;
   outline-offset: 2px;
   border-radius: 4px;
 }
@@ -199,4 +208,104 @@ input[placeholder] {
 }
 .atlas-gallery-row::-webkit-scrollbar {
   display: none;
+}
+
+/* ────────────────────────────────────────────────────────────────────
+   Sep 2026 MVP — Ndebele-inspired geometric pattern accents.
+
+   The four motifs are exposed as React SVG components (see
+   components/patterns/). These CSS classes are the utility layer
+   that wires them into Tailwind — bg-pattern-* lets any container
+   pick a motif via a class.
+
+   All patterns use SVG <pattern> elements with patternUnits="userSpaceOnUse"
+   so they tile cleanly at any size. We use `data:image/svg+xml` URIs
+   so they can live in background-image: url(...) without bundling.
+   ──────────────────────────────────────────────────────────────────── */
+
+/* Triangle pattern — stacked triangles, the dominant Ndebele shape. */
+.bg-pattern-triangles {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M0 30 L20 10 L40 30 Z' fill='none' stroke='%23ea7a1f' stroke-width='2'/%3E%3Cpath d='M0 35 L20 15 L40 35' fill='none' stroke='%23ea7a1f' stroke-width='1' opacity='0.4'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+}
+
+/* Zigzag pattern — continuous angular chevrons. */
+.bg-pattern-zigzag {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='20' viewBox='0 0 40 20'%3E%3Cpath d='M0 15 L10 5 L20 15 L30 5 L40 15' fill='none' stroke='%23ea7a1f' stroke-width='2'/%3E%3Cpath d='M0 18 L10 8 L20 18 L30 8 L40 18' fill='none' stroke='%23ea7a1f' stroke-width='1' opacity='0.5'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+}
+
+/* Diamond pattern — horizontal lozenge rows. */
+.bg-pattern-diamonds {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='30' height='30' viewBox='0 0 30 30'%3E%3Cpath d='M15 5 L25 15 L15 25 L5 15 Z' fill='none' stroke='%233f8d4e' stroke-width='2'/%3E%3Ccircle cx='15' cy='15' r='1.5' fill='%233f8d4e'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+}
+
+/* Stepped triangle — corner-stacked stepped triangles, the classic
+   Ndebele house-painting corner motif. */
+.bg-pattern-stepped-triangles {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='30' height='30' viewBox='0 0 30 30'%3E%3Cpath d='M0 30 L0 10 L10 30 Z' fill='%23ea7a1f' opacity='0.85'/%3E%3Cpath d='M5 30 L5 5 L15 30 Z' fill='%23ea7a1f' opacity='0.5'/%3E%3Cpath d='M10 30 L10 0 L20 30 Z' fill='%23ea7a1f' opacity='0.3'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+}
+
+/* Variant: green accent triangles for the secondary motif colour. */
+.bg-pattern-triangles-green {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M0 30 L20 10 L40 30 Z' fill='none' stroke='%233f8d4e' stroke-width='2'/%3E%3Cpath d='M0 35 L20 15 L40 35' fill='none' stroke='%233f8d4e' stroke-width='1' opacity='0.4'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+}
+
+/* Variant: orange + green alternating zigzags — used sparingly for hero
+   strips and the Decision Intelligence panel header. */
+.bg-pattern-zigzag-duo {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='20' viewBox='0 0 40 20'%3E%3Cpath d='M0 15 L10 5 L20 15 L30 5 L40 15' fill='none' stroke='%23ea7a1f' stroke-width='2.5'/%3E%3Cpath d='M0 18 L10 8 L20 18 L30 8 L40 18' fill='none' stroke='%233f8d4e' stroke-width='1.5'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+}
+
+/* ────────────────────────────────────────────────────────────────────
+   Sep 2026 MVP — utility classes that combine Ndebele patterns with
+   the new orange/green palette.
+   ──────────────────────────────────────────────────────────────────── */
+
+/* Buttons: filled orange primary. Replaces bg-indigo-600 patterns. */
+.btn-ndebele-primary {
+  background-color: var(--atlas-accent);
+  color: #fff;
+  border: 1px solid var(--atlas-accent);
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.btn-ndebele-primary:hover {
+  background-color: var(--atlas-accent-soft);
+  border-color: var(--atlas-accent-soft);
+}
+.btn-ndebele-secondary {
+  background-color: var(--atlas-green);
+  color: #fff;
+  border: 1px solid var(--atlas-green);
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.btn-ndebele-secondary:hover {
+  background-color: var(--atlas-green-soft);
+  border-color: var(--atlas-green-soft);
+}
+
+/* Border accents — use on card headers to hint at Ndebele motifs. */
+.border-ndebele-orange { border-color: var(--atlas-accent); }
+.border-ndebele-green  { border-color: var(--atlas-green); }
+
+/* Text colours for accent states. */
+.text-ndebele-orange { color: var(--atlas-accent); }
+.text-ndebele-green  { color: var(--atlas-green); }
+
+/* Reduced-motion respect for any future animated patterns */
+@media (prefers-reduced-motion: reduce) {
+  .bg-pattern-triangles,
+  .bg-pattern-zigzag,
+  .bg-pattern-diamonds,
+  .bg-pattern-stepped-triangles,
+  .bg-pattern-triangles-green,
+  .bg-pattern-zigzag-duo {
+    /* Patterns are static SVGs so this is a no-op, but keeping the
+       hook here signals intent. */
+    background-attachment: scroll;
+  }
 }
