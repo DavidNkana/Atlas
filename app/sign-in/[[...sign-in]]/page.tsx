@@ -1,5 +1,4 @@
 import { SignIn } from "@clerk/nextjs";
-import Link from "next/link";
 import { AtlasLogo } from "@/components/AtlasLogo";
 
 /**
@@ -70,9 +69,9 @@ export default function SignInPage() {
         </div>
         <p className="mt-4 text-center text-xs text-atlas-muted">
           New to Atlas?{" "}
-          <Link href="/sign-up" className="text-atlas-accent hover:underline">
+          <a href="/sign-up" className="text-atlas-accent hover:underline">
             Create an account
-          </Link>
+          </a>
         </p>
       </div>
     </main>

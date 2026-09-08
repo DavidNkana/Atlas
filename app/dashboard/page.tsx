@@ -2,7 +2,9 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/db";
+import { Sidebar } from "@/components/Sidebar";
 import { AppShell } from "@/components/AppShell";
+import { AtlasLogo } from "@/components/AtlasLogo";
 
 /**
  * Atlas Dashboard — user's question history.
@@ -68,7 +70,26 @@ export default async function DashboardPage() {
   });
 
   return (
-    <AppShell patterned>
+    <AppShell>
+        {/* Header */}
+        <header className="flex items-center justify-between border-b border-atlas-border px-6 py-4">
+          <div className="flex items-center gap-3">
+            <AtlasLogo size={24} />
+            <h1 className="text-lg font-semibold tracking-tight text-atlas-text">
+              Dashboard
+            </h1>
+            <span className="text-xs text-atlas-muted">
+              · {questions.length} question{questions.length === 1 ? "" : "s"} on file
+            </span>
+          </div>
+          <Link
+            href="/"
+            className="rounded-md bg-atlas-accent px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-atlas-accent2"
+          >
+            + Ask Atlas
+          </Link>
+        </header>
+
         {/* Question list */}
         <section className="flex-1 px-6 py-6">
           <h2 className="mb-4 text-[10px] font-semibold uppercase tracking-wider text-atlas-muted">

@@ -1,11 +1,29 @@
 "use client";
 
 import { AppShell } from "@/components/AppShell";
+import { AtlasLogo } from "@/components/AtlasLogo";
+import Link from "next/link";
 
 export default function InvestorsPage() {
   return (
-    <AppShell patterned>
+    <AppShell>
       <div className="mx-auto w-full max-w-4xl px-6 py-10">
+        {/* Header */}
+        <header className="mb-10 flex items-center justify-between border-b border-atlas-border pb-4">
+          <div className="flex items-center gap-3">
+            <AtlasLogo size={28} />
+            <h1 className="text-xl font-semibold tracking-tight text-atlas-text">
+              Atlas &middot; Investors
+            </h1>
+          </div>
+          <Link
+            href="/"
+            className="rounded-md border border-atlas-border bg-atlas-surface px-3 py-1.5 text-xs text-atlas-text hover:border-atlas-accent"
+          >
+            ← Back
+          </Link>
+        </header>
+
         {/* One-Pager */}
         <section className="space-y-8 text-sm leading-relaxed text-atlas-text">
           {/* Summary */}

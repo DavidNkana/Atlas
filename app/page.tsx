@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { useUser } from "@clerk/nextjs";
 import { MODEL_INFO } from "@/lib/models/registry";
 import type { ModelInfo } from "@/lib/models/types";
@@ -14,6 +13,7 @@ import { ModelIcon } from "@/components/ModelIcon";
 import { suggestVertical } from "@/components/VerticalMismatchModal";
 import { AuthGateModal } from "@/components/AuthGateModal";
 import { QuestionGallery } from "@/components/QuestionGallery";
+import { BackgroundArt } from "@/components/patterns/BackgroundArt";
 import { TypewriterMoat } from "@/components/TypewriterMoat";
 import { readPrefs, DEFAULT_PREFS, type AtlasPrefs } from "@/components/SettingsDrawer";
 import { ATLAS_HOOK, ATLAS_SUBHOOK } from "@/lib/copy";
@@ -508,11 +508,60 @@ export default function HomePage() {
   if (!isLoaded) return null;
 
   return (
-    <AppShell patterned>
+    <AppShell>
       <AuthGateModal
         open={authGateOpen}
         onClose={() => setAuthGateOpen(false)}
       />
+
+      {/* Top bar: top-right links */}
+      <header className="flex items-center justify-between gap-3 px-6 py-3 text-xs text-atlas-muted">
+          <div className="flex items-center gap-3">
+            {/* Explore Crypto button removed */}
+          </div>
+          <div className="flex items-center gap-3">
+            <a href="/demo" className="hover:text-atlas-accent">
+              Demo
+            </a>
+            <a href="/news" className="hover:text-atlas-accent">News</a>
+            <a href="/pricing" className="hover:text-atlas-accent">
+              Pricing
+            </a>
+            <a href="/investors" className="hover:text-atlas-accent">
+              Investors
+            </a>
+            <a
+              href="/calculator"
+              className="inline-flex items-center gap-1.5 rounded-full border border-transparent bg-atlas-accent px-2.5 py-1 font-medium text-white shadow-[0_2px_8px_rgba(234,122,31,0.25)] transition-colors hover:bg-atlas-accent2"
+              title="Free property investment calculator — Bond, Buy-to-Let, ROI, Transfer Costs"
+            >
+              <svg
+                width="11"
+                height="11"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <rect x="4" y="3" width="16" height="18" rx="2" />
+                <line x1="8" y1="7" x2="16" y2="7" />
+                <line x1="8" y1="11" x2="9.5" y2="11" />
+                <line x1="12" y1="11" x2="13.5" y2="11" />
+                <line x1="15" y1="11" x2="16" y2="11" />
+                <line x1="8" y1="14" x2="9.5" y2="14" />
+                <line x1="12" y1="14" x2="13.5" y2="14" />
+                <line x1="15" y1="14" x2="16" y2="14" />
+                <line x1="8" y1="17" x2="9.5" y2="17" />
+                <line x1="12" y1="17" x2="13.5" y2="17" />
+                <line x1="15" y1="17" x2="16" y2="17" />
+              </svg>
+              Calculator
+            </a>
+          </div>
+        </header>
 
       {/* Center stage */}
       {/* Sep 2026 MVP — SAFAI-inspired landing page hero. Dark page
@@ -524,6 +573,7 @@ export default function HomePage() {
             grain glow. Pinned to the viewport, so the motifs feel
             like they're part of the page chrome rather than the
             content. */}
+        <BackgroundArt />
         {loading ? (
           showThinkingLoader ? (
             <ChatGPTThinking
@@ -912,9 +962,9 @@ export default function HomePage() {
                   <div className="mt-2 flex justify-center">
                     <span className="rounded-full border border-atlas-border bg-atlas-surface px-2.5 py-0.5 text-[10px] text-atlas-muted">
                       1 of 1 free questions used ·{" "}
-                       <Link href="/sign-up" className="text-atlas-accent hover:underline">
-                         create a free account
-                       </Link>
+                      <a href="/sign-up" className="text-atlas-accent hover:underline">
+                        create a free account
+                      </a>
                     </span>
                   </div>
                 )}

@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { Sidebar } from "@/components/Sidebar";
 import { AppShell } from "@/components/AppShell";
+import { AtlasLogo } from "@/components/AtlasLogo";
 import Link from "next/link";
 
 /**
@@ -93,7 +95,13 @@ export default function WaitlistPage() {
 
   if (done) {
     return (
-      <AppShell patterned>
+      <AppShell>
+        <header className="flex items-center gap-3 border-b border-atlas-border px-6 py-4">
+            <AtlasLogo size={24} />
+            <h1 className="text-lg font-semibold tracking-tight text-atlas-text">
+              You&apos;re on the list
+            </h1>
+          </header>
           <div className="mx-auto w-full max-w-md px-6 py-12">
             <div className="rounded-2xl border border-atlas-border bg-atlas-surface p-8 text-center">
               <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/15">
@@ -149,7 +157,25 @@ export default function WaitlistPage() {
   }
 
   return (
-    <AppShell patterned>
+    <AppShell>
+      <header className="flex items-center justify-between border-b border-atlas-border px-6 py-4">
+          <div className="flex items-center gap-3">
+            <AtlasLogo size={24} />
+            <h1 className="text-lg font-semibold tracking-tight text-atlas-text">
+              Join the waitlist
+            </h1>
+            <span className="rounded bg-atlas-accent/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-atlas-accent">
+              {plan}
+            </span>
+          </div>
+          <Link
+            href="/pricing"
+            className="rounded-md border border-atlas-border bg-atlas-surface px-3 py-1.5 text-xs font-medium text-atlas-text transition-colors hover:border-atlas-accent"
+          >
+            ← Pricing
+          </Link>
+        </header>
+
         <div className="mx-auto w-full max-w-lg px-6 py-10">
           <div className="mb-6">
             <h2 className="mb-2 text-2xl font-semibold tracking-tight text-atlas-text">

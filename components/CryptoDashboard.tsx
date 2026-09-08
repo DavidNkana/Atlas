@@ -20,7 +20,6 @@
  */
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 interface CryptoCoin {
@@ -463,9 +462,9 @@ export function CryptoDashboard() {
           className="mb-4 rounded border border-amber-900 bg-atlas-surface px-4 py-3 text-xs text-amber-400"
         >
           {error}. Check that the crypto connector is healthy at{" "}
-           <Link href="/api/crypto/diag" className="underline">
-             /api/crypto/diag
-           </Link>
+          <a href="/api/crypto/diag" className="underline">
+            /api/crypto/diag
+          </a>
           .
         </div>
       )}
@@ -590,9 +589,9 @@ export function CryptoDashboard() {
         <div className="rounded border border-atlas-border/40 bg-atlas-surface/40 p-8 text-center text-sm text-atlas-muted">
           <p>
             No coin data available right now. Check{" "}
-             <Link href="/api/crypto/diag" className="underline">
-               /api/crypto/diag
-             </Link>{" "}
+            <a href="/api/crypto/diag" className="underline">
+              /api/crypto/diag
+            </a>{" "}
             for connector health.
           </p>
           <button
@@ -1079,9 +1078,9 @@ function TrendingPanel() {
           <p>No trending data for this source right now.</p>
           <p className="mt-1 text-[11px]">
             Check{" "}
-             <Link href="/api/strategy/diag" className="underline">
-               /api/strategy/diag
-             </Link>{" "}
+            <a href="/api/strategy/diag" className="underline">
+              /api/strategy/diag
+            </a>{" "}
             for source health.
           </p>
         </div>
@@ -1422,9 +1421,9 @@ function AlgorithmPanel() {
           </p>
           <p className="mt-2 text-[11px]">
             Check{" "}
-             <Link href="/api/strategy/diag" className="underline">
-               /api/strategy/diag
-             </Link>{" "}
+            <a href="/api/strategy/diag" className="underline">
+              /api/strategy/diag
+            </a>{" "}
             for source health.
           </p>
         </div>

@@ -1,4 +1,6 @@
 import { AppShell } from "@/components/AppShell";
+import { AtlasLogo } from "@/components/AtlasLogo";
+import Link from "next/link";
 import CalculatorClient from "./CalculatorClient";
 
 /**
@@ -20,7 +22,28 @@ export const metadata = {
 
 export default function CalculatorPage() {
   return (
-    <AppShell patterned>
+    <AppShell>
+      <header className="flex items-center justify-between border-b border-atlas-border px-6 py-4">
+        <div className="flex items-center gap-3">
+          <AtlasLogo size={24} />
+          <div>
+            <h1 className="text-lg font-semibold tracking-tight text-atlas-text">
+              Property Investment Calculator
+            </h1>
+            <p className="text-[11px] text-atlas-muted">
+              Four tools in one — affordability, cash flow, ROI
+              projections, and SA transfer costs.
+            </p>
+          </div>
+        </div>
+        <Link
+          href="/"
+          className="rounded-md border border-atlas-border bg-atlas-surface px-3 py-1.5 text-xs font-medium text-atlas-text transition-colors hover:border-atlas-accent"
+        >
+          ← Back
+        </Link>
+      </header>
+
       <main className="mx-auto max-w-2xl px-4 py-6">
         <CalculatorClient />
       </main>

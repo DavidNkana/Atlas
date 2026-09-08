@@ -19,12 +19,34 @@ import { ScheduleDemoForm } from "@/components/ScheduleDemoForm";
  */
 export default function DemoPage() {
   return (
-    <AppShell patterned>
+    <AppShell>
       {/* Day 12 v7: outer padding so content doesn't touch the
           inner walls of the scrollable area. px-6 = 24px each
           side on mobile, px-8 = 32px on sm+. py-12 keeps the
           existing vertical rhythm. */}
       <div className="px-6 py-12 sm:px-8">
+      <header className="mb-12 flex items-center justify-between border-b border-atlas-border pb-4">
+        <h1 className="text-xl font-semibold tracking-tight">
+          <a href="/" className="text-atlas-accent">
+            Atlas
+          </a>{" "}
+          <span className="text-atlas-muted text-sm font-normal">
+            For investors
+          </span>
+        </h1>
+        <nav className="flex items-center gap-3 text-xs">
+          <a href="/land" className="text-atlas-muted hover:text-atlas-accent">
+            Land
+          </a>
+          <a
+            href="/dashboard"
+            className="text-atlas-muted hover:text-atlas-accent"
+          >
+            Dashboard
+          </a>
+        </nav>
+      </header>
+
       {/* Hero */}
       <section className="mb-16">
         <h2 className="mb-4 text-4xl font-semibold tracking-tight text-atlas-text">

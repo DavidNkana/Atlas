@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import ResultMapClient from "@/components/ResultMapClient";
+import { Sidebar } from "@/components/Sidebar";
 import { AppShell } from "@/components/AppShell";
 import { RankedSiteCard } from "@/components/RankedSiteCard";
 import { FeedbackWidget } from "@/components/FeedbackWidget";
@@ -13,6 +14,7 @@ import { ListingsOverlay } from "@/components/ListingsOverlay";
 import { ResultChatPanel } from "@/components/ResultChatPanel";
 import { ResultChatButton } from "@/components/ResultChatButton";
 import { DuoZigzagPattern, TrianglePattern } from "@/components/patterns/NdebelePatterns";
+import { NdebeleCorners, NdebeleGradientStrip } from "@/components/patterns/NdebeleCorners";
 import { ResultExportButton } from "@/components/ResultExportButton";
 import { ShareButton } from "@/components/ShareButton";
 import { detectCity } from "@/lib/stub/detect";
@@ -579,7 +581,18 @@ export default async function ResultPage({
   const stubReason = responseBody.stubReason;
 
   return (
-    <AppShell patterned>
+    <AppShell>
+      {/* Sep 2026 MVP — minimal Ndebele wrapper for result page. BIG corner
+          motifs as bold accents (~220px). */}
+      <div className="relative -mx-4 sm:-mx-6 lg:-mx-8 -mt-4 sm:-mt-6 lg:-mt-8 mb-2 overflow-hidden">
+        <NdebeleCorners which={["top-left", "top-right", "bottom-left", "bottom-right"]} size={220} opacity={0.5} />
+      </div>
+      {/* Sep 2026 MVP — Ndebele zigzag strip. Subtle orange+green accent
+          that immediately signals "Atlas" without text. */}
+      <div
+        className="h-2 w-full bg-pattern-zigzag-duo"
+        aria-hidden
+      />
       <header className="flex items-center justify-between gap-3 border-b border-atlas-border px-6 py-4">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
@@ -635,16 +648,16 @@ export default async function ResultPage({
                 suburb: (s as any).suburb,
               }))}
             />
-             <Link
-               href="/"
+            <a
+              href="/"
               className="rounded-md border border-atlas-border bg-atlas-surface px-3 py-1.5 text-xs font-medium text-atlas-text transition-colors hover:border-atlas-accent"
             >
               ← New
-             </Link>
+            </a>
           </div>
         </header>
 
-         <div className="atlas-result-content flex-1 px-6 py-6">
+        <div className="flex-1 px-6 py-6">
 
         {/* Model warning banner — only when NOT in stub_demo mode.
             In stub_demo mode, the stub banner below already says

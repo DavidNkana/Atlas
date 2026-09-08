@@ -23,7 +23,6 @@
  */
 
 import { useState, useEffect } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 type NewsCategory =
@@ -1114,12 +1113,14 @@ function EmptyState({
           Refresh diagnosis
         </button>
 
-        <Link
+        <a
           href="/api/news/diag"
+          target="_blank"
+          rel="noopener noreferrer"
           className="rounded border border-atlas-border bg-atlas-surface px-4 py-2 text-xs font-medium uppercase tracking-wider text-atlas-muted transition hover:text-atlas-text"
         >
           Open diag JSON ↗
-        </Link>
+        </a>
       </div>
     </div>
   );
