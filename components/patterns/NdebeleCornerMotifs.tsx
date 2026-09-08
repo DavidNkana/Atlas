@@ -1,25 +1,19 @@
 /**
- * Sep 2026 MVP — Stacked triangle corner motif.
+ * Sep 2026 MVP — Single-instance Ndebele motifs for hero placement.
  *
- * The signature Ndebele house-painting corner: a large triangle
- * with a smaller, slightly offset triangle stacked inside it. The
- * two triangles are the same color at different opacities so the
- * small one reads as an "echo" inside the big one — exactly the
- * way Ndebele women paint them on the corners of their homes.
+ * The SAFAI reference style: sparse motifs scattered as deliberate
+ * punctuation, NOT corner-anchored or symmetric. Each motif is
+ * a single SVG (not tiled) — one triangle here, one triangle there.
  *
- * Two orientation variants:
- *   - "tl": big triangle anchored to top-left, small one inside
- *   - "br": big triangle anchored to bottom-right, small one inside
+ * The "stacked" variants put a smaller, softer-echo triangle on top
+ * of the larger one — the classic Ndebele house-painting corner.
  *
- * Color: orange or green, set via the color prop. Default orange.
- *
- * Sized large (default 320px) so it's a real anchor on the page,
- * not a decoration.
+ * All are `pointer-events-none` `absolute` so they sit behind the
+ * content. Position is set via the `style` prop or the wrapper.
  */
 
 import * as React from "react";
 
-type Corner = "tl" | "br";
 type Color = "orange" | "green";
 
 const COLORS: Record<Color, string> = {
@@ -27,36 +21,75 @@ const COLORS: Record<Color, string> = {
   green: "#3f8d4e",
 };
 
-export function StackedTriangle({
-  corner = "tl",
+/** Single solid triangle. Default: pointing down (Ndebele standard). */
+export function SolidTriangle({
   color = "orange",
-  size = 320,
+  size = 80,
+  flip = false,
   className,
+  style,
 }: {
-  corner?: Corner;
   color?: Color;
   size?: number;
+  flip?: boolean;
+  className?: string;
+  style?: React.CSSProperties;
+}) {
+  const c = COLORS[color];
+  // Flip = mirror across X axis (for upward-pointing triangles)
+  const d = flip ? "M5 5 L95 5 L50 95 Z" : "M50 5 L95 95 L5 95 Z";
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 100 100"
+      aria-hidden
+      className={className}
+      style={{
+        position: "absolute",
+        pointerEvents: "none",
+        ...style,
+      }}
+    >
+      <path d={d} fill={c} fillOpacity={0.85} />
+    </svg>
+  );
+}
+
+/**
+ * Ndebele house-painting corner motif: a large triangle with a
+ * smaller, lighter-echo triangle stacked on top. This is the
+ * signature motif — large, bold, unmistakable.
+ *
+ * Use for the top-left and bottom-right hero anchors.
+ */
+export function StackedCorner({
+  color = "orange",
+  size = 320,
+  position = "top-left",
+  className,
+}: {
+  color?: Color;
+  size?: number;
+  position?: "top-left" | "bottom-right";
   className?: string;
 }) {
   const c = COLORS[color];
+  const isTopLeft = position === "top-left";
 
-  // The viewBox is 100x100. Big triangle fills most of it; small one
-  // sits inside offset toward the inside of the page.
-  const big =
-    corner === "tl"
-      ? "M0 0 L100 0 L0 100 Z"
-      : "M100 100 L0 100 L100 0 Z";
-  // Small triangle sits inside, offset toward centre
-  const small =
-    corner === "tl"
-      ? "M22 22 L78 22 L22 78 Z"
-      : "M78 78 L22 78 L78 22 Z";
+  // Big triangle: takes the corner.
+  // TL: fills top-left (right-angle at top-left)
+  // BR: fills bottom-right (right-angle at bottom-right)
+  const big = isTopLeft ? "M0 0 L100 0 L0 100 Z" : "M100 100 L0 100 L100 0 Z";
 
-  // Position on the page depending on corner
-  const pos: React.CSSProperties =
-    corner === "tl"
-      ? { top: 0, left: 0 }
-      : { bottom: 0, right: 0 };
+  // Small triangle stacked on top of the big one, offset toward centre
+  // TL: smaller sits in the lower-right of the big triangle
+  // BR: smaller sits in the upper-left of the big triangle
+  const small = isTopLeft ? "M22 78 L78 78 L22 22 Z" : "M78 22 L22 22 L78 78 Z";
+
+  const pos: React.CSSProperties = isTopLeft
+    ? { top: 0, left: 0 }
+    : { bottom: 0, right: 0 };
 
   return (
     <svg
@@ -72,68 +105,26 @@ export function StackedTriangle({
         ...pos,
       }}
     >
-      {/* Big triangle — high opacity, the dominant shape */}
-      <path d={big} fill={c} fillOpacity={0.85} />
-      {/* Small triangle inside — softer echo */}
+      <path d={big} fill={c} fillOpacity={0.9} />
       <path d={small} fill={c} fillOpacity={0.45} />
     </svg>
   );
 }
 
 /**
- * Single accent triangle — a small one for mid-page placement.
- * Used to add visual punctuation without spamming the layout.
+ * Vertical zigzag strip — for the left/right edges.
+ * Single column of zigzags, sparse and short (not full page height).
  */
-export function AccentTriangle({
+export function ZigzagAccent({
   color = "orange",
-  size = 60,
-  rotation = 0,
-  className,
-  style,
-}: {
-  color?: Color;
-  size?: number;
-  rotation?: number;
-  className?: string;
-  style?: React.CSSProperties;
-}) {
-  const c = COLORS[color];
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 100 100"
-      aria-hidden
-      className={className}
-      style={{
-        position: "absolute",
-        pointerEvents: "none",
-        transform: `rotate(${rotation}deg)`,
-        ...style,
-      }}
-    >
-      <path d="M50 5 L95 95 L5 95 Z" fill={c} fillOpacity={0.85} />
-    </svg>
-  );
-}
-
-/**
- * Vertical zigzag accent strip — a single column of zigzags.
- * Used on left/right edges. Smaller and more subtle than the
- * pattern-fill version.
- */
-export function ZigzagStrip({
-  color = "orange",
-  height = 240,
   width = 60,
-  position = "left",
+  height = 160,
   className,
   style,
 }: {
   color?: Color;
-  height?: number;
   width?: number;
-  position?: "left" | "right";
+  height?: number;
   className?: string;
   style?: React.CSSProperties;
 }) {
@@ -142,21 +133,17 @@ export function ZigzagStrip({
     <svg
       width={width}
       height={height}
-      viewBox="0 0 60 200"
-      preserveAspectRatio="xMidYMid meet"
+      viewBox={`0 0 ${width} ${height}`}
       aria-hidden
       className={className}
       style={{
         position: "absolute",
         pointerEvents: "none",
-        ...(position === "left"
-          ? { left: 0, top: "50%", transform: "translateY(-50%)" }
-          : { right: 0, top: "50%", transform: "translateY(-50%) scaleX(-1)" }),
         ...style,
       }}
     >
       <path
-        d="M0 25 L15 10 L30 25 L45 10 L60 25"
+        d={`M0 20 L${width / 2} 5 L${width} 20`}
         fill="none"
         stroke={c}
         strokeWidth="2"
@@ -164,7 +151,7 @@ export function ZigzagStrip({
         strokeLinecap="round"
       />
       <path
-        d="M0 60 L15 45 L30 60 L45 45 L60 60"
+        d={`M0 ${height / 2} L${width / 2} ${height / 2 - 15} L${width} ${height / 2}`}
         fill="none"
         stroke={c}
         strokeWidth="2"
@@ -172,23 +159,7 @@ export function ZigzagStrip({
         strokeLinecap="round"
       />
       <path
-        d="M0 95 L15 80 L30 95 L45 80 L60 95"
-        fill="none"
-        stroke={c}
-        strokeWidth="2"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
-      <path
-        d="M0 130 L15 115 L30 130 L45 115 L60 130"
-        fill="none"
-        stroke={c}
-        strokeWidth="2"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
-      <path
-        d="M0 165 L15 150 L30 165 L45 150 L60 165"
+        d={`M0 ${height - 20} L${width / 2} ${height - 35} L${width} ${height - 20}`}
         fill="none"
         stroke={c}
         strokeWidth="2"

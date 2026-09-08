@@ -14,9 +14,9 @@ import { suggestVertical } from "@/components/VerticalMismatchModal";
 import { AuthGateModal } from "@/components/AuthGateModal";
 import { QuestionGallery } from "@/components/QuestionGallery";
 import {
-  StackedTriangle,
-  AccentTriangle,
-  ZigzagStrip,
+  StackedCorner,
+  SolidTriangle,
+  ZigzagAccent,
 } from "@/components/patterns/NdebeleCornerMotifs";
 import { readPrefs, DEFAULT_PREFS, type AtlasPrefs } from "@/components/SettingsDrawer";
 import { ATLAS_HOOK, ATLAS_SUBHOOK } from "@/lib/copy";
@@ -567,32 +567,37 @@ export default function HomePage() {
         </header>
 
       {/* Center stage */}
-      {/* Sep 2026 MVP — portfolio-grade hero wrapper. Dark page dominates.
-          Patterns are SPARSE and DELIBERATE (inspired by SAFAI):
-          one big stacked-triangle motif top-left (orange),
-          one big stacked-triangle motif bottom-right (green),
-          thin side zigzag strips, plus a couple of small accent
-          triangles mid-page. Generous negative space. */}
+      {/* Sep 2026 MVP — SAFAI-style hero. Dark page dominates. Motifs are
+          SPARSE and deliberately placed, NOT corner-anchored:
+          - ONE big stacked-triangle top-left (orange)
+          - ONE big stacked-triangle bottom-right (green)
+          - a few small accent triangles scattered
+          - thin side zigzag accents
+          Lots of negative space between motifs. */}
       <div className="relative flex flex-1 flex-col items-center justify-center overflow-hidden bg-atlas-bg px-6">
-        {/* Top-left: ONE big stacked-triangle Ndebele house motif */}
-        <StackedTriangle corner="tl" color="orange" size={320} />
-        {/* Bottom-right: ONE big stacked-triangle Ndebele house motif */}
-        <StackedTriangle corner="br" color="green" size={320} />
-        {/* Mid-left zigzag strip */}
-        <ZigzagStrip color="orange" position="left" height={240} />
-        {/* Mid-right zigzag strip */}
-        <ZigzagStrip color="green" position="right" height={240} />
-        {/* A couple of small accent triangles mid-page */}
-        <AccentTriangle
+        {/* Top-left: ONE big stacked-triangle motif (orange) */}
+        <StackedCorner color="orange" size={320} position="top-left" />
+        {/* Bottom-right: ONE big stacked-triangle motif (green) */}
+        <StackedCorner color="green" size={320} position="bottom-right" />
+        {/* Side zigzags — small accents, not tall pillars */}
+        <ZigzagAccent color="orange" height={120} style={{ top: "30%", left: 0 }} />
+        <ZigzagAccent color="green" height={120} style={{ bottom: "28%", right: 0 }} />
+        {/* Small accent triangles scattered mid-page */}
+        <SolidTriangle
           color="green"
-          size={48}
-          style={{ top: "22%", left: "62%" }}
+          size={36}
+          style={{ top: "32%", left: "8%" }}
         />
-        <AccentTriangle
+        <SolidTriangle
           color="orange"
-          size={48}
-          rotation={180}
-          style={{ bottom: "24%", right: "68%" }}
+          size={32}
+          flip
+          style={{ top: "55%", right: "12%" }}
+        />
+        <SolidTriangle
+          color="green"
+          size={28}
+          style={{ top: "18%", right: "30%" }}
         />
           {loading ? (
             showThinkingLoader ? (
