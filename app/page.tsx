@@ -14,6 +14,7 @@ import { suggestVertical } from "@/components/VerticalMismatchModal";
 import { AuthGateModal } from "@/components/AuthGateModal";
 import { QuestionGallery } from "@/components/QuestionGallery";
 import { AtlasBadge } from "@/components/patterns/NdebelePatterns";
+import { NdebeleCorners, NdebeleGradientStrip } from "@/components/patterns/NdebeleCorners";
 import { readPrefs, DEFAULT_PREFS, type AtlasPrefs } from "@/components/SettingsDrawer";
 import { ATLAS_HOOK, ATLAS_SUBHOOK } from "@/lib/copy";
 
@@ -563,20 +564,38 @@ export default function HomePage() {
         </header>
 
       {/* Center stage */}
-      {/* Sep 2026 MVP — Ndebele-pattern hero wrapper. The full-bleed
-          triangle pattern sits at 6% opacity behind the hero so the
-          motifs whisper rather than shout. */}
+      {/* Sep 2026 MVP — Ndebele hero wrapper. Full-bleed top-to-bottom
+          gradient (orange → green) with all four corner motifs anchored
+          to their corners. The gradient is at 8-12% opacity so it
+          reads as a wash, not a paint job. */}
       <div className="relative flex flex-1 flex-col items-center justify-center overflow-hidden bg-atlas-bg px-6">
+        {/* Top-to-bottom orange→green gradient wash */}
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-0 bg-pattern-triangles opacity-[0.06]"
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              "linear-gradient(180deg, rgba(234,122,31,0.18) 0%, rgba(234,122,31,0.06) 20%, rgba(63,141,78,0.06) 80%, rgba(63,141,78,0.18) 100%)",
+          }}
         />
-        {/* Orange→green gradient halo at the top — the new brand
-            gradient replacing the old indigo wash. */}
+        {/* Diagonal accent — a faint orange→green streak across the centre */}
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-atlas-accent/10 via-atlas-accent/5 to-transparent"
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              "linear-gradient(135deg, rgba(234,122,31,0.10) 0%, transparent 30%, transparent 70%, rgba(63,141,78,0.10) 100%)",
+          }}
         />
+        {/* Subtle zig-zag pattern overlay at 5% opacity */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 bg-pattern-zigzag-duo opacity-[0.05]"
+        />
+        {/* Four corner motifs — bigger and more visible than v1 */}
+        <NdebeleCorners which={["top-left", "top-right", "bottom-left", "bottom-right"]} size={220} opacity={0.18} />
+        {/* Side zig-zag strips */}
+        <NdebeleCorners which={["left", "right"]} size={120} opacity={0.14} />
           {loading ? (
             showThinkingLoader ? (
               <ChatGPTThinking
