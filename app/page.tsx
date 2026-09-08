@@ -13,8 +13,11 @@ import { ModelIcon } from "@/components/ModelIcon";
 import { suggestVertical } from "@/components/VerticalMismatchModal";
 import { AuthGateModal } from "@/components/AuthGateModal";
 import { QuestionGallery } from "@/components/QuestionGallery";
-import { AtlasBadge } from "@/components/patterns/NdebelePatterns";
-import { NdebeleCorners, NdebeleGradientStrip } from "@/components/patterns/NdebeleCorners";
+import {
+  StackedTriangle,
+  AccentTriangle,
+  ZigzagStrip,
+} from "@/components/patterns/NdebeleCornerMotifs";
 import { readPrefs, DEFAULT_PREFS, type AtlasPrefs } from "@/components/SettingsDrawer";
 import { ATLAS_HOOK, ATLAS_SUBHOOK } from "@/lib/copy";
 
@@ -564,14 +567,33 @@ export default function HomePage() {
         </header>
 
       {/* Center stage */}
-      {/* Sep 2026 MVP — minimal Ndebele wrapper. Dark page dominates;
-          BIG corner motifs as bold accents (like the SAFAI reference,
-          but bigger — ~280px so the triangles are unmistakable). */}
+      {/* Sep 2026 MVP — portfolio-grade hero wrapper. Dark page dominates.
+          Patterns are SPARSE and DELIBERATE (inspired by SAFAI):
+          one big stacked-triangle motif top-left (orange),
+          one big stacked-triangle motif bottom-right (green),
+          thin side zigzag strips, plus a couple of small accent
+          triangles mid-page. Generous negative space. */}
       <div className="relative flex flex-1 flex-col items-center justify-center overflow-hidden bg-atlas-bg px-6">
-        {/* Four BIG corner motifs — ~280px. Top-left orange triangle,
-            top-right green zigzag, bottom-left orange stepped,
-            bottom-right green diamonds. */}
-        <NdebeleCorners which={["top-left", "top-right", "bottom-left", "bottom-right"]} size={280} opacity={0.55} />
+        {/* Top-left: ONE big stacked-triangle Ndebele house motif */}
+        <StackedTriangle corner="tl" color="orange" size={320} />
+        {/* Bottom-right: ONE big stacked-triangle Ndebele house motif */}
+        <StackedTriangle corner="br" color="green" size={320} />
+        {/* Mid-left zigzag strip */}
+        <ZigzagStrip color="orange" position="left" height={240} />
+        {/* Mid-right zigzag strip */}
+        <ZigzagStrip color="green" position="right" height={240} />
+        {/* A couple of small accent triangles mid-page */}
+        <AccentTriangle
+          color="green"
+          size={48}
+          style={{ top: "22%", left: "62%" }}
+        />
+        <AccentTriangle
+          color="orange"
+          size={48}
+          rotation={180}
+          style={{ bottom: "24%", right: "68%" }}
+        />
           {loading ? (
             showThinkingLoader ? (
               <ChatGPTThinking
@@ -591,55 +613,36 @@ export default function HomePage() {
                   visitor needs before they'll type anything. Hidden
                   the moment they're signed in (they already know). */}
               {!user && (
-                <div className="mb-6 flex max-w-2xl flex-col items-center text-center">
+                <div className="mb-8 flex max-w-2xl flex-col items-center text-center">
                   {/* ⚑ HOOK COPY — swap ATLAS_HOOK in lib/copy.ts */}
-                  <h2 className="text-2xl font-bold tracking-tight text-atlas-text sm:text-3xl">
+                  <h2 className="text-3xl font-bold tracking-tight text-atlas-text sm:text-4xl md:text-5xl">
                     {ATLAS_HOOK}
                   </h2>
-                  <p className="mt-2 text-sm text-atlas-muted">
+                  <p className="mt-3 text-base text-atlas-muted">
                     {ATLAS_SUBHOOK}
                   </p>
                   {/* Offer pill. Once the free question is spent the
                       quota pill under the command bar says so — no
                       need to repeat it here. */}
                   {anonUsed < ANON_FREE_QUESTIONS && (
-                    <span className="mt-3 rounded-full border border-atlas-accent/40 bg-atlas-accent/10 px-3 py-1 text-[11px] font-medium text-atlas-accent">
+                    <span className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-atlas-accent/40 bg-atlas-accent/10 px-3 py-1 text-xs font-medium text-atlas-accent">
+                      <span className="h-1.5 w-1.5 rounded-full bg-atlas-accent" />
                       1 free question · no card
                     </span>
                   )}
-                  <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5">
-                    {[
-                      "🇿🇦 SA-only data",
-                      "Live signals (OSM, Google Places, Tavily)",
-                      "Citation-grade answers",
-                    ].map((chip) => (
-                      <span
-                        key={chip}
-                        className="rounded-full border border-atlas-border bg-atlas-surface px-2.5 py-0.5 text-[10px] text-atlas-muted"
-                      >
-                        {chip}
-                      </span>
-                    ))}
-                  </div>
                 </div>
               )}
 
-              <div className="mb-8 text-center">
-                <h1 className="mb-2 text-4xl font-semibold tracking-tight text-atlas-text sm:text-5xl">
+              <div className="mb-10 text-center">
+                <h1 className="mb-3 text-4xl font-semibold tracking-tight text-atlas-text sm:text-5xl md:text-6xl">
                   Hi {firstName}, I&apos;m Atlas.
                 </h1>
-                <p className="text-lg text-atlas-muted">
+                <p className="text-lg text-atlas-muted sm:text-xl">
                   An AI Operating System for builders and investors.
                 </p>
               </div>
 
               <form onSubmit={onSubmit} className="relative w-full max-w-2xl">
-              {/* Sep 2026 MVP — AtlasBadge as the visual identity of the
-                  question input. Floats top-left, decorative. */}
-              <AtlasBadge
-                className="pointer-events-none absolute -left-14 -top-12 hidden h-20 w-20 opacity-90 sm:block"
-                size={80}
-              />
                 {/* Vertical picker as a row of chips ABOVE the command bar */}
                 <div className="mb-2 flex flex-wrap items-center gap-1.5">
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-atlas-muted">
