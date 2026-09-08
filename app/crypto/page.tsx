@@ -1,4 +1,5 @@
 import { CryptoDashboard } from "@/components/CryptoDashboard";
+import { AppShell } from "@/components/AppShell";
 
 /**
  * Day 26 — Crypto markets page.
@@ -22,8 +23,6 @@ export const dynamic = "force-dynamic";
 
 export default function CryptoPage() {
   return (
-    <main className="min-h-screen bg-atlas-bg px-4 pb-12 pt-6 text-atlas-text">
-      <CryptoDashboard />
-    </main>
+    <AppShell patterned><CryptoDashboard /></AppShell>
   );
 }

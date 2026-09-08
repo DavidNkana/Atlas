@@ -37,10 +37,12 @@
  * they have their own minimal layout (no sidebar, centered card).
  */
 
-import { ReactNode, useEffect, useState } from "react";
+import { ReactNode, useEffect, useRef, useState } from "react";
 import { Sidebar } from "./Sidebar";
 import { ClientOnly } from "./ClientOnly";
 import { FullScreenChat } from "./FullScreenChat";
+import { AtlasHeader } from "./AtlasHeader";
+import { PageFrame } from "./PageFrame";
 
 /**
  * Day 28 v2 — wrap Sidebar in <ClientOnly>. Sidebar reads
@@ -59,10 +61,19 @@ import { FullScreenChat } from "./FullScreenChat";
 function SidebarSkeleton() {
   // Match the Sidebar's expanded width (w-64 = 16rem = 256px) so
   // there's no layout shift when the real Sidebar mounts.
-  return <aside className="w-64 shrink-0 border-r border-atlas-border bg-atlas-surface" aria-hidden="true" />;
+  return <aside className="atlas-sidebar w-64 shrink-0 border-r border-atlas-border bg-atlas-surface" aria-hidden="true" />;
 }
 
-export function AppShell({ children }: { children: ReactNode }) {
+export function AppShell({
+  children,
+  patterned = false,
+}: {
+  children: ReactNode;
+  patterned?: boolean;
+}) {
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const mobileMenuButtonRef = useRef<HTMLButtonElement>(null);
+  const hadMobileNavOpen = useRef(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [chatInitial, setChatInitial] = useState<string | undefined>(
     undefined,
@@ -83,14 +94,85 @@ export function AppShell({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  useEffect(() => {
+    if (!mobileNavOpen) return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setMobileNavOpen(false);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [mobileNavOpen]);
+
+  // A drawer can remain open when the viewport crosses the mobile breakpoint.
+  // Close it from the client-side responsive effect so the desktop sidebar is
+  // no longer competing with an inert main area. The resize listener covers
+  // browsers where MediaQueryList change events are delayed or unavailable.
+  useEffect(() => {
+    const desktopMedia = window.matchMedia("(min-width: 768px)");
+    const closeOnDesktop = () => {
+      if (desktopMedia.matches) setMobileNavOpen(false);
+    };
+
+    closeOnDesktop();
+    desktopMedia.addEventListener("change", closeOnDesktop);
+    window.addEventListener("resize", closeOnDesktop);
+    return () => {
+      desktopMedia.removeEventListener("change", closeOnDesktop);
+      window.removeEventListener("resize", closeOnDesktop);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (hadMobileNavOpen.current && !mobileNavOpen) {
+      // The trigger is hidden at desktop widths. Preserve the mobile focus
+      // restoration without attempting to focus that hidden control after a
+      // responsive close.
+      if (window.matchMedia("(max-width: 767px)").matches) {
+        mobileMenuButtonRef.current?.focus();
+      }
+    }
+    hadMobileNavOpen.current = mobileNavOpen;
+  }, [mobileNavOpen]);
+
   return (
-    <div className="flex h-screen overflow-hidden bg-atlas-bg text-atlas-text">
+    <div className="atlas-app-shell flex h-screen overflow-hidden bg-atlas-bg text-atlas-text">
       <ClientOnly fallback={<SidebarSkeleton />}>
-        <Sidebar />
+        <Sidebar
+          mobileOpen={mobileNavOpen}
+          onMobileClose={() => setMobileNavOpen(false)}
+        />
       </ClientOnly>
-      <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
-        {children}
+      {mobileNavOpen && (
+        <div
+          role="presentation"
+          className="atlas-mobile-backdrop fixed inset-0 z-20 bg-black/55 md:hidden"
+          onClick={() => setMobileNavOpen(false)}
+        />
+      )}
+      <main
+        className="flex min-w-0 flex-1 flex-col overflow-y-auto"
+        inert={mobileNavOpen ? true : undefined}
+      >
+        <AtlasHeader />
+        <PageFrame patterned={patterned}>{children}</PageFrame>
       </main>
+      <button
+        ref={mobileMenuButtonRef}
+        type="button"
+        aria-label="Open navigation"
+        aria-expanded={mobileNavOpen}
+        aria-controls="atlas-navigation"
+        hidden={mobileNavOpen}
+        inert={mobileNavOpen ? true : undefined}
+        className="fixed left-3 top-3 z-40 inline-flex h-10 w-10 items-center justify-center rounded-full border border-atlas-border bg-atlas-surface/95 text-atlas-muted shadow-lg backdrop-blur transition-colors hover:border-atlas-accent hover:text-atlas-text md:hidden"
+        onClick={() => setMobileNavOpen(true)}
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <line x1="4" y1="6" x2="20" y2="6" />
+          <line x1="4" y1="12" x2="20" y2="12" />
+          <line x1="4" y1="18" x2="20" y2="18" />
+        </svg>
+      </button>
       <ClientOnly fallback={null}>
         <FullScreenChat
           open={chatOpen}

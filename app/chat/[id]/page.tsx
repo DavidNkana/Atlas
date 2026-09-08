@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useUser } from "@clerk/nextjs";
 import Link from "next/link";
+import { AppShell } from "@/components/AppShell";
 
 interface ChatResponse {
   id: string;
@@ -83,18 +84,22 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-atlas-bg text-atlas-muted">
-        Loading conversation…
-      </div>
+      <AppShell patterned>
+        <div className="flex min-h-[60vh] items-center justify-center text-atlas-muted">
+          Loading conversation…
+        </div>
+      </AppShell>
     );
   }
   if (error) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-atlas-bg">
-        <div className="rounded-xl border border-atlas-border bg-atlas-surface p-6 text-center text-sm text-atlas-muted">
-          {error}
+      <AppShell patterned>
+        <div className="flex min-h-[60vh] items-center justify-center">
+          <div className="rounded-xl border border-atlas-border bg-atlas-surface p-6 text-center text-sm text-atlas-muted">
+            {error}
+          </div>
         </div>
-      </div>
+      </AppShell>
     );
   }
   if (!data) return null;
@@ -103,15 +108,16 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const sites = data.ranked_sites ?? [];
 
   return (
+    <AppShell patterned>
     <div className="min-h-screen bg-atlas-bg p-6 text-atlas-text">
       <div className="mx-auto max-w-3xl space-y-6">
         <div className="flex items-baseline justify-between">
-          <a
+          <Link
             href={chatId ? `/result/${chatId}` : "/dashboard"}
             className="text-xs text-atlas-muted hover:text-atlas-accent"
           >
             ← Switch to map view
-          </a>
+          </Link>
           <span className="rounded-full border border-atlas-border bg-atlas-surface px-2 py-0.5 text-[10px] uppercase tracking-wider text-atlas-muted">
             {data.primaryEngine.replace(/_/g, " ")}
           </span>
@@ -227,5 +233,6 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         </div>
       </div>
     </div>
+    </AppShell>
   );
 }

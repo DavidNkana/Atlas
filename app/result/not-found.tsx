@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 /**
  * Atlas result-not-found page.
  *
@@ -44,25 +46,25 @@ export default function ResultNotFound() {
             <span className="font-mono text-atlas-accent">3.</span>
             <span>
               <strong>Atlas is having a database hiccup</strong> —
-              check <a className="underline" href="/api/atlas-debug">/api/atlas-debug</a>{" "}
+              check <Link className="underline" href="/api/atlas-debug">/api/atlas-debug</Link>{" "}
               to see if Prisma is reachable.
             </span>
           </li>
         </ol>
 
         <div className="flex flex-wrap gap-2">
-          <a
+          <Link
             href="/"
             className="rounded-md bg-atlas-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-atlas-accent2"
           >
             Ask a new question
-          </a>
-          <a
+          </Link>
+          <Link
             href="/api/atlas-debug"
             className="rounded-md border border-atlas-border bg-atlas-surface2 px-4 py-2 text-sm font-medium text-atlas-text transition-colors hover:border-atlas-accent"
           >
             Check Atlas health
-          </a>
+          </Link>
         </div>
 
         <p className="mt-6 text-[11px] text-atlas-muted">

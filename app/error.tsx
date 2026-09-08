@@ -19,6 +19,7 @@
  */
 
 import { useEffect } from "react";
+import Link from "next/link";
 
 export default function GlobalError({
   error,
@@ -69,18 +70,18 @@ export default function GlobalError({
           >
             Try again
           </button>
-          <a
+          <Link
             href="/"
             className="rounded-md border border-atlas-border bg-atlas-surface2 px-4 py-2 text-sm font-medium text-atlas-text transition-colors hover:border-atlas-accent"
           >
             Back to home
-          </a>
-          <a
+          </Link>
+          <Link
             href="/api/diag-keys"
             className="rounded-md border border-atlas-border bg-atlas-surface2 px-4 py-2 text-sm font-medium text-atlas-text transition-colors hover:border-atlas-accent"
           >
             Check API keys
-          </a>
+          </Link>
         </div>
 
         <p className="mt-6 text-[11px] text-atlas-muted">

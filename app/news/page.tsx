@@ -1,4 +1,5 @@
 import { NewsFeedGrid } from "@/components/NewsFeedGrid";
+import { AppShell } from "@/components/AppShell";
 
 /**
  * Day 23 — Investor news feed.
@@ -18,8 +19,6 @@ export const dynamic = "force-dynamic";
 
 export default function NewsPage() {
   return (
-    <main className="min-h-screen bg-atlas-bg px-4 pb-12 pt-6 text-atlas-text">
-      <NewsFeedGrid />
-    </main>
+    <AppShell patterned><NewsFeedGrid /></AppShell>
   );
 }
