@@ -582,36 +582,11 @@ export default async function ResultPage({
 
   return (
     <AppShell>
-      {/* Sep 2026 MVP — full-bleed top-to-bottom gradient + corner
-          patterns behind the result content. The patterns sit at 22%
-          opacity and the gradient at 8-15%, so the data still
-          dominates visually but the motifs frame it. */}
+      {/* Sep 2026 MVP — minimal Ndebele wrapper for result page. Discrete
+          corner motifs like the SAFAI reference. Dark page dominates,
+          patterns are decoration only. */}
       <div className="relative -mx-4 sm:-mx-6 lg:-mx-8 -mt-4 sm:-mt-6 lg:-mt-8 mb-2 overflow-hidden">
-        {/* Top-to-bottom orange→green gradient wash */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0"
-          style={{
-            background:
-              "linear-gradient(180deg, rgba(234,122,31,0.18) 0%, rgba(234,122,31,0.04) 18%, rgba(63,141,78,0.04) 82%, rgba(63,141,78,0.18) 100%)",
-          }}
-        />
-        {/* Diagonal accent */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0"
-          style={{
-            background:
-              "linear-gradient(135deg, rgba(234,122,31,0.08) 0%, transparent 30%, transparent 70%, rgba(63,141,78,0.08) 100%)",
-          }}
-        />
-        {/* Subtle zig-zag overlay */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 bg-pattern-zigzag-duo opacity-[0.04]"
-        />
-        {/* Four corner motifs */}
-        <NdebeleCorners which={["top-left", "top-right", "bottom-left", "bottom-right"]} size={220} opacity={0.22} />
+        <NdebeleCorners which={["top-left", "top-right", "bottom-left", "bottom-right"]} size={130} opacity={0.4} />
       </div>
       {/* Sep 2026 MVP — Ndebele zigzag strip. Subtle orange+green accent
           that immediately signals "Atlas" without text. */}
@@ -889,15 +864,9 @@ export default async function ResultPage({
             className="relative mb-6 overflow-hidden rounded-md border border-atlas-border bg-atlas-surface p-4"
             data-testid="atlas-connectors-row"
           >
-            {/* Sep 2026 MVP — Ndebele stepped-triangle corner motif. Sits in
-                the top-left corner as a visual signature. */}
+            {/* Sep 2026 MVP — small stepped-triangle corner accent. */}
             <div
-              className="pointer-events-none absolute -left-1 -top-1 h-10 w-10 bg-pattern-stepped-triangles opacity-90"
-              aria-hidden
-            />
-            {/* Subtle orange top-border accent */}
-            <div
-              className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-orange-500 via-atlas-accent to-green-500"
+              className="pointer-events-none absolute -left-1 -top-1 h-8 w-8 bg-pattern-stepped-triangles opacity-90"
               aria-hidden
             />
             <div className="mb-3 flex items-baseline justify-between">
