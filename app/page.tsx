@@ -569,12 +569,10 @@ export default function HomePage() {
           (inspired by the SAFAI reference: patterns as decoration,
           not wallpaper). */}
       <div className="relative flex flex-1 flex-col items-center justify-center overflow-hidden bg-atlas-bg px-6">
-        {/* Four SMALL corner motifs — ~110px, accent-only. Top-left orange
+        {/* Four SMALL corner motifs — ~130px, accent-only. Top-left orange
             triangle, top-right green zigzag, bottom-left orange stepped,
             bottom-right green diamonds. */}
-        <NdebeleCorners which={["top-left", "top-right", "bottom-left", "bottom-right"]} size={110} opacity={0.32} />
-        {/* Left/right side motifs — vertical zigzag strips */}
-        <NdebeleCorners which={["left", "right"]} size={70} opacity={0.26} />
+        <NdebeleCorners which={["top-left", "top-right", "bottom-left", "bottom-right"]} size={130} opacity={0.42} />
           {loading ? (
             showThinkingLoader ? (
               <ChatGPTThinking
