@@ -4,223 +4,56 @@
 
 :root {
   color-scheme: dark;
-  /* Sep 2026 MVP rebuild: Ndebele palette — warm orange + earthy green.
-     These are the canonical Ndebele house-painting colors derived from
-     natural pigments: ochre/clay (orange) and vegetation (green). */
-  --atlas-accent: #ea7a1f;        /* Ndebele warm orange */
-  --atlas-accent-soft: #f59e3d;   /* lighter orange for hovers */
-  --atlas-green: #3f8d4e;          /* Ndebele green */
-  --atlas-green-soft: #5cb568;     /* lighter green for hovers */
+  /* Sep 2026 MVP — Ndebele palette + SAFAI design tokens.
+     Inter for body text, Space Grotesk for display titles.
+     Orange (clay/ochre) + green (vegetation) — natural Ndebele pigments. */
+  --atlas-accent: #ea7a1f;
+  --atlas-accent-soft: #f59e3d;
+  --atlas-accent-2: #c14a00;
+  --atlas-accent-glow: rgba(234, 122, 31, 0.35);
+  --atlas-green: #3f8d4e;
+  --atlas-green-2: #0e7a4a;
+  --atlas-green-soft: #5cb568;
+  --atlas-green-glow: rgba(63, 141, 78, 0.32);
+  --atlas-bg: #07070a;
+  --atlas-bg-2: #0d0d12;
+  --atlas-surface: #131319;
+  --atlas-border: rgba(255, 255, 255, 0.08);
+  --atlas-border-strong: rgba(255, 255, 255, 0.14);
+  --atlas-text-muted: #9a9aa3;
+  --atlas-text-dim: #6b6b75;
+  --font-display: 'Space Grotesk', 'Inter', sans-serif;
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
 html,
 body {
-  background: #09090b;
-  color: #e4e4e7;
+  background: #07070a;
+  color: #ededee;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  min-height: 100%;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  line-height: 1.55;
+  overflow-x: hidden;
 }
 
-/* Day 8 redesign: light mode preview. Triggered by the Settings drawer
-   when the user picks "light" or "system" + OS preference is light. The
-   palette mirrors the dark theme but with white surfaces.
-
-   Sep 2026: light mode accent stays Ndebele orange + green — they read
-   well on white surfaces. */
+/* Light mode keeps the Ndebele orange/green accent */
 html.atlas-light,
 html.atlas-light body {
   background: #fafafa;
   color: #18181b;
 }
 
-/* Light theme overrides — when html.atlas-light is set, swap Atlas
-   surface tokens to light equivalents. We do this in CSS rather than
-   duplicating every component class so the design tokens stay in one
-   place. */
-html.atlas-light .bg-atlas-bg {
-  background-color: #fafafa !important;
-}
-html.atlas-light .bg-atlas-surface {
-  background-color: #ffffff !important;
-}
-html.atlas-light .bg-atlas-surface2 {
-  background-color: #f4f4f5 !important;
-}
-html.atlas-light .border-atlas-border {
-  border-color: #e4e4e7 !important;
-}
-html.atlas-light .text-atlas-text {
-  color: #18181b !important;
-}
-html.atlas-light .text-atlas-muted {
-  color: #71717a !important;
-}
-html.atlas-light .hover\:bg-atlas-surface2:hover {
-  background-color: #f4f4f5 !important;
-}
-html.atlas-light .bg-atlas-accent\/10 {
-  background-color: rgba(234, 122, 31, 0.1) !important;
-}
-
-/* Day 12 v7: comprehensive zinc/gray overrides for the light theme.
-   Several pages (result page, AddListingModal, ConfirmDialog) still
-   use the raw Tailwind zinc-* tokens because they were styled
-   directly against the dark palette. To make the theme toggle
-   actually flip them too, we remap each zinc shade in light mode
-   to its closest light-mode equivalent:
-
-   dark surface     light surface
-   zinc-900  (deep)  →  zinc-50  (near-white)
-   zinc-800  (dark)  →  zinc-100
-   zinc-700  (mid)   →  zinc-200
-   zinc-600  (mid)   →  zinc-300
-   zinc-500          →  zinc-500 (neutral, stays)
-   zinc-400          →  zinc-600 (slightly darker for muted text)
-   zinc-300          →  zinc-700
-   zinc-200          →  zinc-800
-   zinc-100          →  zinc-900
-*/
-html.atlas-light .bg-zinc-900 { background-color: #fafafa !important; }
-html.atlas-light .bg-zinc-950 { background-color: #ffffff !important; }
-html.atlas-light .bg-zinc-800 { background-color: #f4f4f5 !important; }
-html.atlas-light .bg-zinc-700 { background-color: #e4e4e7 !important; }
-html.atlas-light .bg-zinc-600 { background-color: #d4d4d8 !important; }
-html.atlas-light .text-zinc-100,
-html.atlas-light .text-zinc-200 { color: #18181b !important; }
-html.atlas-light .text-zinc-300 { color: #27272a !important; }
-html.atlas-light .text-zinc-400 { color: #52525b !important; }
-html.atlas-light .text-zinc-500 { color: #71717a !important; }
-html.atlas-light .border-zinc-800,
-html.atlas-light .border-zinc-700 { border-color: #e4e4e7 !important; }
-html.atlas-light .hover\:bg-zinc-700:hover,
-html.atlas-light .hover\:bg-zinc-800:hover { background-color: #f4f4f5 !important; }
-html.atlas-light .hover\:border-zinc-600:hover { border-color: #a1a1aa !important; }
-
-/* Brand color buttons keep their orange in light mode. The white-on-accent
-   text is already readable — no override needed. */
-
-/* Subtle focus ring, Ndebele orange */
+/* Subtle focus ring */
 :focus-visible {
   outline: 2px solid #ea7a1f;
   outline-offset: 2px;
   border-radius: 4px;
 }
 
-/* Day 4 dark-theme result page: ensure Mapbox popups inherit dark text on
-   dark popup backgrounds. Mapbox's default .mapboxgl-popup-content uses
-   white bg + black text, but the dark-v11 map style calls for dark popups. */
-.mapboxgl-popup-content {
-  background-color: #18181b !important; /* zinc-900 */
-  color: #e4e4e7 !important;            /* zinc-200 */
-  border-radius: 8px !important;
-  border: 1px solid #27272a !important; /* zinc-800 */
-}
-.mapboxgl-popup-tip {
-  border-top-color: #18181b !important;
-  border-bottom-color: #18181b !important;
-}
-.mapboxgl-popup-close-button {
-  color: #a1a1aa !important;            /* zinc-400 */
-  font-size: 18px !important;
-  padding-right: 4px !important;
-}
-.mapboxgl-popup-close-button:hover {
-  color: #fafafa !important;
-  background: transparent !important;
-}
-
-/* Atlas — Auth gate modal smiley animation.
-   Gentle bounce + occasional blink, applied via inline classes on the
-   inline SVG in components/AuthGateModal.tsx. Zero JS, zero deps. */
-.atlas-smiley-bounce {
-  animation: atlas-smiley-bounce 3.2s ease-in-out infinite;
-  transform-origin: center;
-  will-change: transform;
-}
-@keyframes atlas-smiley-bounce {
-  0%, 100% { transform: translateY(0); }
-  50%      { transform: translateY(-6px); }
-}
-.atlas-smiley-blink .atlas-eye-left,
-.atlas-smiley-blink .atlas-eye-right {
-  transform-origin: center;
-  animation: atlas-smiley-blink 4.5s ease-in-out infinite;
-}
-@keyframes atlas-smiley-blink {
-  0%, 92%, 100% { transform: scaleY(1); }
-  95%, 97%      { transform: scaleY(0.1); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .atlas-smiley-bounce,
-  .atlas-smiley-blink .atlas-eye-left,
-  .atlas-smiley-blink .atlas-eye-right {
-    animation: none;
-  }
-}
-
-/* Atlas — Clerk form placeholder visibility.
-   Tailwind's placeholder: utility depends on Clerk rendering
-   placeholder as a data-attribute; in practice Clerk uses
-   native <input placeholder="..."> so we also need a CSS rule
-   that targets inputs inside the Clerk form card. The
-   atlas-muted/60 token = a1a1aa at 60% opacity — visible but
-   clearly subordinate to actual input text (#fafafa). */
-.cl-formFieldInput input::placeholder,
-input[class*="cl-"]::placeholder,
-input[placeholder] {
-  color: rgba(161, 161, 170, 0.6) !important;
-  opacity: 1 !important; /* override browser default ~0.7 */
-}
-
-/* Atlas — ThinkingLoader dots animation.
-   Larger, more visible dots that bounce with staggered delays.
-   Replaces animate-pulse on ChatGPTThinking's three dots so they
-   feel alive without external deps. Respect prefers-reduced-motion. */
-.atlas-thinking-dot {
-  animation: atlas-thinking-bounce 1.1s ease-in-out infinite;
-  opacity: 0.7;
-}
-@keyframes atlas-thinking-bounce {
-  0%, 60%, 100% {
-    transform: scale(0.85);
-    opacity: 0.55;
-  }
-  30% {
-    transform: scale(1.25);
-    opacity: 1;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .atlas-thinking-dot {
-    animation: none;
-    opacity: 0.85;
-  }
-}
-
-/* Atlas — QuestionGallery horizontal rows.
-   Each vertical's prompts scroll sideways. A visible scrollbar per
-   row would add 5 grey bars to an otherwise clean hero, so we hide
-   the bar and keep touch/trackpad/shift-wheel scrolling. */
-.atlas-gallery-row {
-  scrollbar-width: none; /* Firefox */
-  -ms-overflow-style: none; /* old Edge */
-}
-.atlas-gallery-row::-webkit-scrollbar {
-  display: none;
-}
-
 /* ────────────────────────────────────────────────────────────────────
-   Sep 2026 MVP — Ndebele-inspired geometric pattern accents.
-
-   The four motifs are exposed as React SVG components (see
-   components/patterns/). These CSS classes are the utility layer
-   that wires them into Tailwind — bg-pattern-* lets any container
-   pick a motif via a class.
-
-   All patterns use SVG <pattern> elements with patternUnits="userSpaceOnUse"
-   so they tile cleanly at any size. We use `data:image/svg+xml` URIs
-   so they can live in background-image: url(...) without bundling.
+   SAFAI-inspired Ndebele pattern utilities.
+   Use sparingly — these are decorations, not wallpaper.
    ──────────────────────────────────────────────────────────────────── */
 
 /* Triangle pattern — stacked triangles, the dominant Ndebele shape. */
@@ -248,64 +81,200 @@ input[placeholder] {
   background-repeat: repeat;
 }
 
-/* Variant: green accent triangles for the secondary motif colour. */
 .bg-pattern-triangles-green {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M0 30 L20 10 L40 30 Z' fill='none' stroke='%233f8d4e' stroke-width='2'/%3E%3Cpath d='M0 35 L20 15 L40 35' fill='none' stroke='%233f8d4e' stroke-width='1' opacity='0.4'/%3E%3C/svg%3E");
   background-repeat: repeat;
 }
 
-/* Variant: orange + green alternating zigzags — used sparingly for hero
-   strips and the Decision Intelligence panel header. */
 .bg-pattern-zigzag-duo {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='20' viewBox='0 0 40 20'%3E%3Cpath d='M0 15 L10 5 L20 15 L30 5 L40 15' fill='none' stroke='%23ea7a1f' stroke-width='2.5'/%3E%3Cpath d='M0 18 L10 8 L20 18 L30 8 L40 18' fill='none' stroke='%233f8d4e' stroke-width='1.5'/%3E%3C/svg%3E");
   background-repeat: repeat;
 }
 
-/* ────────────────────────────────────────────────────────────────────
-   Sep 2026 MVP — utility classes that combine Ndebele patterns with
-   the new orange/green palette.
-   ──────────────────────────────────────────────────────────────────── */
+/* Display font utility — for hero/landing-page big titles */
+.font-display {
+  font-family: 'Space Grotesk', 'Inter', sans-serif;
+}
 
-/* Buttons: filled orange primary. Replaces bg-indigo-600 patterns. */
-.btn-ndebele-primary {
-  background-color: var(--atlas-accent);
+/* Glassmorphism utilities */
+.glass {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.glass-strong {
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+/* Gradient text utility */
+.gradient-text-orange {
+  background-image: linear-gradient(135deg, #ff9a4d 0%, #ea7a1f 50%, #c14a00 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+.gradient-text-green {
+  background-image: linear-gradient(135deg, #6ee7a8 0%, #3f8d4e 50%, #0e7a4a 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+/* SAFAI-style bg-art — corner motifs, side accents, grain overlay.
+   Use on the home page hero wrapper as a fixed background layer. */
+.bg-art {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.bg-art__grain {
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(circle at 50% 0%, rgba(234, 122, 31, 0.06), transparent 40%),
+    radial-gradient(circle at 100% 100%, rgba(63, 141, 78, 0.06), transparent 40%);
+  mix-blend-mode: screen;
+}
+.bg-art::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(1200px 600px at 10% -10%, rgba(234, 122, 31, 0.08), transparent 60%),
+    radial-gradient(1000px 500px at 110% 110%, rgba(63, 141, 78, 0.07), transparent 60%);
+  pointer-events: none;
+}
+
+/* Button system — matches SAFAI primary/ghost pattern */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 24px;
+  border-radius: 999px;
+  font-size: 15px;
+  font-weight: 600;
+  background: var(--atlas-accent);
+  color: #0a0a0a;
+  box-shadow: 0 8px 24px -8px var(--atlas-accent-glow);
+  transition: all 0.25s ease;
+  cursor: pointer;
+}
+.btn-primary:hover {
+  background: #ff8a45;
+  transform: translateY(-2px);
+  box-shadow: 0 14px 32px -8px var(--atlas-accent-glow);
+}
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 24px;
+  border-radius: 999px;
+  font-size: 15px;
+  font-weight: 600;
+  background: transparent;
+  border: 1px solid var(--atlas-border-strong);
   color: #fff;
-  border: 1px solid var(--atlas-accent);
-  transition: background-color 0.15s ease, border-color 0.15s ease;
+  transition: all 0.25s ease;
+  cursor: pointer;
 }
-.btn-ndebele-primary:hover {
-  background-color: var(--atlas-accent-soft);
-  border-color: var(--atlas-accent-soft);
-}
-.btn-ndebele-secondary {
-  background-color: var(--atlas-green);
-  color: #fff;
-  border: 1px solid var(--atlas-green);
-  transition: background-color 0.15s ease, border-color 0.15s ease;
-}
-.btn-ndebele-secondary:hover {
-  background-color: var(--atlas-green-soft);
-  border-color: var(--atlas-green-soft);
+.btn-ghost:hover {
+  border-color: var(--atlas-green);
+  background: rgba(63, 141, 78, 0.08);
 }
 
-/* Border accents — use on card headers to hint at Ndebele motifs. */
-.border-ndebele-orange { border-color: var(--atlas-accent); }
-.border-ndebele-green  { border-color: var(--atlas-green); }
+/* Mapbox popup dark theme */
+.mapboxgl-popup-content {
+  background-color: #18181b !important;
+  color: #e4e4e7 !important;
+  border-radius: 8px !important;
+  border: 1px solid #27272a !important;
+}
+.mapboxgl-popup-tip {
+  border-top-color: #18181b !important;
+  border-bottom-color: #18181b !important;
+}
+.mapboxgl-popup-close-button {
+  color: #a1a1aa !important;
+  font-size: 18px !important;
+  padding-right: 4px !important;
+}
+.mapboxgl-popup-close-button:hover {
+  color: #fafafa !important;
+  background: transparent !important;
+}
 
-/* Text colours for accent states. */
-.text-ndebele-orange { color: var(--atlas-accent); }
-.text-ndebele-green  { color: var(--atlas-green); }
-
-/* Reduced-motion respect for any future animated patterns */
+/* Atlas smiley bounce */
+.atlas-smiley-bounce {
+  animation: atlas-smiley-bounce 3.2s ease-in-out infinite;
+  transform-origin: center;
+  will-change: transform;
+}
+@keyframes atlas-smiley-bounce {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-6px); }
+}
+.atlas-smiley-blink .atlas-eye-left,
+.atlas-smiley-blink .atlas-eye-right {
+  transform-origin: center;
+  animation: atlas-smiley-blink 4.5s ease-in-out infinite;
+}
+@keyframes atlas-smiley-blink {
+  0%, 92%, 100% { transform: scaleY(1); }
+  95%, 97%      { transform: scaleY(0.1); }
+}
 @media (prefers-reduced-motion: reduce) {
-  .bg-pattern-triangles,
-  .bg-pattern-zigzag,
-  .bg-pattern-diamonds,
-  .bg-pattern-stepped-triangles,
-  .bg-pattern-triangles-green,
-  .bg-pattern-zigzag-duo {
-    /* Patterns are static SVGs so this is a no-op, but keeping the
-       hook here signals intent. */
-    background-attachment: scroll;
+  .atlas-smiley-bounce,
+  .atlas-smiley-blink .atlas-eye-left,
+  .atlas-smiley-blink .atlas-eye-right {
+    animation: none;
   }
+}
+
+/* Clerk form placeholder visibility */
+.cl-formFieldInput input::placeholder,
+input[class*="cl-"]::placeholder,
+input[placeholder] {
+  color: rgba(161, 161, 170, 0.6) !important;
+  opacity: 1 !important;
+}
+
+/* ThinkingLoader dots animation */
+.atlas-thinking-dot {
+  animation: atlas-thinking-bounce 1.1s ease-in-out infinite;
+  opacity: 0.7;
+}
+@keyframes atlas-thinking-bounce {
+  0%, 60%, 100% {
+    transform: scale(0.85);
+    opacity: 0.55;
+  }
+  30% {
+    transform: scale(1.25);
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .atlas-thinking-dot {
+    animation: none;
+    opacity: 0.85;
+  }
+}
+
+/* QuestionGallery horizontal rows */
+.atlas-gallery-row {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.atlas-gallery-row::-webkit-scrollbar {
+  display: none;
 }

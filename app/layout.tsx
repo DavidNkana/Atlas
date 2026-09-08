@@ -28,6 +28,21 @@ export default function RootLayout({
       signUpFallbackRedirectUrl="/"
     >
       <html lang="en" className="dark">
+        <head>
+          {/* Sep 2026 MVP — Ndebele landing page typography. Inter for
+              body, Space Grotesk for display titles (matches the SAFAI
+              reference style). */}
+          <link rel="preconnect" href="https://fonts.googleapis.com" />
+          <link
+            rel="preconnect"
+            href="https://fonts.gstatic.com"
+            crossOrigin=""
+          />
+          <link
+            href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap"
+            rel="stylesheet"
+          />
+        </head>
         <body className="min-h-screen bg-atlas-bg text-atlas-text font-sans antialiased">
           <ThemeBootstrapper />
           <NavigationLoader />

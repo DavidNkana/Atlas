@@ -18,6 +18,7 @@ import {
   SolidTriangle,
   ZigzagAccent,
 } from "@/components/patterns/NdebeleCornerMotifs";
+import { BackgroundArt } from "@/components/patterns/BackgroundArt";
 import { readPrefs, DEFAULT_PREFS, type AtlasPrefs } from "@/components/SettingsDrawer";
 import { ATLAS_HOOK, ATLAS_SUBHOOK } from "@/lib/copy";
 
@@ -567,92 +568,67 @@ export default function HomePage() {
         </header>
 
       {/* Center stage */}
-      {/* Sep 2026 MVP — SAFAI-style hero. Dark page dominates. Motifs are
-          SPARSE and deliberately placed, NOT corner-anchored:
-          - ONE big stacked-triangle top-left (orange)
-          - ONE big stacked-triangle bottom-right (green)
-          - a few small accent triangles scattered
-          - thin side zigzag accents
-          Lots of negative space between motifs. */}
+      {/* Sep 2026 MVP — SAFAI-inspired landing page hero. Dark page
+          dominates. Patterns are placed deliberately as accents in
+          the corners and edges (like the reference). The title uses
+          Space Grotesk at portfolio-grade scale. */}
       <div className="relative flex flex-1 flex-col items-center justify-center overflow-hidden bg-atlas-bg px-6">
-        {/* Top-left: ONE big stacked-triangle motif (orange) */}
-        <StackedCorner color="orange" size={320} position="top-left" />
-        {/* Bottom-right: ONE big stacked-triangle motif (green) */}
-        <StackedCorner color="green" size={320} position="bottom-right" />
-        {/* Side zigzags — small accents, not tall pillars */}
-        <ZigzagAccent color="orange" height={120} style={{ top: "30%", left: 0 }} />
-        <ZigzagAccent color="green" height={120} style={{ bottom: "28%", right: 0 }} />
-        {/* Small accent triangles scattered mid-page */}
-        <SolidTriangle
-          color="green"
-          size={36}
-          style={{ top: "32%", left: "8%" }}
-        />
-        <SolidTriangle
-          color="orange"
-          size={32}
-          flip
-          style={{ top: "55%", right: "12%" }}
-        />
-        <SolidTriangle
-          color="green"
-          size={28}
-          style={{ top: "18%", right: "30%" }}
-        />
-          {loading ? (
-            showThinkingLoader ? (
-              <ChatGPTThinking
-                firstName={isLoaded ? user?.firstName ?? null : null}
-                question={question}
-                vertical={vertical}
-              />
-            ) : (
-              <div className="flex items-center gap-2 text-sm text-atlas-muted">
-                <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-atlas-accent" />
-                Atlas is thinking…
-              </div>
-            )
+        {/* Fixed background art layer — corner motifs + side strips +
+            grain glow. Pinned to the viewport, so the motifs feel
+            like they're part of the page chrome rather than the
+            content. */}
+        <BackgroundArt />
+        {loading ? (
+          showThinkingLoader ? (
+            <ChatGPTThinking
+              firstName={isLoaded ? user?.firstName ?? null : null}
+              question={question}
+              vertical={vertical}
+            />
           ) : (
-            <>
-              {/* Anon landing hero — the value prop a signed-out
-                  visitor needs before they'll type anything. Hidden
-                  the moment they're signed in (they already know). */}
-              {!user && (
-                <div className="mb-8 flex max-w-2xl flex-col items-center text-center">
-                  {/* ⚑ HOOK COPY — swap ATLAS_HOOK in lib/copy.ts */}
-                  <h2 className="text-3xl font-bold tracking-tight text-atlas-text sm:text-4xl md:text-5xl">
-                    {ATLAS_HOOK}
-                  </h2>
-                  <p className="mt-3 text-base text-atlas-muted">
-                    {ATLAS_SUBHOOK}
-                  </p>
-                  {/* Offer pill. Once the free question is spent the
-                      quota pill under the command bar says so — no
-                      need to repeat it here. */}
-                  {anonUsed < ANON_FREE_QUESTIONS && (
-                    <span className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-atlas-accent/40 bg-atlas-accent/10 px-3 py-1 text-xs font-medium text-atlas-accent">
-                      <span className="h-1.5 w-1.5 rounded-full bg-atlas-accent" />
-                      1 free question · no card
-                    </span>
-                  )}
-                </div>
-              )}
-
-              <div className="mb-10 text-center">
-                <h1 className="mb-3 text-4xl font-semibold tracking-tight text-atlas-text sm:text-5xl md:text-6xl">
-                  Hi {firstName}, I&apos;m Atlas.
-                </h1>
-                <p className="text-lg text-atlas-muted sm:text-xl">
-                  An AI Operating System for builders and investors.
+            <div className="flex items-center gap-2 text-sm text-atlas-muted">
+              <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-atlas-accent" />
+              Atlas is thinking…
+            </div>
+          )
+        ) : (
+          <>
+            {/* Anon landing hero — the value prop a signed-out
+                visitor needs before they'll type anything. Hidden
+                the moment they're signed in (they already know). */}
+            {!user && (
+              <div className="mb-8 flex max-w-2xl flex-col items-center text-center">
+                <h2 className="font-display text-3xl font-bold tracking-tight text-atlas-text sm:text-4xl md:text-5xl">
+                  {ATLAS_HOOK}
+                </h2>
+                <p className="mt-3 text-base text-atlas-muted">
+                  {ATLAS_SUBHOOK}
                 </p>
-              </div>
-
-              <form onSubmit={onSubmit} className="relative w-full max-w-2xl">
-                {/* Vertical picker as a row of chips ABOVE the command bar */}
-                <div className="mb-2 flex flex-wrap items-center gap-1.5">
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-atlas-muted">
-                    I&apos;m looking for
+                {anonUsed < ANON_FREE_QUESTIONS && (
+                  <span className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-atlas-accent/40 bg-atlas-accent/10 px-3 py-1 text-xs font-medium text-atlas-accent">
+                    <span className="h-1.5 w-1.5 rounded-full bg-atlas-accent" />
+                    1 free question · no card
                   </span>
+                )}
+              </div>
+            )}
+
+            {/* Portfolio-grade hero title — Space Grotesk, 4xl-6xl */}
+            <div className="mb-10 text-center">
+              <h1 className="font-display mb-3 text-5xl font-semibold leading-[1.05] tracking-tight text-atlas-text sm:text-6xl md:text-7xl lg:text-[5.5rem]">
+                Hi {firstName}, I&apos;m Atlas.
+              </h1>
+              <p className="text-lg text-atlas-muted sm:text-xl">
+                An AI Operating System for builders and investors.
+              </p>
+            </div>
+
+            <form onSubmit={onSubmit} className="relative w-full max-w-2xl">
+              {/* Vertical picker */}
+              <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-atlas-muted">
+                  I&apos;m looking for
+                </span>
                   {BUILTIN_VERTICALS.map((v) => (
                     <button
                       key={v.value}
