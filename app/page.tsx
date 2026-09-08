@@ -13,11 +13,6 @@ import { ModelIcon } from "@/components/ModelIcon";
 import { suggestVertical } from "@/components/VerticalMismatchModal";
 import { AuthGateModal } from "@/components/AuthGateModal";
 import { QuestionGallery } from "@/components/QuestionGallery";
-import {
-  StackedCorner,
-  SolidTriangle,
-  ZigzagAccent,
-} from "@/components/patterns/NdebeleCornerMotifs";
 import { BackgroundArt } from "@/components/patterns/BackgroundArt";
 import { readPrefs, DEFAULT_PREFS, type AtlasPrefs } from "@/components/SettingsDrawer";
 import { ATLAS_HOOK, ATLAS_SUBHOOK } from "@/lib/copy";
