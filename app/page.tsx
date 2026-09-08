@@ -564,38 +564,17 @@ export default function HomePage() {
         </header>
 
       {/* Center stage */}
-      {/* Sep 2026 MVP — Ndebele hero wrapper. Full-bleed top-to-bottom
-          gradient (orange → green) with all four corner motifs anchored
-          to their corners. The gradient is at 8-12% opacity so it
-          reads as a wash, not a paint job. */}
+      {/* Sep 2026 MVP — minimal Ndebele wrapper. Dark page dominates;
+          small discrete motifs float in corners/edges as accents
+          (inspired by the SAFAI reference: patterns as decoration,
+          not wallpaper). */}
       <div className="relative flex flex-1 flex-col items-center justify-center overflow-hidden bg-atlas-bg px-6">
-        {/* Top-to-bottom orange→green gradient wash */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0"
-          style={{
-            background:
-              "linear-gradient(180deg, rgba(234,122,31,0.18) 0%, rgba(234,122,31,0.06) 20%, rgba(63,141,78,0.06) 80%, rgba(63,141,78,0.18) 100%)",
-          }}
-        />
-        {/* Diagonal accent — a faint orange→green streak across the centre */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0"
-          style={{
-            background:
-              "linear-gradient(135deg, rgba(234,122,31,0.10) 0%, transparent 30%, transparent 70%, rgba(63,141,78,0.10) 100%)",
-          }}
-        />
-        {/* Subtle zig-zag pattern overlay at 5% opacity */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 bg-pattern-zigzag-duo opacity-[0.05]"
-        />
-        {/* Four corner motifs — bigger and more visible than v1 */}
-        <NdebeleCorners which={["top-left", "top-right", "bottom-left", "bottom-right"]} size={260} opacity={0.28} />
-        {/* Side zig-zag strips */}
-        <NdebeleCorners which={["left", "right"]} size={140} opacity={0.22} />
+        {/* Four SMALL corner motifs — ~110px, accent-only. Top-left orange
+            triangle, top-right green zigzag, bottom-left orange stepped,
+            bottom-right green diamonds. */}
+        <NdebeleCorners which={["top-left", "top-right", "bottom-left", "bottom-right"]} size={110} opacity={0.32} />
+        {/* Left/right side motifs — vertical zigzag strips */}
+        <NdebeleCorners which={["left", "right"]} size={70} opacity={0.26} />
           {loading ? (
             showThinkingLoader ? (
               <ChatGPTThinking
