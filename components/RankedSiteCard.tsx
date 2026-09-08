@@ -202,10 +202,10 @@ export function RankedSiteCard({
 
   return (
     <li
-      className={`overflow-hidden rounded-lg border bg-atlas-surface transition-colors ${
+      className={`overflow-hidden rounded-lg border bg-atlas-surface/40 backdrop-blur-md backdrop-saturate-150 transition-colors ${
         expanded
-          ? "border-atlas-accent"
-          : "border-atlas-border hover:border-atlas-accent/50"
+          ? "border-atlas-accent shadow-lg shadow-atlas-accent/10"
+          : "border-white/10 hover:border-atlas-accent/50"
       }`}
     >
       <button
