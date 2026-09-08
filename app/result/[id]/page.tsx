@@ -14,6 +14,7 @@ import { ListingsOverlay } from "@/components/ListingsOverlay";
 import { ResultChatPanel } from "@/components/ResultChatPanel";
 import { ResultChatButton } from "@/components/ResultChatButton";
 import { DuoZigzagPattern, TrianglePattern } from "@/components/patterns/NdebelePatterns";
+import { NdebeleCorners, NdebeleGradientStrip } from "@/components/patterns/NdebeleCorners";
 import { ResultExportButton } from "@/components/ResultExportButton";
 import { ShareButton } from "@/components/ShareButton";
 import { detectCity } from "@/lib/stub/detect";
@@ -581,8 +582,39 @@ export default async function ResultPage({
 
   return (
     <AppShell>
+      {/* Sep 2026 MVP — full-bleed top-to-bottom gradient + corner
+          patterns behind the result content. The patterns sit at 22%
+          opacity and the gradient at 8-15%, so the data still
+          dominates visually but the motifs frame it. */}
+      <div className="relative -mx-4 sm:-mx-6 lg:-mx-8 -mt-4 sm:-mt-6 lg:-mt-8 mb-2 overflow-hidden">
+        {/* Top-to-bottom orange→green gradient wash */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              "linear-gradient(180deg, rgba(234,122,31,0.18) 0%, rgba(234,122,31,0.04) 18%, rgba(63,141,78,0.04) 82%, rgba(63,141,78,0.18) 100%)",
+          }}
+        />
+        {/* Diagonal accent */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              "linear-gradient(135deg, rgba(234,122,31,0.08) 0%, transparent 30%, transparent 70%, rgba(63,141,78,0.08) 100%)",
+          }}
+        />
+        {/* Subtle zig-zag overlay */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 bg-pattern-zigzag-duo opacity-[0.04]"
+        />
+        {/* Four corner motifs */}
+        <NdebeleCorners which={["top-left", "top-right", "bottom-left", "bottom-right"]} size={220} opacity={0.22} />
+      </div>
       {/* Sep 2026 MVP — Ndebele zigzag strip. Subtle orange+green accent
-         that immediately signals "Atlas" without text. */}
+          that immediately signals "Atlas" without text. */}
       <div
         className="h-2 w-full bg-pattern-zigzag-duo"
         aria-hidden
