@@ -14,6 +14,7 @@ import { suggestVertical } from "@/components/VerticalMismatchModal";
 import { AuthGateModal } from "@/components/AuthGateModal";
 import { QuestionGallery } from "@/components/QuestionGallery";
 import { BackgroundArt } from "@/components/patterns/BackgroundArt";
+import { TypewriterMoat } from "@/components/TypewriterMoat";
 import { readPrefs, DEFAULT_PREFS, type AtlasPrefs } from "@/components/SettingsDrawer";
 import { ATLAS_HOOK, ATLAS_SUBHOOK } from "@/lib/copy";
 
@@ -613,9 +614,7 @@ export default function HomePage() {
               <h1 className="font-display mb-3 text-5xl font-semibold leading-[1.05] tracking-tight text-atlas-text sm:text-6xl md:text-7xl lg:text-[5.5rem]">
                 Hi {firstName}, I&apos;m Atlas.
               </h1>
-              <p className="text-lg text-atlas-muted sm:text-xl">
-                An AI Operating System for builders and investors.
-              </p>
+              <TypewriterMoat />
             </div>
 
             <form onSubmit={onSubmit} className="relative w-full max-w-2xl">
