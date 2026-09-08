@@ -567,7 +567,7 @@ export default function HomePage() {
           dominates. Patterns are placed deliberately as accents in
           the corners and edges (like the reference). The title uses
           Space Grotesk at portfolio-grade scale. */}
-      <div className="relative flex flex-1 flex-col items-center justify-center overflow-hidden bg-atlas-bg px-6">
+      <div className="relative flex flex-1 flex-col items-center justify-center overflow-y-auto bg-atlas-bg px-6">
         {/* Fixed background art layer — corner motifs + side strips +
             grain glow. Pinned to the viewport, so the motifs feel
             like they're part of the page chrome rather than the

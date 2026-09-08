@@ -1,28 +1,25 @@
 "use client";
 
 /**
- * Atlas — question gallery.
+ * Atlas — sample questions dropdown.
  *
- * Replaces the old four sample chips under the command bar. Those
- * chips mixed cities across three countries (Lusaka, Nairobi,
- * Sandton) which taught new users the wrong thing about what Atlas
- * covers today: South Africa.
+ * Replaces the always-visible chips. Click "View samples" to open
+ * a scrollable, vertically-laid-out dropdown with 20 hand-written
+ * SA prompts grouped by vertical. Clicking a sample fills the
+ * command bar AND sets the matching vertical.
  *
- * The gallery is 20 hand-written, SA-only prompts grouped by
- * vertical. Clicking one fills the command bar AND sets the matching
- * vertical, so the very first question a new user asks is already a
- * well-formed one — the fastest path to a good first answer.
- *
- * Each section scrolls horizontally so the whole gallery stays
- * short (5 rows) no matter how many prompts we add later.
+ * Scroll behavior: when the dropdown is open the page can scroll
+ * normally (so users can see the rest of the page), and the
+ * dropdown itself has its own internal scroll for samples that
+ * don't fit in the viewport.
  */
+
+import * as React from "react";
 
 export type GalleryPick = { question: string; vertical: string };
 
 type GallerySection = {
-  /** Human label for the section header. */
   label: string;
-  /** Vertical token sent to /api/ask (built-in or `custom:...`). */
   vertical: string;
   questions: string[];
 };
@@ -85,45 +82,94 @@ export function QuestionGallery({
 }: {
   onPick: (pick: GalleryPick) => void;
 }) {
+  const [open, setOpen] = React.useState(false);
+
+  // Close on Escape
+  React.useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open]);
+
   return (
-    <div className="mt-5 w-full">
-      <div className="mb-3 text-center text-[11px] font-semibold uppercase tracking-wider text-atlas-muted">
-        Start with a real South African question
+    <div className="relative w-full">
+      {/* Trigger button — centered, orange pill */}
+      <div className="flex justify-center">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+          className={`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[11px] font-medium uppercase tracking-wider transition-colors ${
+            open
+              ? "border-atlas-accent bg-atlas-accent/15 text-atlas-accent"
+              : "border-atlas-border bg-atlas-surface/40 text-atlas-muted hover:border-atlas-accent hover:text-atlas-text"
+          }`}
+          data-testid="atlas-samples-toggle"
+        >
+          <span>{open ? "Hide samples" : "View samples"}</span>
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={`transition-transform ${open ? "rotate-180" : ""}`}
+          >
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </button>
       </div>
 
-      <div className="flex flex-col gap-3">
-        {SECTIONS.map((section) => (
-          <section key={section.vertical}>
-            <div className="mb-1.5 flex items-center gap-2">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-atlas-muted">
-                {section.label}
-              </span>
-              <span className="rounded-full border border-atlas-border px-1.5 text-[9px] font-semibold text-atlas-muted">
-                {section.questions.length}
-              </span>
-              <span className="h-px flex-1 bg-atlas-border/50" />
-            </div>
+      {/* Dropdown — opens below the trigger, scrollable */}
+      {open && (
+        <div
+          className="mt-3 max-h-[min(420px,calc(100vh-280px))] overflow-y-auto rounded-lg border border-atlas-border/60 bg-atlas-surface/85 backdrop-blur-xl backdrop-saturate-150 p-4 shadow-2xl shadow-black/50"
+          data-testid="atlas-samples-dropdown"
+        >
+          <div className="mb-3 text-center text-[10px] font-semibold uppercase tracking-wider text-atlas-muted">
+            Pick a South African question to start
+          </div>
 
-            {/* Horizontal scroller — no wrapping, so each vertical
-                stays exactly one row tall. */}
-            <div className="atlas-gallery-row -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
-              {section.questions.map((q) => (
-                <button
-                  key={q}
-                  type="button"
-                  onClick={() =>
-                    onPick({ question: q, vertical: section.vertical })
-                  }
-                  title={q}
-                  className="shrink-0 whitespace-nowrap rounded-full border border-atlas-border bg-atlas-surface px-3.5 py-2 text-xs text-atlas-muted transition-colors hover:border-atlas-accent hover:text-atlas-text"
-                >
-                  {q}
-                </button>
-              ))}
-            </div>
-          </section>
-        ))}
-      </div>
+          <div className="space-y-4">
+            {SECTIONS.map((section) => (
+              <section key={section.vertical}>
+                <div className="mb-1.5 flex items-center gap-2">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-atlas-muted">
+                    {section.label}
+                  </span>
+                  <span className="rounded-full border border-atlas-border px-1.5 text-[9px] font-semibold text-atlas-muted">
+                    {section.questions.length}
+                  </span>
+                  <span className="h-px flex-1 bg-atlas-border/50" />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  {section.questions.map((q) => (
+                    <button
+                      key={q}
+                      type="button"
+                      onClick={() => {
+                        onPick({ question: q, vertical: section.vertical });
+                        setOpen(false);
+                      }}
+                      title={q}
+                      className="w-full rounded border border-transparent px-3 py-2 text-left text-xs text-atlas-muted transition-colors hover:border-atlas-accent/40 hover:bg-atlas-accent/5 hover:text-atlas-text"
+                    >
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
