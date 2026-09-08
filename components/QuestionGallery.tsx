@@ -115,7 +115,7 @@ export function QuestionGallery({
                     onPick({ question: q, vertical: section.vertical })
                   }
                   title={q}
-                  className="shrink-0 whitespace-nowrap rounded-full border border-atlas-border bg-atlas-surface px-3.5 py-2 text-xs text-atlas-muted transition-colors hover:border-atlas-accent hover:bg-atlas-surface2 hover:text-atlas-text"
+                  className="shrink-0 whitespace-nowrap rounded-full border border-white/10 bg-atlas-surface/40 backdrop-blur-md backdrop-saturate-150 px-3.5 py-2 text-xs text-atlas-muted transition-colors hover:border-atlas-accent hover:bg-atlas-accent/15 hover:text-atlas-text"
                 >
                   {q}
                 </button>

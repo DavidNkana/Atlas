@@ -593,9 +593,9 @@ export default function HomePage() {
           className="pointer-events-none absolute inset-0 bg-pattern-zigzag-duo opacity-[0.05]"
         />
         {/* Four corner motifs — bigger and more visible than v1 */}
-        <NdebeleCorners which={["top-left", "top-right", "bottom-left", "bottom-right"]} size={220} opacity={0.18} />
+        <NdebeleCorners which={["top-left", "top-right", "bottom-left", "bottom-right"]} size={260} opacity={0.28} />
         {/* Side zig-zag strips */}
-        <NdebeleCorners which={["left", "right"]} size={120} opacity={0.14} />
+        <NdebeleCorners which={["left", "right"]} size={140} opacity={0.22} />
           {loading ? (
             showThinkingLoader ? (
               <ChatGPTThinking
@@ -795,8 +795,9 @@ export default function HomePage() {
                   </div>
                 )}
 
-                {/* Command bar */}
-                <div className="rounded-xl border border-atlas-border bg-atlas-surface shadow-lg shadow-black/20 transition-colors focus-within:border-atlas-accent">
+                {/* Command bar — glassmorphic. Frosted glass with subtle
+                    backdrop blur so the patterns bleed through. */}
+                <div className="relative rounded-xl border border-white/10 bg-atlas-surface/60 backdrop-blur-xl backdrop-saturate-150 shadow-2xl shadow-black/40 transition-colors focus-within:border-atlas-accent/70 focus-within:bg-atlas-surface/70">
                   <div className="flex items-end gap-2 px-3 py-2">
                     <textarea
                       ref={inputRef}
