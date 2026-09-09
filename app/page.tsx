@@ -515,7 +515,7 @@ export default function HomePage() {
       />
 
       {/* Top bar: top-right links */}
-      <header className="flex items-center justify-between gap-3 px-6 py-3 text-xs text-atlas-muted">
+      <header className="relative z-10 flex items-center justify-between gap-3 border-b border-white/10 bg-atlas-surface/75 px-6 py-3 text-xs text-atlas-muted shadow-[0_8px_24px_rgba(0,0,0,0.18)] backdrop-blur-[18px] backdrop-saturate-[140%]">
           <div className="flex items-center gap-3">
             {/* Explore Crypto button removed */}
           </div>
