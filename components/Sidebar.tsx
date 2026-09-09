@@ -200,13 +200,13 @@ export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boole
   return (
     <>
       <aside
-        className={`${w} flex h-screen shrink-0 flex-col border-r border-atlas-border bg-atlas-surface transition-[width] duration-200`}
+        className={`${w} relative z-10 flex h-screen shrink-0 flex-col border-r border-atlas-border bg-atlas-surface transition-[width] duration-200`}
       >
         {/* Top: logo + collapse toggle */}
         <div className="flex items-center justify-between gap-2 px-3 py-3">
           <Link
             href="/"
-            className="flex items-center gap-2 overflow-hidden"
+            className="relative z-10 flex items-center gap-2 overflow-hidden"
             title="Go to home"
           >
             <AtlasLogo size={28} className="shrink-0" />

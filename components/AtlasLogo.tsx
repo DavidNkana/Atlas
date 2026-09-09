@@ -3,8 +3,8 @@
 /**
  * Atlas — brand mark.
  *
- * Uses AI.png with a blue rounded background for visibility
- * in both light and dark modes.
+ * Uses the transparent AI.png brand mark so the logo stays readable
+ * without a colored tile in either theme.
  */
 export function AtlasLogo({
   size = 28,
@@ -15,7 +15,7 @@ export function AtlasLogo({
 }) {
   return (
     <div
-      className={`flex items-center justify-center rounded-lg bg-[#4F46E5] ${className}`}
+      className={`relative z-10 flex items-center justify-center ${className}`}
       style={{ width: size, height: size }}
     >
       <img
@@ -23,7 +23,7 @@ export function AtlasLogo({
         alt="Atlas"
         width={size - 8}
         height={size - 8}
-        className="object-contain"
+        className="atlas-logo-mark object-contain"
       />
     </div>
   );
