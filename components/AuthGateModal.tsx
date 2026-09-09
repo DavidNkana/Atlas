@@ -30,6 +30,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 export function AuthGateModal({
   open,
@@ -145,12 +146,12 @@ export function AuthGateModal({
           Create a free account to keep asking — unlimited questions,
           plus your history, saved sites and exports. Already have
           one?{" "}
-          <a
-            href="/sign-in"
+            <Link
+              href="/sign-in"
             className="font-medium text-atlas-accent hover:underline"
           >
             Sign in
-          </a>
+            </Link>
           .
         </p>
 

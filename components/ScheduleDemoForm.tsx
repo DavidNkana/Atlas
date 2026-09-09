@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 
 /**
  * Day 13 — Schedule Demo form.
@@ -68,12 +69,12 @@ export function ScheduleDemoForm() {
           Your demo request is in. David will email you within 1
           business day to schedule a 30-minute call. In the
           meantime, try the live Atlas at{" "}
-          <a
+          <Link
             href="/"
             className="underline underline-offset-2 hover:text-emerald-100"
           >
             atlas-q2eh.vercel.app
-          </a>
+          </Link>
           .
         </p>
       </div>

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useUser } from "@clerk/nextjs";
 import { MODEL_INFO } from "@/lib/models/registry";
 import type { ModelInfo } from "@/lib/models/types";
@@ -519,17 +520,17 @@ export default function HomePage() {
             {/* Explore Crypto button removed */}
           </div>
           <div className="flex items-center gap-3">
-            <a href="/demo" className="hover:text-atlas-accent">
+             <Link href="/demo" className="hover:text-atlas-accent">
               Demo
-            </a>
-            <a href="/news" className="hover:text-atlas-accent">News</a>
-            <a href="/pricing" className="hover:text-atlas-accent">
+            </Link>
+            <Link href="/news" className="hover:text-atlas-accent">News</Link>
+            <Link href="/pricing" className="hover:text-atlas-accent">
               Pricing
-            </a>
-            <a href="/investors" className="hover:text-atlas-accent">
+            </Link>
+            <Link href="/investors" className="hover:text-atlas-accent">
               Investors
-            </a>
-            <a
+            </Link>
+            <Link
               href="/calculator"
               className="inline-flex items-center gap-1.5 rounded-full border border-transparent bg-atlas-accent px-2.5 py-1 font-medium text-white shadow-[0_2px_8px_rgba(234,122,31,0.25)] transition-colors hover:bg-atlas-accent2"
               title="Free property investment calculator — Bond, Buy-to-Let, ROI, Transfer Costs"
@@ -558,7 +559,7 @@ export default function HomePage() {
                 <line x1="15" y1="17" x2="16" y2="17" />
               </svg>
               Calculator
-            </a>
+            </Link>
           </div>
         </header>
 
@@ -960,9 +961,9 @@ export default function HomePage() {
                   <div className="mt-2 flex justify-center">
                     <span className="rounded-full border border-atlas-border bg-atlas-surface px-2.5 py-0.5 text-[10px] text-atlas-muted">
                       1 of 1 free questions used ·{" "}
-                      <a href="/sign-up" className="text-atlas-accent hover:underline">
+                      <Link href="/sign-up" className="text-atlas-accent hover:underline">
                         create a free account
-                      </a>
+                      </Link>
                     </span>
                   </div>
                 )}

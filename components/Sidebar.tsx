@@ -6,7 +6,7 @@
  * Perplexity-style left rail:
  *   - Atlas logo + tagline (collapses to logo only)
  *   - "+ New" button (clears input + scrolls to top)
- *   - History list — last 20 questions, scrollable
+ *   - Sessions list — last 20 questions, scrollable
  *   - Settings button (opens SettingsDrawer for theme + default model)
  *   - User avatar + name at the bottom (Clerk UserButton on hover)
  *
@@ -85,7 +85,7 @@ function truncate(s: string, n: number): string {
 
 // Day 12 v7: enforce the new sidebar layout rules.
 //   - Pinned: max 4 items, always visible, no inner scroll.
-//   - History: max 20 items, scrollable in its own area below pinned.
+//   - Sessions: max 20 items, scrollable in its own area below pinned.
 //   - Active result: the row whose id matches the current URL
 //     /result/[id] is highlighted with a left accent bar and
 //     distinct background so the user always knows which result
@@ -106,6 +106,8 @@ export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boole
   // Local-only for v1; Day 30+ will move to a server-side DELETE.
   const [hiddenIds, setHiddenIds] = useState<string[]>([]);
   const pins = usePins(user?.id ?? null);
+  // Derive the active question id from result, chat, or dashboard detail URLs.
+  const activeId = pathname?.match(/^\/(?:result|chat|dashboard)\/([^/]+)/)?.[1] ?? null;
 
   // Restore collapsed preference from localStorage
   useEffect(() => {
@@ -146,7 +148,7 @@ export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boole
     }
   }, [prefs]);
 
-  // Fetch last 20 questions for the history list. Re-fetches when:
+  // Fetch last 20 questions for the sessions list. Re-fetches when:
   //   - User signs in (isLoaded + user change)
   //   - User navigates to a different page (pathname change)
   //   - atlas:history-changed event fires (new question created)
@@ -157,7 +159,10 @@ export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boole
     let cancelled = false;
     async function load() {
       try {
-        const res = await fetch("/api/history", { cache: "no-store" });
+        const historyUrl = activeId
+          ? `/api/history?active=${encodeURIComponent(activeId)}`
+          : "/api/history";
+        const res = await fetch(historyUrl, { cache: "no-store" });
         if (!res.ok) return;
         const data = await res.json();
         if (!cancelled && Array.isArray(data.items)) {
@@ -193,16 +198,7 @@ export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boole
         window.removeEventListener("atlas:history-changed", onHistoryChanged);
       }
     };
-  }, [isLoaded, user, hiddenIds, pathname]);
-
-  // Day 12 v7: derive the active question id from the current URL.
-  // /result/<id> → that id is active. Anything else → no active item.
-  // The active item gets a left accent bar + distinct background so
-  // the user can see at a glance which result they're on.
-  const activeId =
-    pathname && pathname.startsWith("/result/")
-      ? pathname.split("/")[2] ?? null
-      : null;
+  }, [isLoaded, user, hiddenIds, pathname, activeId]);
 
   // The compact rail remains wide enough for icon rows and their
   // focus/hover cards; the expand button still provides the obvious toggle.
@@ -269,11 +265,11 @@ export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boole
           </Link>
         </div>
 
-        {/* Day 12 v7: Pinned (max 4) + History (max 20) split.
+        {/* Day 12 v7: Pinned (max 4) + Sessions (max 20) split.
            - Pinned is rendered in its own area, NO inner scroll.
              The 4 pinned items are always fully visible so the
              user can see their most important results at a glance.
-           - History is rendered BELOW pinned in its own area
+           - Sessions is rendered BELOW pinned in its own area
              with its own scroll. Max 20 items, scrollable.
            - Each row is highlighted with a left accent bar
              when the current URL matches /result/[id].
@@ -329,17 +325,17 @@ export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boole
             </div>
           </div>
 
-          {/* Divider between Pinned and History */}
+          {/* Divider between Pinned and Sessions */}
           {!collapsed && pins.pinned.length > 0 && (
             <div className="my-3 border-t border-atlas-border" />
           )}
 
-          {/* History section — scrollable, max 20 */}
+          {/* Sessions section — scrollable, max 20 */}
           <div className="flex min-h-0 flex-1 flex-col">
             {!collapsed && (
               <div className="mb-2 flex shrink-0 items-center justify-between">
                 <span className="text-[10px] font-semibold uppercase tracking-wider text-atlas-muted">
-                  History
+                  Sessions
                 </span>
                 <Link
                   href="/dashboard"
@@ -358,14 +354,9 @@ export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boole
                 // would NOT appear in the visible top-N (e.g. it's older
                 // than MAX_HISTORY items), force it to the top so the user
                 // always sees "which result am I on" with no scrolling.
-                const activeVisible =
-                  activeId &&
-                  unpinnedAll.some((h) => h.id === activeId);
-                const pinnedTop = activeVisible
-                  ? []
-                  : activeId
-                    ? unpinnedAll.filter((h) => h.id === activeId)
-                    : [];
+                const pinnedTop = activeId
+                  ? unpinnedAll.filter((h) => h.id === activeId)
+                  : [];
                 const fill = unpinnedAll.filter((h) => h.id !== activeId);
                 const unpinned = [...pinnedTop, ...fill].slice(0, MAX_HISTORY);
                 if (unpinned.length === 0 && !collapsed) {
@@ -498,7 +489,7 @@ export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boole
         title="Delete this question?"
         body={
           deleteTarget
-            ? `This will permanently remove "${truncate(deleteTarget.questionText, 60)}" from your history. This cannot be undone.`
+            ? `This will permanently remove "${truncate(deleteTarget.questionText, 60)}" from your sessions. This cannot be undone.`
             : ""
         }
         confirmLabel="Delete"
@@ -628,7 +619,7 @@ function HistoryRow({
 
     const reposition = () => updateInfoPosition();
     window.addEventListener("resize", reposition);
-    // Capture scroll events from the History container as its rows move.
+    // Capture scroll events from the Sessions container as its rows move.
     window.addEventListener("scroll", reposition, true);
     return () => {
       window.removeEventListener("resize", reposition);
@@ -668,7 +659,6 @@ function HistoryRow({
       <button
         type="button"
         onClick={onNavigate}
-        title={item.questionText}
         aria-describedby={`history-info-${item.id}`}
         className="flex min-w-0 flex-1 items-start gap-2 text-left"
       >
@@ -761,8 +751,8 @@ function HistoryRow({
               e.stopPropagation();
               onRequestDelete();
             }}
-            title="Delete from history"
-            aria-label="Delete from history"
+            title="Delete from sessions"
+            aria-label="Delete from sessions"
             className="rounded p-1 text-atlas-muted transition-colors hover:bg-atlas-surface2 hover:text-red-300"
           >
             <svg

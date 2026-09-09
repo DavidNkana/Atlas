@@ -12,13 +12,14 @@ import { prisma } from "@/lib/db";
  * If the user is not signed in, returns { items: [] } so the sidebar
  * just shows an empty state without redirecting.
  */
-export async function GET() {
+export async function GET(request: Request) {
   const { userId } = await auth();
   if (!userId) {
     return NextResponse.json({ items: [] });
   }
 
   try {
+    const activeId = new URL(request.url).searchParams.get("active");
     const rows = await prisma.question.findMany({
       where: { userId },
       orderBy: { createdAt: "desc" },
@@ -31,6 +32,20 @@ export async function GET() {
         responseJson: true,
       },
     });
+    if (activeId && !rows.some((row) => row.id === activeId)) {
+      const active = await prisma.question.findFirst({
+        where: { id: activeId, userId },
+        select: {
+          id: true,
+          questionText: true,
+          vertical: true,
+          createdAt: true,
+          responseJson: true,
+        },
+      });
+      if (active) rows.push(active);
+    }
+
     return NextResponse.json({
       items: rows.map((r) => {
         const response = r.responseJson as {

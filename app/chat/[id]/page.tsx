@@ -106,12 +106,12 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     <div className="min-h-screen bg-atlas-bg p-6 text-atlas-text">
       <div className="mx-auto max-w-3xl space-y-6">
         <div className="flex items-baseline justify-between">
-          <a
+          <Link
             href={chatId ? `/result/${chatId}` : "/dashboard"}
             className="text-xs text-atlas-muted hover:text-atlas-accent"
           >
             ← Switch to map view
-          </a>
+          </Link>
           <span className="rounded-full border border-atlas-border bg-atlas-surface px-2 py-0.5 text-[10px] uppercase tracking-wider text-atlas-muted">
             {data.primaryEngine.replace(/_/g, " ")}
           </span>

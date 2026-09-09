@@ -1,5 +1,6 @@
 import { AppShell } from "@/components/AppShell";
 import { ScheduleDemoForm } from "@/components/ScheduleDemoForm";
+import Link from "next/link";
 
 /**
  * Day 7: /demo — investor-facing page.
@@ -27,23 +28,23 @@ export default function DemoPage() {
       <div className="px-6 py-12 sm:px-8">
       <header className="mb-12 flex items-center justify-between border-b border-atlas-border pb-4">
         <h1 className="text-xl font-semibold tracking-tight">
-          <a href="/" className="text-atlas-accent">
+          <Link href="/" className="text-atlas-accent">
             Atlas
-          </a>{" "}
+          </Link>{" "}
           <span className="text-atlas-muted text-sm font-normal">
             For investors
           </span>
         </h1>
         <nav className="flex items-center gap-3 text-xs">
-          <a href="/land" className="text-atlas-muted hover:text-atlas-accent">
+          <Link href="/land" className="text-atlas-muted hover:text-atlas-accent">
             Land
-          </a>
-          <a
+          </Link>
+          <Link
             href="/dashboard"
             className="text-atlas-muted hover:text-atlas-accent"
           >
             Dashboard
-          </a>
+          </Link>
         </nav>
       </header>
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useUser } from "@clerk/nextjs";
+import Link from "next/link";
 
 type PayfastTestResponse = {
   timestamp: string;
@@ -78,12 +79,12 @@ export default function PayfastTestPage() {
     <div className="min-h-screen bg-atlas-bg p-6 text-atlas-text">
       <div className="mx-auto max-w-3xl space-y-6">
         <div>
-          <a
+          <Link
             href="/admin"
             className="text-xs text-atlas-muted hover:text-atlas-accent"
           >
             ← back to /admin
-          </a>
+          </Link>
           <h1 className="mt-2 text-2xl font-semibold">PayFast wiring check</h1>
           <p className="mt-1 text-sm text-atlas-muted">
             Verifies the env vars + signature builder end-to-end without

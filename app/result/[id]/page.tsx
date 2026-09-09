@@ -648,12 +648,12 @@ export default async function ResultPage({
                 suburb: (s as any).suburb,
               }))}
             />
-            <a
+            <Link
               href="/"
               className="rounded-md border border-atlas-border bg-atlas-surface px-3 py-1.5 text-xs font-medium text-atlas-text transition-colors hover:border-atlas-accent"
             >
               ← New
-            </a>
+            </Link>
           </div>
         </header>
 

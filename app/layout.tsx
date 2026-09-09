@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
-import { NavigationLoader } from "@/components/NavigationLoader";
 import { ThemeBootstrapper } from "@/components/ThemeBootstrapper";
 import "./globals.css";
 
@@ -45,7 +44,6 @@ export default function RootLayout({
         </head>
         <body className="min-h-screen bg-atlas-bg text-atlas-text font-sans antialiased">
           <ThemeBootstrapper />
-          <NavigationLoader />
           {children}
         </body>
       </html>
