@@ -81,6 +81,7 @@ export function QuestionGallery({
   onPick: (pick: GalleryPick) => void;
 }) {
   const [open, setOpen] = React.useState(false);
+  const galleryRef = React.useRef<HTMLDivElement>(null);
 
   // Close on Escape
   React.useEffect(() => {
@@ -92,8 +93,18 @@ export function QuestionGallery({
     return () => document.removeEventListener("keydown", onKey);
   }, [open]);
 
+  // Close when clicking outside the trigger and dropdown
+  React.useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (!galleryRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [open]);
+
   return (
-    <div className="relative mt-4 w-full sm:mt-5">
+    <div ref={galleryRef} className="relative mt-4 w-full sm:mt-5">
       {/* Trigger button — centered, orange pill */}
       <div className="flex justify-center">
         <button
