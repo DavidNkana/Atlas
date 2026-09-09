@@ -12,6 +12,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
+    "test:reliability": "tsx scripts/reliability-check.ts",
     "postinstall": "prisma generate",
     "migrate:waitlist": "tsx scripts/migrate-waitlist.ts",
     "migrate:rating": "tsx scripts/migrate-rating.ts",

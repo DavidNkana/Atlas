@@ -7,6 +7,7 @@ import { curatedStub, type StubPayload } from "@/lib/models/stub";
 import type { Vertical, ModelInfo } from "@/lib/models/types";
 import { getConnector } from "@/lib/connectors/registry";
 import type { Signal } from "@/lib/connectors/types";
+import { metadataForSource } from "@/lib/connectors/provenance";
 import { combine } from "@/lib/scoring/engine";
 import type { ScoreBreakdown } from "@/lib/scoring/types";
 import { buildPlan } from "@/lib/plan/planner";
@@ -177,6 +178,7 @@ type AskRequest = {
 };
 
 type RankedSite = {
+  id?: string;
   rank: number;
   name: string;
   score: number;
@@ -844,8 +846,9 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
       const location = deriveLocation(rankedSites);
       const builtPlan: Plan = buildPlan(effectiveVertical, location, rankedSites);
 
-      // Run every plan step. We map index → site.id so we can rebuild
-      // signalsForSite[siteId] without re-reading the plan.
+      // Run every plan step. Each step carries its explicit site owner; the
+      // flat step index is not a site index because there are many connectors
+      // per site.
       const stepResults = await Promise.allSettled(
         builtPlan.steps.map((step) => {
           const skip = step.input.__skip === true;
@@ -854,9 +857,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
             return Promise.resolve<Signal[]>([]);
           }
           const connector = getConnector(step.connectorId);
-          // Find the site the step is for. The planner always emits one step
-          // per site, in the same order, so we can use the step index.
-          const site = rankedSites[builtPlan.steps.indexOf(step)];
+          const site = rankedSites[step.siteIndex];
           if (!site) {
             return Promise.resolve<Signal[]>([]);
           }
@@ -864,7 +865,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
             vertical: effectiveVertical,
             location,
             site: {
-              id: String(site.rank),
+              id: step.siteId,
               name: site.name,
               lat: site.lat ?? location.lat,
               lng: site.lng ?? location.lng,
@@ -874,22 +875,27 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
         }),
       );
 
-      // Bucket signals per siteId (which is the site rank as a string).
+      // Bucket signals by the explicit site id on the step. This prevents a
+      // connector's result from leaking into another site's evidence.
       const signalsBySite: Record<string, Signal[]> = {};
       builtPlan.steps.forEach((step, i) => {
-        const siteId = String(rankedSites[i]?.rank ?? i);
+        const siteId = step.siteId;
         const settled = stepResults[i];
         if (settled && settled.status === "fulfilled") {
-          signalsBySite[siteId] = settled.value ?? [];
+          const siteSignals = (settled.value ?? []).map((signal) => ({
+            ...signal,
+            ...metadataForSource(signal.source),
+          }));
+          signalsBySite[siteId] = (signalsBySite[siteId] ?? []).concat(siteSignals);
         } else {
-          signalsBySite[siteId] = [];
+          signalsBySite[siteId] = signalsBySite[siteId] ?? [];
         }
       });
 
       // Per-connector status — today we only have one connector ("overpass")
       // but we aggregate across all sites for the response.
       const signalsByConnector: Record<string, Signal[]> = {};
-      let anyConnectorFailed = false;
+      const connectorFailures = new Set<string>();
       for (let i = 0; i < builtPlan.steps.length; i += 1) {
         const step = builtPlan.steps[i];
         const settled = stepResults[i];
@@ -901,27 +907,31 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
         signalsByConnector[step.connectorId] =
           signalsByConnector[step.connectorId].concat(sigs);
         if (settled.status === "rejected") {
-          anyConnectorFailed = true;
+          connectorFailures.add(step.connectorId);
         }
       }
 
-      connectorsRun = Object.entries(
-        signalsByConnector,
-      ).map(([id, sigs]) => ({
-        id,
-        status: sigs.length === 0 && anyConnectorFailed ? ("error" as const) : ("ok" as const),
-        signalCount: sigs.length,
-        // Sep 2026 MVP: surface freshness so the UI can show
-        // "live just now" / "stale (last fetched Nh ago)".
-        fetchedAt:
-          sigs.length > 0
-            ? sigs.reduce(
-                (latest, s) =>
-                  s.fetchedAt > latest ? s.fetchedAt : latest,
-                sigs[0].fetchedAt,
-              )
-            : undefined,
-      }));
+      connectorsRun = builtPlan.steps
+        .map((step) => step.connectorId)
+        .filter((id, i, ids) => ids.indexOf(id) === i)
+        .map((id) => {
+          const sigs = signalsByConnector[id] ?? [];
+          return {
+            id,
+            status: connectorFailures.has(id) ? ("error" as const) : ("ok" as const),
+            signalCount: sigs.length,
+            // Sep 2026 MVP: surface freshness so the UI can show
+            // "live just now" / "stale (last fetched Nh ago)".
+            fetchedAt:
+              sigs.length > 0
+                ? sigs.reduce(
+                    (latest, s) =>
+                      s.fetchedAt > latest ? s.fetchedAt : latest,
+                    sigs[0].fetchedAt,
+                  )
+                : undefined,
+          };
+        });
 
       // Apply scoring engine to every site.
       //
@@ -942,7 +952,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
       //   1-2 sources:           0.65 multiplier
       //   0 sources:             confidence capped at 0.4
       for (const site of rankedSites) {
-        const siteId = String(site.rank);
+        const siteId = String(site.id ?? site.rank);
         const signals = signalsBySite[siteId] ?? [];
         const breakdown = combine(
           { id: siteId, score: site.score },
@@ -992,6 +1002,8 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
               value: s.medianIncome,
               weight: Math.min(1, s.medianIncome / (1_000_000 / 12)),
               fetchedAt: new Date().toISOString(),
+              provenance: "Synthetic/Heuristic",
+              sourceVintage: "REAL_SITE_CATALOG fallback",
             });
           }
           if (s.arterial) {
@@ -1003,7 +1015,9 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
               label: `Arterial: ${s.arterial}${s.nearestHighwayKm ? ` (${s.nearestHighwayKm}km to highway)` : ""}`,
               value: s.nearestHighwayKm ? Math.max(0, 1 - s.nearestHighwayKm / 20) : 0.7,
               weight: s.nearestHighwayKm ? Math.max(0, 1 - s.nearestHighwayKm / 20) : 0.7,
-              fetchedAt: new Date().toISOString(),
+               fetchedAt: new Date().toISOString(),
+               provenance: "Synthetic/Heuristic",
+               sourceVintage: "REAL_SITE_CATALOG fallback",
             });
           }
           if (s.priceRange) {
@@ -1015,7 +1029,9 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
               label: `Land price: ${s.priceRange}`,
               value: 0.6,
               weight: 0.6,
-              fetchedAt: new Date().toISOString(),
+               fetchedAt: new Date().toISOString(),
+               provenance: "Synthetic/Heuristic",
+               sourceVintage: "REAL_SITE_CATALOG fallback",
             });
           }
           if (s.plotSizeHectares) {
@@ -1027,7 +1043,9 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
               label: `Plot size: ${s.plotSizeHectares}ha`,
               value: s.plotSizeHectares,
               weight: Math.min(1, s.plotSizeHectares / 5),
-              fetchedAt: new Date().toISOString(),
+               fetchedAt: new Date().toISOString(),
+               provenance: "Synthetic/Heuristic",
+               sourceVintage: "REAL_SITE_CATALOG fallback",
             });
           }
           if (s.cornerStand) {
@@ -1039,7 +1057,9 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
               label: s.facing ? `Corner stand, facing ${s.facing}` : "Corner stand",
               value: 0.75,
               weight: 0.75,
-              fetchedAt: new Date().toISOString(),
+               fetchedAt: new Date().toISOString(),
+               provenance: "Synthetic/Heuristic",
+               sourceVintage: "REAL_SITE_CATALOG fallback",
             });
           }
           if (s.competition && s.competition.length > 0) {
@@ -1051,7 +1071,9 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
               label: `${s.competition.length} nearby competitors`,
               value: s.competition.length,
               weight: Math.min(1, s.competition.length / 20),
-              fetchedAt: new Date().toISOString(),
+               fetchedAt: new Date().toISOString(),
+               provenance: "Synthetic/Heuristic",
+               sourceVintage: "REAL_SITE_CATALOG fallback",
             });
           }
         }
@@ -1326,6 +1348,13 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   }
 
   // 6. Build response body (sans id; id comes from prisma row)
+  // Final order is based on the score after connector evidence and coverage
+  // adjustments. Reassign ranks so cards, charts, maps, and exports agree.
+  rankedSites.sort((a, b) => b.score - a.score || a.rank - b.rank);
+  rankedSites.forEach((site, index) => {
+    site.rank = index + 1;
+  });
+
   //
   // Day 17 v6: add the intent classifier result so the UI can route
   // to the spatial (/result/[id]) or conversational (/chat/[id])

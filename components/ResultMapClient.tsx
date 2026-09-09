@@ -25,6 +25,7 @@ type Signal = {
   value: number;
   weight: number;
   fetchedAt: string;
+  provenance?: "Live" | "Static" | "Curated" | "Synthetic/Heuristic";
 };
 
 type ScoreFactor = {
@@ -526,6 +527,9 @@ export default function ResultMapClient({
                               className="inline-flex items-center rounded-full border border-zinc-700 bg-zinc-900 px-2 py-0.5 text-[10px] text-zinc-300"
                             >
                               {sig.label}
+                              <span className="ml-1 text-[9px] uppercase text-emerald-300">
+                                {sig.provenance ?? "Synthetic/Heuristic"}
+                              </span>
                             </span>
                           ))}
                         </span>

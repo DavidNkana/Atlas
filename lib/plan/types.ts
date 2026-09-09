@@ -21,6 +21,9 @@ import type { Vertical } from "@/lib/models/types";
  */
 export interface PlanStep {
   connectorId: string;
+  /** Explicit owner of this step; never infer this from steps[] position. */
+  siteId: string;
+  siteIndex: number;
   input: Record<string, unknown>;
   /** Short human sentence the UI can show ("fetch POI density for site 3"). */
   reason: string;

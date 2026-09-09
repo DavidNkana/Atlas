@@ -35,6 +35,8 @@ type Signal = {
   value: number;
   weight: number;
   fetchedAt: string;
+  provenance?: "Live" | "Static" | "Curated" | "Synthetic/Heuristic";
+  sourceVintage?: string;
 };
 
 type ScoreFactor = {
@@ -648,8 +650,12 @@ export function RankedSiteCard({
                         {typeLabel(s)}
                       </span>
                       <span className="text-atlas-text">{s.label}</span>
+                      <span className="rounded border border-atlas-border px-1 py-0.5 text-[9px] uppercase tracking-wide text-atlas-muted">
+                        {s.provenance ?? "Synthetic/Heuristic"}
+                      </span>
                       <span className="font-mono text-[10px] text-atlas-muted">
                         · weight {(s.weight * 100).toFixed(0)}%
+                        {s.sourceVintage ? ` · ${s.sourceVintage}` : ""}
                       </span>
                     </div>
                   </li>

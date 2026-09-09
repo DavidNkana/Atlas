@@ -115,11 +115,13 @@ export function combine(
     services_density: "amenityDensity",
     amenity_mix: "amenityDensity",
     traffic_cameras: "landuse",      // proxy for "monitored corridor"
-    traffic_alerts: "landuse",       // proxy for "currently active traffic"
+    traffic_alerts: "landuse",       // active alerts are adverse
     fuel_stations_nearby: "landuse",
     // TomTom Traffic Incidents connector
     traffic_incidents: "landuse",    // live incident density
     congestion_density: "landuse",   // jams + closures + roadworks
+    traffic_aadt: "roads",            // positive road exposure/access signal
+    arterial_access: "roads",         // positive access signal
   };
 
   // Signal types that are INVERTED — high value = BAD for the user's
@@ -128,6 +130,9 @@ export function combine(
   const INVERTED_SIGNAL_TYPES = new Set([
     "competitor_count", // too many competitors = bad
     "env_risk",         // flood/protected/hazards = bad
+    "traffic_alerts",   // active incidents/alerts are adverse
+    "traffic_incidents", // accidents and incidents are adverse
+    "congestion_density", // jams, closures and roadworks are adverse
   ]);
 
   for (const sig of signals) {

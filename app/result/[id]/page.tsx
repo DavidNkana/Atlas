@@ -21,6 +21,7 @@ import { detectCity } from "@/lib/stub/detect";
 import { REAL_SITE_CATALOG } from "@/lib/stub/real-sites";
 import { SUBURB_PROFILES } from "@/lib/demographics/suburbs";
 import { ATLAS_HOOK, ATLAS_ORIGIN } from "@/lib/copy";
+import { metadataForSource } from "@/lib/connectors/provenance";
 
 /**
  * Day 4 commit 1 + Day 5 commit 4:
@@ -142,6 +143,8 @@ type ConnectorRun = {
 
 type PlanStep = {
   connectorId: string;
+  siteId: string;
+  siteIndex: number;
   input: Record<string, unknown>;
   reason: string;
 };
@@ -207,8 +210,6 @@ function freshnessFor(
     "sa_zoning",       // Metro town-planning schemes, snapshotted
     "sa_traffic",      // SANRAL/ITP counts, annual
     "building_density", // Pre-computed OSM building counts (see sa-building-density.ts)
-    "tomtom_places",   // 5-min in-memory cache — effectively real-time but stale within the cache window
-    "tomtom_traffic",  // 5-min in-memory cache, same as tomtom_places
   ]);
   if (CATALOG_SOURCES.has(id)) return "static";
 
@@ -975,6 +976,9 @@ export default async function ResultPage({
                     )}
                     <span className={live ? "text-atlas-text" : failed ? "text-amber-400" : "text-atlas-muted"}>
                       {c.id}
+                    </span>
+                    <span className="text-[9px] uppercase text-atlas-muted">
+                      {metadataForSource(c.id).provenance}
                     </span>
                     <span className="ml-auto flex items-center gap-1 text-[10px] text-atlas-muted">
                       <span>{c.signalCount}</span>

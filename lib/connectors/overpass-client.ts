@@ -166,12 +166,16 @@ export async function overpassBatch(
       for (const el of elements) {
         if (el.type !== "count") continue;
         const q = queries[qIdx];
-        if (q) counts[q.key] = readCount(el.tags);
+         if (q) {
+           const count = readOverpassCount(el.tags);
+           if (count === null) throw new Error(`Overpass response has missing/invalid count for ${q.key}`);
+           counts[q.key] = count;
+         }
         qIdx++;
       }
-      // If we got fewer counts than queries, fill missing with 0.
+      // A missing count is an unavailable response, not a successful zero.
       for (const q of queries) {
-        if (!(q.key in counts)) counts[q.key] = 0;
+        if (!(q.key in counts)) throw new Error(`Overpass response missing count for ${q.key}`);
       }
       cache.set(key, { fetchedAt: Date.now(), counts });
       return counts;
@@ -182,16 +186,13 @@ export async function overpassBatch(
     }
   }
 
-  // All mirrors failed — return zeros rather than throw. The route
-  // marks the connectors as "error" and continues.
+  // All mirrors failed: reject so the route can preserve an error state.
   console.warn(
     `[overpass-client] all mirrors failed for ${lat},${lng}: ${
       lastError instanceof Error ? lastError.message : String(lastError)
     }`,
   );
-  const zeros: Record<string, number> = {};
-  for (const q of queries) zeros[q.key] = 0;
-  return zeros;
+  throw lastError instanceof Error ? lastError : new Error("Overpass unavailable");
 }
 
 function sleep(ms: number): Promise<void> {
@@ -207,18 +208,22 @@ function sleep(ms: number): Promise<void> {
  * back to summing the parts, then to a literal `count` key for any
  * mirror that formats differently.
  */
-function readCount(tags: Record<string, string | number> | undefined): number {
-  if (!tags) return 0;
-  const num = (v: string | number | undefined): number => {
+export function readOverpassCount(tags: Record<string, string | number> | undefined): number | null {
+  if (!tags) return null;
+  const num = (v: string | number | undefined): number | null => {
+    if (v === undefined || v === null || (typeof v === "string" && v.trim() === "")) return null;
     const n = typeof v === "number" ? v : Number(v);
-    return Number.isFinite(n) ? n : 0;
+    return Number.isFinite(n) && n >= 0 ? n : null;
   };
   if (tags.total !== undefined) return num(tags.total);
   if (tags.nodes !== undefined || tags.ways !== undefined || tags.relations !== undefined) {
-    return num(tags.nodes) + num(tags.ways) + num(tags.relations);
+    const nodes = num(tags.nodes ?? 0);
+    const ways = num(tags.ways ?? 0);
+    const relations = num(tags.relations ?? 0);
+    return nodes === null || ways === null || relations === null ? null : nodes + ways + relations;
   }
   if (tags.count !== undefined) return num(tags.count);
-  return 0;
+  return null;
 }
 
 interface OverpassElement {

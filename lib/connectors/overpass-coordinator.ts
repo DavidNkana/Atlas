@@ -136,29 +136,32 @@ export async function coordinatorFetch(
         let qIdx = 0;
         for (const el of elements) {
           if (el.type !== "count") continue;
-          let v: number | null = null;
-          if (typeof el.tags?.total === "number") v = el.tags.total;
-          else if (
-            typeof el.tags?.nodes === "number" ||
-            typeof el.tags?.ways === "number" ||
-            typeof el.tags?.relations === "number"
-          ) {
-            v =
-              Number(el.tags?.nodes ?? 0) +
-              Number(el.tags?.ways ?? 0) +
-              Number(el.tags?.relations ?? 0);
-          } else if (typeof el.tags?.count === "number") {
-            v = el.tags.count;
-          }
+           const raw = el.tags ?? undefined;
+           const asNumber = (value: string | number | undefined): number | null => {
+             if (value === undefined || (typeof value === "string" && value.trim() === "")) return null;
+             const n = typeof value === "number" ? value : Number(value);
+             return Number.isFinite(n) && n >= 0 ? n : null;
+           };
+           const v = raw?.total !== undefined
+             ? asNumber(raw.total)
+             : ((raw?.nodes !== undefined || raw?.ways !== undefined || raw?.relations !== undefined)
+               ? (() => {
+                   const nodes = asNumber(raw.nodes ?? 0);
+                   const ways = asNumber(raw.ways ?? 0);
+                   const relations = asNumber(raw.relations ?? 0);
+                   return nodes === null || ways === null || relations === null ? null : nodes + ways + relations;
+                 })()
+               : asNumber(raw?.count));
           const entry = flat[qIdx];
           if (!entry) break;
-          counts[`${entry.moduleId}:${entry.key}`] = v ?? 0;
+           if (v === null) throw new Error(`Overpass response has missing/invalid count for ${entry.moduleId}:${entry.key}`);
+           counts[`${entry.moduleId}:${entry.key}`] = v;
           qIdx++;
         }
-        // Fill missing with 0
+        // Missing query results mean the response is incomplete, not zero.
         for (const entry of flat) {
           const k = `${entry.moduleId}:${entry.key}`;
-          if (!(k in counts)) counts[k] = 0;
+          if (!(k in counts)) throw new Error(`Overpass response missing count for ${k}`);
         }
         cache.set(key, { fetchedAt: Date.now(), counts });
         inflight.delete(key);
@@ -169,7 +172,7 @@ export async function coordinatorFetch(
     }
     // All mirrors failed
     inflight.delete(key);
-    return {};
+    throw new Error("Overpass coordinator unavailable");
   })();
 
   inflight.set(key, promise);

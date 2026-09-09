@@ -37,6 +37,10 @@ export interface Signal {
   weight: number;
   /** ISO timestamp when the signal was fetched. */
   fetchedAt: string;
+  /** Provenance shown to users; set from connector/source metadata. */
+  provenance?: "Live" | "Static" | "Curated" | "Synthetic/Heuristic";
+  /** Honest source vintage for static/curated data, when known. */
+  sourceVintage?: string;
   /**
    * Optional structured metadata. Day 10: stats_sa connector uses
    * this to surface suburb name + economic zone + growth rate as

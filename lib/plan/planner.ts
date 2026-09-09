@@ -68,6 +68,8 @@ export function buildPlan(
       for (const connectorId of connectorIds) {
         steps.push({
           connectorId,
+          siteId: id,
+          siteIndex: i,
           input: { siteId: id, __skip: true },
           reason: `fetch ${connectorId} for site ${id} (skipped: missing coords)`,
         });
@@ -78,6 +80,8 @@ export function buildPlan(
     for (const connectorId of connectorIds) {
       steps.push({
         connectorId,
+        siteId: id,
+        siteIndex: i,
         input: { siteId: id },
         reason: `fetch ${connectorId} for site ${id} (${site.name ?? "unnamed"})`,
       });

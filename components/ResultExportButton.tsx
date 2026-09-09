@@ -82,7 +82,7 @@ function toMarkdown(d: ExportData): string {
     if (s.signals && Array.isArray(s.signals) && s.signals.length > 0) {
       lines.push(`**Signals (${s.signals.length}):**`);
       for (const sig of s.signals.slice(0, 8)) {
-        lines.push(`- [${sig.source}] ${sig.label ?? sig.type}`);
+        lines.push(`- [${sig.provenance ?? "Synthetic/Heuristic"}] [${sig.source}] ${sig.label ?? sig.type}`);
       }
     }
     lines.push("");

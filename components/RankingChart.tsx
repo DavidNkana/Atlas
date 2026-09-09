@@ -33,6 +33,7 @@ type Signal = {
   value: number;
   weight: number;
   fetchedAt: string;
+  provenance?: "Live" | "Static" | "Curated" | "Synthetic/Heuristic";
 };
 
 type ScoreFactor = {
@@ -333,7 +334,7 @@ function ChartTooltip({
           </div>
           {topSignals.map((s, i) => (
             <div key={i} className="text-[10px] text-atlas-text">
-              <span className="text-atlas-muted">·</span> {s.label}
+               <span className="text-atlas-muted">·</span> {s.label} ({s.provenance ?? "Synthetic/Heuristic"})
             </div>
           ))}
         </div>
