@@ -593,7 +593,7 @@ export default async function ResultPage({
         className="h-2 w-full bg-pattern-zigzag-duo"
         aria-hidden
       />
-      <header className="flex items-center justify-between gap-3 border-b border-atlas-border px-6 py-4">
+      <header className="flex items-center justify-between gap-3 border-b border-atlas-border px-6 py-10 sm:py-14 lg:py-20">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <h1 className="text-lg font-semibold tracking-tight text-atlas-text">
@@ -657,7 +657,7 @@ export default async function ResultPage({
           </div>
         </header>
 
-        <div className="flex-1 px-4 py-10 sm:px-6 sm:py-14 lg:px-8 lg:py-20">
+        <div className="flex-1 px-4 sm:px-6 lg:px-8">
 
         {/* Model warning banner — only when NOT in stub_demo mode.
             In stub_demo mode, the stub banner below already says
