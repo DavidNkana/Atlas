@@ -4,14 +4,12 @@
  * Atlas — sample questions dropdown.
  *
  * Replaces the always-visible chips. Click "View samples" to open
- * a scrollable, vertically-laid-out dropdown with 20 hand-written
+ * a vertically-laid-out dropdown with 20 hand-written
  * SA prompts grouped by vertical. Clicking a sample fills the
  * command bar AND sets the matching vertical.
  *
  * Scroll behavior: when the dropdown is open the page can scroll
- * normally (so users can see the rest of the page), and the
- * dropdown itself has its own internal scroll for samples that
- * don't fit in the viewport.
+ * normally so users can see all of the samples.
  */
 
 import * as React from "react";
@@ -95,7 +93,7 @@ export function QuestionGallery({
   }, [open]);
 
   return (
-    <div className="relative w-full">
+    <div className="relative mt-4 w-full sm:mt-5">
       {/* Trigger button — centered, orange pill */}
       <div className="flex justify-center">
         <button
@@ -126,10 +124,10 @@ export function QuestionGallery({
         </button>
       </div>
 
-      {/* Dropdown — opens below the trigger, scrollable */}
+      {/* Dropdown — opens below the trigger and expands with all samples */}
       {open && (
         <div
-          className="mt-3 max-h-[min(420px,calc(100vh-280px))] overflow-y-auto rounded-lg border border-atlas-border/60 bg-atlas-surface/85 backdrop-blur-xl backdrop-saturate-150 p-4 shadow-2xl shadow-black/50"
+          className="mt-3 rounded-lg border border-atlas-border/60 bg-atlas-surface/85 backdrop-blur-xl backdrop-saturate-150 p-4 shadow-2xl shadow-black/50"
           data-testid="atlas-samples-dropdown"
         >
           <div className="mb-3 text-center text-[10px] font-semibold uppercase tracking-wider text-atlas-muted">
