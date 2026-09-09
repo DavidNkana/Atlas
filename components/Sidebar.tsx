@@ -17,7 +17,8 @@
  */
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useUser, UserButton } from "@clerk/nextjs";
 import { AtlasLogo } from "./AtlasLogo";
@@ -210,7 +211,7 @@ export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boole
   return (
     <>
       <aside
-        className={`${w} atlas-sidebar-glass relative z-10 flex h-screen shrink-0 flex-col border-r transition-[width] duration-200`}
+        className={`${w} atlas-sidebar-glass relative z-10 flex h-screen shrink-0 flex-col overflow-x-hidden border-r transition-[width] duration-200`}
       >
         {/* Top: logo + collapse toggle */}
         <div className="flex items-center justify-between gap-2 px-3 py-3">
@@ -348,7 +349,7 @@ export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boole
                 </Link>
               </div>
             )}
-            <nav className="atlas-history-scrollbar min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
+            <nav className="atlas-history-scrollbar min-h-0 flex-1 space-y-1 overflow-x-hidden overflow-y-auto pr-1">
               {(() => {
                 const unpinnedAll = history.filter(
                   (h) => !pins.pinned.some((p) => p.id === h.id),
@@ -592,8 +593,66 @@ function HistoryRow({
   onTogglePin: () => void;
   onRequestDelete: () => void;
 }) {
+  const rowRef = useRef<HTMLDivElement>(null);
+  const [infoOpen, setInfoOpen] = useState(false);
+  const [infoPosition, setInfoPosition] = useState({ top: 8, left: 8 });
+
+  function updateInfoPosition() {
+    const row = rowRef.current;
+    if (!row || typeof window === "undefined") return;
+
+    const rect = row.getBoundingClientRect();
+    const cardWidth = Math.min(256, window.innerWidth - 16);
+    const gap = 8;
+    let left = rect.right + gap;
+
+    // Prefer the space beside the rail, but keep the card usable in narrow
+    // viewports where the mobile drawer occupies most of the screen.
+    if (left + cardWidth > window.innerWidth - gap) {
+      left = Math.max(gap, rect.left - cardWidth - gap);
+    }
+
+    setInfoPosition({
+      left,
+      top: Math.min(Math.max(gap, rect.top), Math.max(gap, window.innerHeight - 180)),
+    });
+  }
+
+  useLayoutEffect(() => {
+    if (!infoOpen) return;
+    updateInfoPosition();
+  }, [infoOpen]);
+
+  useEffect(() => {
+    if (!infoOpen) return;
+
+    const reposition = () => updateInfoPosition();
+    window.addEventListener("resize", reposition);
+    // Capture scroll events from the History container as its rows move.
+    window.addEventListener("scroll", reposition, true);
+    return () => {
+      window.removeEventListener("resize", reposition);
+      window.removeEventListener("scroll", reposition, true);
+    };
+  }, [infoOpen]);
+
   return (
     <div
+      ref={rowRef}
+      onMouseEnter={() => {
+        updateInfoPosition();
+        setInfoOpen(true);
+      }}
+      onMouseLeave={() => setInfoOpen(false)}
+      onFocusCapture={() => {
+        updateInfoPosition();
+        setInfoOpen(true);
+      }}
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          setInfoOpen(false);
+        }
+      }}
       // LCP-active-row-fix: the active row was previously only a
       // subtle bg-atlas-accent/10 tint which was barely visible
       // against the sidebar surface. Now it's a 3px left accent
@@ -641,25 +700,30 @@ function HistoryRow({
       {/* This is intentionally available on hover and focus-within. It is
           descriptive, not interactive, so it never steals the navigation
           target or traps the pointer between rows. */}
-      <div
-        id={`history-info-${item.id}`}
-        role="note"
-        className="pointer-events-none absolute left-0 top-full z-50 mt-1 w-64 rounded-xl border border-white/15 bg-atlas-surface p-3 text-left opacity-0 shadow-xl transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100"
-      >
-        <p className="truncate text-[11px] font-semibold text-atlas-text">
-          {item.questionText || "Pinned question"}
-        </p>
-        <div className="mt-1 flex items-center gap-2 text-[10px] text-atlas-muted">
-          <span>{(VERTICAL_LABEL[item.vertical] ?? item.vertical) || "Vertical unavailable"}</span>
-          <span aria-hidden="true">·</span>
-          <span>{askedAt(item.createdAt)}</span>
-        </div>
-        {item.summary && (
-          <p className="mt-2 line-clamp-3 text-[10px] leading-relaxed text-atlas-muted">
-            {item.summary}
-          </p>
+      {infoOpen && typeof document !== "undefined" &&
+        createPortal(
+          <div
+            id={`history-info-${item.id}`}
+            role="note"
+            style={{ top: infoPosition.top, left: infoPosition.left }}
+            className="pointer-events-none fixed z-[100] w-64 max-w-[calc(100vw-1rem)] rounded-xl border border-white/15 bg-atlas-surface p-3 text-left shadow-xl"
+          >
+            <p className="truncate text-[11px] font-semibold text-atlas-text">
+              {item.questionText || "Pinned question"}
+            </p>
+            <div className="mt-1 flex items-center gap-2 text-[10px] text-atlas-muted">
+              <span>{(VERTICAL_LABEL[item.vertical] ?? item.vertical) || "Vertical unavailable"}</span>
+              <span aria-hidden="true">·</span>
+              <span>{askedAt(item.createdAt)}</span>
+            </div>
+            {item.summary && (
+              <p className="mt-2 line-clamp-3 text-[10px] leading-relaxed text-atlas-muted">
+                {item.summary}
+              </p>
+            )}
+          </div>,
+          document.body,
         )}
-      </div>
 
       {/* Hover-revealed actions (right side) — only when not collapsed */}
       {!collapsed && (
