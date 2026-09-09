@@ -3,12 +3,17 @@
 import { useEffect, useRef, useState } from "react";
 
 export type AdminUser = {
-  id: string;
-  email: string;
+  userId: string;
+  primaryEmail: string;
+  availableEmails: string[];
+  firstName: string | null;
+  lastName: string | null;
   plan: string;
   questionCount: number;
   plotCount: number;
   hasBillingLink: boolean;
+  onboardingComplete?: boolean;
+  createdAt?: string;
 };
 
 export function UserManagement({ initialUsers }: { initialUsers: AdminUser[] }) {
@@ -29,16 +34,16 @@ export function UserManagement({ initialUsers }: { initialUsers: AdminUser[] }) 
   }
 
   async function deleteUser() {
-    if (!selected || typedEmail.trim().toLowerCase() !== selected.email.toLowerCase()) return;
+    if (!selected || typedEmail.trim().toLowerCase() !== selected.primaryEmail.toLowerCase()) return;
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`/api/admin/users/${encodeURIComponent(selected.id)}`, {
+      const response = await fetch(`/api/admin/users/${encodeURIComponent(selected.userId)}`, {
         method: "DELETE",
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.details || body.error || "Deletion failed");
-      setUsers((current) => current.filter((user) => user.id !== selected.id));
+      setUsers((current) => current.filter((user) => user.userId !== selected.userId));
       setSelected(null);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Deletion failed");
@@ -54,24 +59,34 @@ export function UserManagement({ initialUsers }: { initialUsers: AdminUser[] }) 
       </h2>
       <div className="overflow-x-auto rounded-xl border border-atlas-border bg-atlas-surface">
         {users.length === 0 ? (
-          <p className="px-4 py-8 text-center text-sm text-atlas-muted">No local users yet.</p>
+          <p className="px-4 py-8 text-center text-sm text-atlas-muted">No Clerk users yet.</p>
         ) : (
           <table className="w-full text-sm">
             <thead className="border-b border-atlas-border text-[10px] uppercase tracking-wider text-atlas-muted">
               <tr>
-                <th className="px-3 py-2 text-left font-medium">Email / ID</th>
+                <th className="px-3 py-2 text-left font-medium">User</th>
                 <th className="px-3 py-2 text-left font-medium">Plan</th>
                 <th className="px-3 py-2 text-left font-medium">Questions</th>
                 <th className="px-3 py-2 text-left font-medium">Plots</th>
+                <th className="px-3 py-2 text-left font-medium">Onboarding</th>
+                <th className="px-3 py-2 text-left font-medium">Created</th>
                 <th className="px-3 py-2 text-right font-medium">Action</th>
               </tr>
             </thead>
             <tbody>
               {users.map((user) => (
-                <tr key={user.id} className="border-b border-atlas-border last:border-0">
+                <tr key={user.userId} className="border-b border-atlas-border last:border-0">
                   <td className="px-3 py-2">
-                    <div className="font-mono text-xs text-atlas-text">{user.email}</div>
-                    <div className="font-mono text-[10px] text-atlas-muted">{user.id}</div>
+                    <div className="text-xs text-atlas-text">
+                      {[user.firstName, user.lastName].filter(Boolean).join(" ") || "Unnamed user"}
+                    </div>
+                    <div className="font-mono text-xs text-atlas-text">{user.primaryEmail || "No email address"}</div>
+                    {user.availableEmails.length > 1 && (
+                      <div className="text-[10px] text-atlas-muted" title={user.availableEmails.join(", ")}>
+                        +{user.availableEmails.length - 1} other email{user.availableEmails.length === 2 ? "" : "s"}
+                      </div>
+                    )}
+                    <div className="font-mono text-[10px] text-atlas-muted">{user.userId}</div>
                   </td>
                   <td className="px-3 py-2 text-xs">
                     <span className={user.hasBillingLink ? "text-amber-300" : "text-atlas-muted"}>
@@ -80,6 +95,12 @@ export function UserManagement({ initialUsers }: { initialUsers: AdminUser[] }) 
                   </td>
                   <td className="px-3 py-2 font-mono text-xs text-atlas-muted">{user.questionCount}</td>
                   <td className="px-3 py-2 font-mono text-xs text-atlas-muted">{user.plotCount}</td>
+                  <td className="px-3 py-2 text-xs text-atlas-muted">
+                    {user.onboardingComplete === undefined ? "—" : user.onboardingComplete ? "Complete" : "Incomplete"}
+                  </td>
+                  <td className="px-3 py-2 text-[10px] text-atlas-muted">
+                    {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : "—"}
+                  </td>
                   <td className="px-3 py-2 text-right">
                     <button
                       type="button"
@@ -135,7 +156,7 @@ function DeleteDialog({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
 
-  const confirmed = !user.hasBillingLink && typedEmail.trim().toLowerCase() === user.email.toLowerCase();
+  const confirmed = Boolean(user.primaryEmail) && !user.hasBillingLink && typedEmail.trim().toLowerCase() === user.primaryEmail.toLowerCase();
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" role="presentation">
       <div
@@ -146,8 +167,8 @@ function DeleteDialog({
       >
         <h3 id="delete-user-title" className="text-base font-semibold text-atlas-text">Delete user permanently?</h3>
         <div className="mt-3 space-y-1 text-xs text-atlas-muted">
-          <p>Email: <strong className="text-atlas-text">{user.email}</strong></p>
-          <p>User ID: <code className="text-atlas-text">{user.id}</code></p>
+          <p>Email: <strong className="text-atlas-text">{user.primaryEmail || "No email address"}</strong></p>
+          <p>User ID: <code className="text-atlas-text">{user.userId}</code></p>
           <p>Will delete {user.questionCount} question{user.questionCount === 1 ? "" : "s"} and {user.plotCount} plot{user.plotCount === 1 ? "" : "s"}.</p>
           <p>Billing status: <strong className={user.hasBillingLink ? "text-amber-300" : "text-emerald-300"}>
             {user.hasBillingLink ? `${user.plan}; billing attached` : "free; no billing attached"}

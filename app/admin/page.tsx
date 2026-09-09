@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { auth } from "@clerk/nextjs/server";
+import { auth, clerkClient } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/db";
 import { isVerifiedAdmin } from "@/lib/admin";
 import { AppShell } from "@/components/AppShell";
@@ -13,6 +13,21 @@ import { UserManagement, type AdminUser } from "./UserManagement";
  * Shows KPIs, waitlist, demo requests, paying users, questions.
  */
 export const dynamic = "force-dynamic";
+
+async function getAllClerkUsers() {
+  const client = await clerkClient();
+  const users = [] as Awaited<ReturnType<typeof client.users.getUserList>>["data"];
+  const limit = 100;
+  let offset = 0;
+
+  // Clerk defaults to 10 users; explicitly walk every page.
+  while (true) {
+    const page = await client.users.getUserList({ limit, offset });
+    users.push(...page.data);
+    offset += page.data.length;
+    if (page.data.length === 0 || offset >= page.totalCount) return users;
+  }
+}
 
 export default async function AdminPage() {
   const { userId } = await auth();
@@ -190,7 +205,8 @@ export default async function AdminPage() {
     prisma.user.count().catch(() => 0),
   ]);
 
-  const [allUsers, questionsByUser, plotsByUser] = await Promise.all([
+  const [clerkUsers, allUsers, questionsByUser, plotsByUser] = await Promise.all([
+    getAllClerkUsers(),
     prisma.user.findMany({
       orderBy: { createdAt: "desc" },
       select: {
@@ -202,6 +218,8 @@ export default async function AdminPage() {
         payfastPaymentId: true,
         payfastToken: true,
         payfastMPaymentId: true,
+        onboardingComplete: true,
+        createdAt: true,
       },
     }),
     prisma.question.groupBy({ by: ["userId"], _count: { _all: true } }),
@@ -210,21 +228,31 @@ export default async function AdminPage() {
 
   const questionCounts = new Map(questionsByUser.map((row) => [row.userId, row._count._all]));
   const plotCounts = new Map(plotsByUser.map((row) => [row.userId, row._count._all]));
-  const adminUsers: AdminUser[] = allUsers.map((user) => ({
-    id: user.id,
-    email: user.email,
-    plan: user.plan,
-    questionCount: questionCounts.get(user.id) ?? 0,
-    plotCount: plotCounts.get(user.id) ?? 0,
-    hasBillingLink: Boolean(
-      user.plan !== "free" ||
-        user.stripeCustomerId ||
-        user.stripeSubscriptionId ||
-        user.payfastPaymentId ||
-        user.payfastToken ||
-        user.payfastMPaymentId,
-    ),
-  }));
+  const localUsersById = new Map(allUsers.map((user) => [user.id, user]));
+  const adminUsers: AdminUser[] = clerkUsers.map((clerkUser) => {
+    const localUser = localUsersById.get(clerkUser.id);
+    const availableEmails = clerkUser.emailAddresses.map((email) => email.emailAddress);
+    return {
+      userId: clerkUser.id,
+      primaryEmail: clerkUser.primaryEmailAddress?.emailAddress ?? availableEmails[0] ?? "",
+      availableEmails,
+      firstName: clerkUser.firstName,
+      lastName: clerkUser.lastName,
+      plan: localUser?.plan ?? "free",
+      questionCount: questionCounts.get(clerkUser.id) ?? 0,
+      plotCount: plotCounts.get(clerkUser.id) ?? 0,
+      hasBillingLink: Boolean(localUser && (
+        localUser.plan !== "free" ||
+        localUser.stripeCustomerId ||
+        localUser.stripeSubscriptionId ||
+        localUser.payfastPaymentId ||
+        localUser.payfastToken ||
+        localUser.payfastMPaymentId
+      )),
+      onboardingComplete: localUser?.onboardingComplete,
+      createdAt: clerkUser.createdAt ? new Date(clerkUser.createdAt).toISOString() : undefined,
+    };
+  });
 
   return (
     <AppShell>

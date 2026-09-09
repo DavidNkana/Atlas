@@ -37,15 +37,15 @@ export async function DELETE(
       payfastMPaymentId: true,
     },
   });
-  if (!target) return errorResponse("Local user not found", 404);
-
   const hasBillingLink = Boolean(
-    target.plan !== "free" ||
-      target.stripeCustomerId ||
-      target.stripeSubscriptionId ||
-      target.payfastPaymentId ||
-      target.payfastToken ||
-      target.payfastMPaymentId,
+    target && (
+      target.plan !== "free" ||
+        target.stripeCustomerId ||
+        target.stripeSubscriptionId ||
+        target.payfastPaymentId ||
+        target.payfastToken ||
+        target.payfastMPaymentId
+    ),
   );
   if (hasBillingLink) {
     return errorResponse(
@@ -59,7 +59,7 @@ export async function DELETE(
     await prisma.$transaction(async (tx) => {
       await tx.plot.deleteMany({ where: { userId: targetUserId } });
       await tx.question.deleteMany({ where: { userId: targetUserId } });
-      await tx.user.delete({ where: { id: targetUserId } });
+      if (target) await tx.user.delete({ where: { id: targetUserId } });
     });
   } catch (error) {
     // A concurrent deletion is safe to report as already gone; other errors
