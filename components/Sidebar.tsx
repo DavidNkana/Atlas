@@ -338,7 +338,7 @@ export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boole
                 </Link>
               </div>
             )}
-            <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
+            <nav className="atlas-history-scrollbar min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
               {(() => {
                 const unpinnedAll = history.filter(
                   (h) => !pins.pinned.some((p) => p.id === h.id),

@@ -113,7 +113,23 @@ html.atlas-light body {
 /* The left rail is glass so the Ndebele art remains visible behind it. */
 .atlas-sidebar-glass {
   background: transparent;
-  border: none;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Keep the History rail native and scoped to this one scroll container. */
+.atlas-history-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(234, 122, 31, 0.78) transparent;
+}
+.atlas-history-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.atlas-history-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.atlas-history-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(234, 122, 31, 0.78);
+  border-radius: 9999px;
 }
 
 /* Gradient text utility */
