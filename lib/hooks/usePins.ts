@@ -27,6 +27,7 @@ interface PinnedItem {
   id: string;
   questionText: string;
   vertical: string;
+  createdAt?: string;
 }
 
 const STORAGE_PREFIX = "atlas:pinned";
@@ -99,7 +100,7 @@ export function usePins(userId: string | null) {
   function pin(id: string, questionText: string = "", vertical: string = "") {
     if (!userId) return; // no-op when signed out
     if (pinned.some((p) => p.id === id)) return;
-    const next = [{ id, questionText, vertical }, ...pinned];
+    const next = [{ id, questionText, vertical, createdAt: new Date().toISOString() }, ...pinned];
     setPinned(next);
     write(userId, next);
   }

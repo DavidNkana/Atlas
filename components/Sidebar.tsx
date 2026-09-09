@@ -36,6 +36,7 @@ export type HistoryItem = {
   questionText: string;
   vertical: string;
   createdAt: string; // ISO
+  summary?: string;
 };
 
 const VERTICAL_LABEL: Record<string, string> = {
@@ -64,6 +65,16 @@ function relativeTime(iso: string): string {
   const day = Math.floor(hr / 24);
   if (day < 30) return `${day}d`;
   return `${Math.floor(day / 30)}mo`;
+}
+
+function askedAt(iso: string): string {
+  if (!iso) return "Time unavailable";
+  const date = new Date(iso);
+  if (isNaN(date.getTime())) return "Time unavailable";
+  return date.toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
 }
 
 function truncate(s: string, n: number): string {
@@ -192,10 +203,9 @@ export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boole
       ? pathname.split("/")[2] ?? null
       : null;
 
-  // When fully collapsed, the sidebar is 0px wide — only the expand
-  // button floats over the main content. When expanded, it's the full
-  // 280px rail.
-  const w = collapsed ? "w-0 overflow-hidden" : "w-64";
+  // The compact rail remains wide enough for icon rows and their
+  // focus/hover cards; the expand button still provides the obvious toggle.
+  const w = collapsed ? "w-16" : "w-64";
 
   return (
     <>
@@ -297,9 +307,9 @@ export function Sidebar({ initialCollapsed = false }: { initialCollapsed?: boole
                   const historyItem = history.find((h) => h.id === p.id);
                   const item: HistoryItem = historyItem ?? {
                     id: p.id,
-                    questionText: p.questionText || p.id,
+                    questionText: p.questionText || "",
                     vertical: p.vertical || '',
-                    createdAt: new Date().toISOString(), // fallback so relativeTime works
+                    createdAt: p.createdAt ?? "",
                   };
                   return (
                     <HistoryRow
@@ -600,6 +610,7 @@ function HistoryRow({
         type="button"
         onClick={onNavigate}
         title={item.questionText}
+        aria-describedby={`history-info-${item.id}`}
         className="flex min-w-0 flex-1 items-start gap-2 text-left"
       >
         {!collapsed && (
@@ -627,9 +638,32 @@ function HistoryRow({
         )}
       </button>
 
+      {/* This is intentionally available on hover and focus-within. It is
+          descriptive, not interactive, so it never steals the navigation
+          target or traps the pointer between rows. */}
+      <div
+        id={`history-info-${item.id}`}
+        role="note"
+        className="pointer-events-none absolute left-0 top-full z-50 mt-1 w-64 rounded-xl border border-white/15 bg-atlas-surface p-3 text-left opacity-0 shadow-xl transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100"
+      >
+        <p className="truncate text-[11px] font-semibold text-atlas-text">
+          {item.questionText || "Pinned question"}
+        </p>
+        <div className="mt-1 flex items-center gap-2 text-[10px] text-atlas-muted">
+          <span>{(VERTICAL_LABEL[item.vertical] ?? item.vertical) || "Vertical unavailable"}</span>
+          <span aria-hidden="true">·</span>
+          <span>{askedAt(item.createdAt)}</span>
+        </div>
+        {item.summary && (
+          <p className="mt-2 line-clamp-3 text-[10px] leading-relaxed text-atlas-muted">
+            {item.summary}
+          </p>
+        )}
+      </div>
+
       {/* Hover-revealed actions (right side) — only when not collapsed */}
       {!collapsed && (
-        <div className="absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-0.5 rounded-md bg-atlas-surface/95 px-1 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100">
+        <div className="absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-0.5 rounded-md bg-atlas-surface/95 px-1 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
           <button
             type="button"
             onClick={(e) => {

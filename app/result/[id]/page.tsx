@@ -657,7 +657,7 @@ export default async function ResultPage({
           </div>
         </header>
 
-        <div className="flex-1 px-6 py-6">
+        <div className="flex-1 px-4 py-10 sm:px-6 sm:py-14 lg:px-8 lg:py-20">
 
         {/* Model warning banner — only when NOT in stub_demo mode.
             In stub_demo mode, the stub banner below already says

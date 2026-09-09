@@ -41,6 +41,7 @@ import { ReactNode, useEffect, useState } from "react";
 import { Sidebar } from "./Sidebar";
 import { ClientOnly } from "./ClientOnly";
 import { FullScreenChat } from "./FullScreenChat";
+import { BackgroundArt } from "./patterns/BackgroundArt";
 
 /**
  * Day 28 v2 — wrap Sidebar in <ClientOnly>. Sidebar reads
@@ -84,11 +85,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-atlas-bg text-atlas-text">
+    <div className="relative flex h-screen overflow-hidden bg-atlas-bg text-atlas-text">
+      <BackgroundArt />
       <ClientOnly fallback={<SidebarSkeleton />}>
         <Sidebar />
       </ClientOnly>
-      <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
+      <main className="relative z-[1] flex min-w-0 flex-1 flex-col overflow-y-auto">
         {children}
       </main>
       <ClientOnly fallback={null}>

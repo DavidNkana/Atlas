@@ -28,15 +28,29 @@ export async function GET() {
         questionText: true,
         vertical: true,
         createdAt: true,
+        responseJson: true,
       },
     });
     return NextResponse.json({
-      items: rows.map((r) => ({
-        id: r.id,
-        questionText: r.questionText,
-        vertical: r.vertical,
-        createdAt: r.createdAt.toISOString(),
-      })),
+      items: rows.map((r) => {
+        const response = r.responseJson as {
+          answer?: unknown;
+          ranked_sites?: Array<{ name?: unknown; rationale?: unknown }>;
+        } | null;
+        const answer = typeof response?.answer === "string" ? response.answer : "";
+        const topSite = response?.ranked_sites?.[0];
+        const rankedSummary = [topSite?.name, topSite?.rationale]
+          .filter((part): part is string => typeof part === "string" && part.trim().length > 0)
+          .join(": ");
+        const summary = answer || rankedSummary;
+        return {
+          id: r.id,
+          questionText: r.questionText,
+          vertical: r.vertical,
+          createdAt: r.createdAt.toISOString(),
+          summary: summary.trim().slice(0, 180),
+        };
+      }),
     });
   } catch (e) {
     // If Prisma is down or the table is missing, return empty rather
