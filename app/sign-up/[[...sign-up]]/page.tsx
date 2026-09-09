@@ -62,8 +62,8 @@ export default function SignUpPage() {
               },
             }}
             signInUrl="/sign-in"
-            forceRedirectUrl="/"
-            fallbackRedirectUrl="/"
+            forceRedirectUrl="/onboarding"
+            fallbackRedirectUrl="/onboarding"
           />
         </div>
         <p className="mt-4 text-center text-xs text-atlas-muted">

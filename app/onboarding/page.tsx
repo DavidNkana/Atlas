@@ -24,7 +24,8 @@
  * bg-atlas-accent) — same tokens as the sign-in/sign-up pages.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { AtlasLogo } from "@/components/AtlasLogo";
 
@@ -90,6 +91,8 @@ const TOTAL_STEPS = 4;
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const { user, isLoaded } = useUser();
+  const [profileChecked, setProfileChecked] = useState<boolean>(false);
   const [step, setStep] = useState<number>(1);
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -100,6 +103,42 @@ export default function OnboardingPage() {
   const [organizationName, setOrganizationName] = useState<string>("");
   const [intent, setIntent] = useState<Intent | null>(null);
   const [referralSource, setReferralSource] = useState<ReferralSource | "">("");
+
+  // Protect the onboarding form without relying on a server redirect, so the
+  // Clerk session is fully loaded before the first meaningful render. A
+  // missing profile is a valid state for a brand-new Clerk user and should
+  // fall through to the form.
+  useEffect(() => {
+    if (!isLoaded) return;
+
+    if (!user) {
+      router.replace("/sign-in");
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/profile", { cache: "no-store" });
+        const data = await res.json().catch(() => ({}));
+        if (cancelled) return;
+
+        if (res.ok && data?.profile?.onboardingComplete === true) {
+          router.replace("/");
+          return;
+        }
+      } catch {
+        // Keep the existing form available if the profile check fails. The
+        // profile API remains the source of truth when the form is submitted.
+      }
+
+      if (!cancelled) setProfileChecked(true);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoaded, user, router]);
 
   const stepIsValid = (n: number): boolean => {
     if (n === 1) return true; // location is free text, always valid
@@ -163,6 +202,8 @@ export default function OnboardingPage() {
   async function skipAll() {
     await submit({ skip: true });
   }
+
+  if (!isLoaded || !user || !profileChecked) return null;
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-atlas-bg px-4 py-8">
