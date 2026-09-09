@@ -16,7 +16,7 @@ import { AuthGateModal } from "@/components/AuthGateModal";
 import { QuestionGallery } from "@/components/QuestionGallery";
 import { TypewriterMoat } from "@/components/TypewriterMoat";
 import { readPrefs, DEFAULT_PREFS, type AtlasPrefs } from "@/components/SettingsDrawer";
-import { ATLAS_HOOK, ATLAS_SUBHOOK } from "@/lib/copy";
+import { ATLAS_SUBHOOK } from "@/lib/copy";
 
 /**
  * Atlas — Home.
@@ -593,9 +593,6 @@ export default function HomePage() {
                 the moment they're signed in (they already know). */}
             {!user && (
               <div className="mb-8 flex max-w-2xl flex-col items-center text-center">
-                <h2 className="font-display text-3xl font-bold tracking-tight text-atlas-text sm:text-4xl md:text-5xl">
-                  {ATLAS_HOOK}
-                </h2>
                 <p className="mt-3 text-base text-atlas-muted">
                   {ATLAS_SUBHOOK}
                 </p>

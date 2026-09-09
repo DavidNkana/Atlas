@@ -14,7 +14,7 @@ export const ATLAS_HOOK = "Atlas — Where in South Africa should you build?";
 
 /** Sub-line used under the hook on the anon hero. */
 export const ATLAS_SUBHOOK =
-  "Ranked, map-backed site answers in 30 seconds. Ask one free question — no sign-up.";
+  "Ask one free question — no sign-up.";
 
 /** Canonical public host (used on the OG card footer + metadataBase). */
 export const ATLAS_HOST = "atlas-q2eh.vercel.app";
