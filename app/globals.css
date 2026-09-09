@@ -114,8 +114,6 @@ html.atlas-light body {
 .atlas-sidebar-glass {
   background: transparent;
   border: none;
-  backdrop-filter: blur(18px) saturate(140%);
-  -webkit-backdrop-filter: blur(18px) saturate(140%);
 }
 
 /* Gradient text utility */
