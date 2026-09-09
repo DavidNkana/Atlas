@@ -112,16 +112,10 @@ html.atlas-light body {
 
 /* The left rail is glass so the Ndebele art remains visible behind it. */
 .atlas-sidebar-glass {
-  background: rgba(20, 20, 22, 0.76);
-  border-color: rgba(255, 255, 255, 0.08);
+  background: transparent;
+  border: none;
   backdrop-filter: blur(18px) saturate(140%);
   -webkit-backdrop-filter: blur(18px) saturate(140%);
-  box-shadow: 8px 0 24px rgba(0, 0, 0, 0.18);
-}
-.atlas-light .atlas-sidebar-glass {
-  background: rgba(255, 255, 255, 0.76);
-  border-color: rgba(24, 24, 27, 0.12);
-  box-shadow: 8px 0 24px rgba(24, 24, 27, 0.1);
 }
 
 /* Gradient text utility */
