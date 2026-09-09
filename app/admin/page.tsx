@@ -1,8 +1,10 @@
 import { redirect } from "next/navigation";
-import { auth, currentUser } from "@clerk/nextjs/server";
+import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/db";
+import { isVerifiedAdmin } from "@/lib/admin";
 import { AppShell } from "@/components/AppShell";
 import { AtlasLogo } from "@/components/AtlasLogo";
+import { UserManagement, type AdminUser } from "./UserManagement";
 
 /**
  * Admin dashboard.
@@ -12,15 +14,11 @@ import { AtlasLogo } from "@/components/AtlasLogo";
  */
 export const dynamic = "force-dynamic";
 
-const ADMIN_EMAIL = "nkanadavid74@gmail.com";
-
 export default async function AdminPage() {
   const { userId } = await auth();
   if (!userId) redirect("/sign-in");
 
-  const user = await currentUser();
-  const email = user?.emailAddresses?.[0]?.emailAddress;
-  if (email !== ADMIN_EMAIL) {
+  if (!(await isVerifiedAdmin())) {
     redirect("/");
   }
 
@@ -192,6 +190,42 @@ export default async function AdminPage() {
     prisma.user.count().catch(() => 0),
   ]);
 
+  const [allUsers, questionsByUser, plotsByUser] = await Promise.all([
+    prisma.user.findMany({
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        email: true,
+        plan: true,
+        stripeCustomerId: true,
+        stripeSubscriptionId: true,
+        payfastPaymentId: true,
+        payfastToken: true,
+        payfastMPaymentId: true,
+      },
+    }),
+    prisma.question.groupBy({ by: ["userId"], _count: { _all: true } }),
+    prisma.plot.groupBy({ by: ["userId"], _count: { _all: true } }),
+  ]);
+
+  const questionCounts = new Map(questionsByUser.map((row) => [row.userId, row._count._all]));
+  const plotCounts = new Map(plotsByUser.map((row) => [row.userId, row._count._all]));
+  const adminUsers: AdminUser[] = allUsers.map((user) => ({
+    id: user.id,
+    email: user.email,
+    plan: user.plan,
+    questionCount: questionCounts.get(user.id) ?? 0,
+    plotCount: plotCounts.get(user.id) ?? 0,
+    hasBillingLink: Boolean(
+      user.plan !== "free" ||
+        user.stripeCustomerId ||
+        user.stripeSubscriptionId ||
+        user.payfastPaymentId ||
+        user.payfastToken ||
+        user.payfastMPaymentId,
+    ),
+  }));
+
   return (
     <AppShell>
       <header className="flex items-center justify-between border-b border-atlas-border px-6 py-4">
@@ -233,6 +267,8 @@ export default async function AdminPage() {
             <Kpi label="Plot listings" value={plotCount} />
             <Kpi label="Stripe users" value={recentUsers.length} />
           </section>
+
+          <UserManagement initialUsers={adminUsers} />
 
           {/* Waitlist breakdown */}
           <section className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-2">
