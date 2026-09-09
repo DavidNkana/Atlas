@@ -59,7 +59,7 @@ import { FullScreenChat } from "./FullScreenChat";
 function SidebarSkeleton() {
   // Match the Sidebar's expanded width (w-64 = 16rem = 256px) so
   // there's no layout shift when the real Sidebar mounts.
-  return <aside className="w-64 shrink-0 border-r border-atlas-border bg-atlas-surface" aria-hidden="true" />;
+  return <aside className="atlas-sidebar-glass w-64 shrink-0 border-r" aria-hidden="true" />;
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
