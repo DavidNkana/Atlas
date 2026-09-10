@@ -8,7 +8,10 @@ import { buildPrompt as buildGooglePrompt } from "@/lib/models/google";
 import { buildPrompt as buildOpenRouterPrompt } from "@/lib/models/openrouter";
 import { buildPrompt as buildGeminiPrompt } from "@/lib/models/gemini-search";
 import { buildMessages as buildPerplexityMessages } from "@/lib/models/perplexity";
+import { curatedStub } from "@/lib/models/stub";
+import { applyConfidenceGate, hasLabeledEmptyRanking } from "@/lib/reliability/empty-ranking";
 
+async function main() {
 const sites = [
   { id: "alpha", rank: 1, name: "Alpha", lat: -33, lng: 18 },
   { id: "beta", rank: 2, name: "Beta", lat: -34, lng: 19 },
@@ -53,4 +56,44 @@ for (const prompt of [
   assert.doesNotMatch(prompt, /find the best|best location|searching for a|best suburb/i);
 }
 
+// Zero-result reliability: low-confidence model output is erased, then the
+// curated path is allowed through without applying that gate a second time.
+const lowConfidence = [
+  { rank: 1, name: "weak", confidence: 0.2 },
+  { rank: 2, name: "also weak", confidence: 0.3 },
+];
+assert.deepEqual(applyConfidenceGate(lowConfidence), []);
+const curatedResponse = await curatedStub.call({
+  vertical: "retail_shop",
+  question: "Find retail sites in Johannesburg",
+});
+assert.equal(curatedResponse.ok, true);
+assert.ok(curatedResponse.ranked_sites.length > 0, "curated fallback must not return zero sites");
+assert.equal((curatedResponse as any).__stub?.status, "stub_demo");
+assert.ok(applyConfidenceGate(curatedResponse.ranked_sites).length > 0);
+
+// A model returning [] and an all-model timeout use the same deterministic
+// fallback contract; no live evidence is fabricated by this check.
+async function fallbackAfterModelFailure(kind: "empty" | "timeout") {
+  try {
+    if (kind === "timeout") throw new Error("model timeout");
+    const empty = { ok: true as const, ranked_sites: [] };
+    if (empty.ranked_sites.length === 0) throw new Error("model returned zero sites");
+    return empty;
+  } catch {
+    return curatedStub.call({ vertical: "retail_shop", question: "Retail in Cape Town" });
+  }
+}
+assert.ok(((await fallbackAfterModelFailure("empty")) as any).ranked_sites.length > 0);
+assert.ok(((await fallbackAfterModelFailure("timeout")) as any).ranked_sites.length > 0);
+assert.equal(hasLabeledEmptyRanking({ status: "ok", ranked_sites: [] }), false);
+assert.equal(hasLabeledEmptyRanking({ status: "unavailable", ranked_sites: [], unavailableReason: "no fallback" }), true);
+assert.equal(hasLabeledEmptyRanking({ status: "partial_timeout", ranked_sites: [], model: { modelError: "timed out" } }), true);
+
 console.log("reliability checks passed");
+}
+
+void main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

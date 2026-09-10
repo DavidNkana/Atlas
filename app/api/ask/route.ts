@@ -20,6 +20,7 @@ import { fetchNearbyCompetitors, geocodePlaceName } from "@/lib/connectors/googl
 import { withTimeout } from "@/lib/util/timeout";
 import { sanitizeForJson } from "@/lib/util/json-sanitize";
 import { detectCity } from "@/lib/stub/detect";
+import { applyConfidenceGate, CONFIDENCE_THRESHOLD } from "@/lib/reliability/empty-ranking";
 
 /**
  * Day 5 hotfix — handler-level budget.
@@ -485,7 +486,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   let activeModel: Model;
   let activeInfo: ModelInfo;
   let fallbackUsed = false;
-  let responseStatus: "ok" | "stub_fallback" | "stub_demo" = "ok";
+  let responseStatus: "ok" | "stub_fallback" | "stub_demo" | "unavailable" = "ok";
   // Day 6 — populated when the stub returns its __stub payload. The UI
   // banner uses these to tell the user "this is a city-specific demo
   // placeholder" and to render the city + country.
@@ -769,9 +770,9 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   // pool becomes 5×0.8 + 3×0.5 = 0.69 (just under the bar) or worse, and
   // a perfectly fine response gets wiped. Gate only on sites that
   // arrived from the model.
-  const CONFIDENCE_THRESHOLD = 0.6;
-  const modelSites = rankedSites.filter((s: any) => !s._catalogSupplement);
-  if (modelSites.length > 0) {
+  const gatedSites = applyConfidenceGate(rankedSites);
+  if (gatedSites.length === 0 && rankedSites.length > 0) {
+    const modelSites = rankedSites.filter((s: any) => !s._catalogSupplement);
     const avgConfidence =
       modelSites.reduce((sum: number, s: any) => sum + (s.confidence ?? 0), 0) /
       modelSites.length;
@@ -781,10 +782,52 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
     }
   }
 
+  // Reliability invariant: connector/scoring execution must never receive an
+  // unlabeled empty ranking. This also catches the case where the confidence
+  // gate erased every model site. Do not run the confidence gate again against
+  // the curated response: it is the deliberate, deterministic last resort.
+  if (rankedSites.length === 0) {
+    const emptyRankingReason = modelError ?? "The selected model returned no sites.";
+    console.warn(`[/api/ask] empty ranking after confidence gate — using curated fallback: ${emptyRankingReason}`);
+    pushAttempted("curated-stub-post-gate");
+    const fallbackResult = await callModel(curatedStub);
+    if (fallbackResult.ok && fallbackResult.sites.length > 0) {
+      try {
+        rankedSites = enrichSitesWithCatalog(fallbackResult.sites);
+      } catch (enrichErr) {
+        // Enrichment is optional metadata; never turn a valid curated result
+        // into an empty result because catalog data is malformed.
+        console.warn("[/api/ask] curated fallback enrichment failed:", enrichErr);
+        rankedSites = fallbackResult.sites;
+      }
+      raw = fallbackResult.raw ?? raw;
+      if (fallbackResult.__stub) stubMeta = fallbackResult.__stub;
+      activeInfo = curatedStub.info;
+      activeModel = curatedStub;
+      fallbackUsed = true;
+      responseStatus = "stub_demo";
+      modelError = `${emptyRankingReason}\ncurated-fallback: used without re-running confidence gate`;
+    } else {
+      // A curated fallback failure is exceptional, but an empty successful
+      // ranking is worse: persist an explicit unavailable response instead.
+      responseStatus = "unavailable";
+      fallbackUsed = true;
+      modelError = `${emptyRankingReason}\ncurated-fallback: unavailable`;
+      console.error("[/api/ask] curated fallback unavailable", fallbackResult);
+    }
+  }
+
   // Day 28 — supplement AI-ranked sites with catalog entries before
   // building the connector plan. This ensures ALL sites (AI + catalog)
   // get signal data from connectors, not just the AI's top picks.
-  if (rankedSites.length > 0) {
+  // `stubMeta.ranked_sites` is the authoritative curated source when the
+  // live/model path was empty. Keep this explicit so supplementation does not
+  // depend on a non-empty model ranking.
+  const supplementationSites = rankedSites.length > 0
+    ? rankedSites
+    : (stubMeta?.ranked_sites ?? []);
+  if (supplementationSites.length > 0) {
+    rankedSites = supplementationSites;
     rankedSites = supplementMissingCatalogSites(
       rankedSites,
       detectCity(question).id,
@@ -841,7 +884,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   /** Day 22 — when Tavily fails for any reason; UI surfaces a non-fatal badge. */
   let liveListingsError: string | undefined;
 
-  try {
+  if (rankedSites.length > 0) try {
     await withTimeout((async () => {
       const location = deriveLocation(rankedSites);
       const builtPlan: Plan = buildPlan(effectiveVertical, location, rankedSites);
@@ -1542,25 +1585,65 @@ export async function POST(req: NextRequest) {
     // wrong — the partial response IS a result, just with
     // empty ranked_sites.
     const actualElapsed = Date.now() - t0;
+    let partialSites: RankedSite[] = [];
+    let partialStub: StubPayload | null = null;
+    let partialFallbackError: string | null = null;
+    try {
+      const stubResult = await curatedStub.call({
+        vertical: (partialVertical || "retail_shop") as Vertical,
+        question: partialQuestionText,
+      });
+      if (stubResult.ok && Array.isArray(stubResult.ranked_sites) && stubResult.ranked_sites.length > 0) {
+        try {
+          partialSites = enrichSitesWithCatalog(stubResult.ranked_sites);
+        } catch (enrichErr) {
+          console.warn("[/api/ask] partial-timeout fallback enrichment failed:", enrichErr);
+          partialSites = stubResult.ranked_sites;
+        }
+        partialStub = (stubResult as any).__stub ?? null;
+      } else {
+        partialFallbackError = "curated fallback returned no sites";
+      }
+    } catch (fallbackErr) {
+      partialFallbackError = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
+    }
+    const partialHasFallback = partialSites.length > 0;
+    const partialUnavailableReason = partialFallbackError
+      ? `Request timed out and curated fallback was unavailable: ${partialFallbackError}`
+      : "Request timed out before a ranked response was available, and the curated fallback was unavailable.";
     const partialResult = {
-      status: "partial_timeout" as const,
+      // Keep partial_timeout for compatibility, while explicitly labelling a
+      // curated fallback as stub_demo. If the fallback fails, status becomes
+      // unavailable rather than pretending [] is a successful ranking.
+      status: partialHasFallback ? ("partial_timeout" as const) : ("unavailable" as const),
+      fallbackStatus: partialHasFallback ? ("stub_demo" as const) : undefined,
+      partialTimeout: true,
+      fallbackUsed: true,
       error: "Request timed out. Try again or pick curated-stub for instant response.",
       elapsedMs: actualElapsed,
       timeoutMs: HANDLER_TIMEOUT_MS,
       vertical: partialVertical,
       questionText: partialQuestionText,
-      ranked_sites: [],
+      ranked_sites: partialSites,
       model: {
         id: "timeout",
-        displayName: "Timed out",
+        displayName: partialHasFallback ? "Atlas Stub" : "Timed out",
         provider: "stub" as const,
         free: true,
-        description: "Request exceeded the time budget before any model could respond.",
+        description: partialHasFallback
+          ? "Curated fallback returned after the request exceeded the time budget."
+          : "Request exceeded the time budget before any model could respond.",
         fallbackUsed: true,
         attemptedChain: partialAttemptedChain,
       },
-      modelError: partialModelError || "No model produced a response within the time budget",
+      modelError: partialHasFallback
+        ? `${partialModelError || "Request exceeded the time budget"}; curated fallback used`
+        : partialFallbackError || partialModelError || partialUnavailableReason,
       connectorsRun: [],
+      city: partialStub?.city,
+      country: partialStub?.country,
+      stubReason: partialStub?.stubReason,
+      unavailableReason: partialHasFallback ? undefined : partialUnavailableReason,
     };
     let questionId: string | null = null;
     try {

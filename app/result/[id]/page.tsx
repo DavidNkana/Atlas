@@ -176,6 +176,9 @@ type ResponseBody = {
   city?: string;
   country?: string;
   stubReason?: string;
+  fallbackStatus?: string;
+  partialTimeout?: boolean;
+  unavailableReason?: string;
   // Day 12 v16 — research answer + citations from Gemini Search.
   answer?: string;
   sources?: Array<{ title?: string; url: string }>;
@@ -580,6 +583,7 @@ export default async function ResultPage({
   const stubCity = responseBody.city;
   const stubCountry = responseBody.country;
   const stubReason = responseBody.stubReason;
+  const unavailableReason = responseBody.unavailableReason ?? responseBody.model?.modelError;
 
   return (
     <AppShell>
@@ -782,7 +786,7 @@ export default async function ResultPage({
             that highlights the live signal count + which sources fired.
             This addresses developer feedback "I want to see 18 signals
             not 1" — even in degraded mode, the badge tells the truth. */}
-        {responseStatus === "stub_demo" && (() => {
+        {(responseStatus === "stub_demo" || responseBody.fallbackStatus === "stub_demo") && (() => {
           const liveConnectorCount = connectorsRun.filter(
             (c) => c.status === "ok" && c.signalCount > 0,
           ).length;
@@ -1062,14 +1066,28 @@ export default async function ResultPage({
         <section className="mb-6">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-sm font-medium text-atlas-text">
-              Ranked sites
+              {rankedSites.length > 0 ? "Ranked sites" : "No ranked sites were available"}
             </h2>
-            <span className="text-[10px] uppercase tracking-wider text-atlas-muted">
-              {rankedSites.length} site{rankedSites.length === 1 ? "" : "s"} · click to expand
-            </span>
+            {rankedSites.length > 0 && (
+              <span className="text-[10px] uppercase tracking-wider text-atlas-muted">
+                {rankedSites.length} site{rankedSites.length === 1 ? "" : "s"} · click to expand
+              </span>
+            )}
           </div>
-           <ol className="space-y-2">
-            {rankedSites.map((s, i) => (
+          {rankedSites.length === 0 ? (
+            <div
+              role="status"
+              data-testid="atlas-empty-ranking"
+              className="rounded-md border border-amber-900 bg-amber-950/30 px-4 py-4 text-sm text-amber-200"
+            >
+              <p className="font-medium">No ranked sites were available.</p>
+              <p className="mt-1 text-xs text-amber-300/80">
+                {unavailableReason ?? "Atlas could not produce a reliable ranking for this request."}
+              </p>
+            </div>
+          ) : (
+            <ol className="space-y-2">
+              {rankedSites.map((s, i) => (
               <RankedSiteCard
                 key={i}
                 site={{
@@ -1101,8 +1119,9 @@ export default async function ResultPage({
                 vertical={questionVertical}
                 fallbackLatLng={streetViewAnchor}
               />
-            ))}
-          </ol>
+              ))}
+            </ol>
+          )}
         </section>
 
         <ListingsOverlay
