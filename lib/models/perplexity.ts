@@ -37,7 +37,7 @@ function humanVertical(v: string): string {
   return stripped.replace(/_/g, ' ');
 }
 
-function buildMessages(req: ModelRequest): PerplexityMessage[] {
+export function buildMessages(req: ModelRequest): PerplexityMessage[] {
   return [
     {
       role: 'system',
@@ -46,13 +46,13 @@ function buildMessages(req: ModelRequest): PerplexityMessage[] {
     },
     {
       role: 'user',
-      content: `I'm searching for a ${humanVertical(req.vertical)} site. My question: "${req.question}".
+      content: `I'm evaluating land or redevelopment opportunities for a ${humanVertical(req.vertical)} development brief. My question: "${req.question}".
 
 Please answer in TWO parts:
 
-PART 1 — Prose summary: A 2-3 sentence answer that names the best suburb(s) for what I asked, the criteria the user implicitly cares about, and any tradeoffs.
+PART 1 — Prose summary: A 2-3 sentence answer that ranks candidate areas or proxy sites against the stated brief, criteria, tradeoffs, assumptions, evidence gaps, and constraints.
 
-PART 2 — Ranked sites list: 3-5 ranked suburbs/areas that fit. For each, give: name (e.g. "Constantia, Cape Town"), suburb, 2-3 sentence rationale naming real schools/amenities/landmarks, property price band, and decimal lat/lng coordinates so we can plot it on a map.
+PART 2 — Ranked opportunities list: 3-5 ranked candidate areas or proxy sites that fit. For each, give: name (e.g. "Constantia, Cape Town"), suburb, 2-3 sentence rationale naming real evidence, property price band, constraints, and decimal lat/lng coordinates so we can plot it on a map. End with the next diligence action. Do not imply a confirmed parcel or entitlement.
 
 End with a line that starts with "SOURCES:" followed by the URLs you used, one per line.`,
     },

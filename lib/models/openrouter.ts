@@ -7,16 +7,16 @@ function humanVertical(v: string): string {
   return stripped.replace(/_/g, " ");
 }
 
-function buildPrompt(req: ModelRequest): string {
+export function buildPrompt(req: ModelRequest): string {
   const base = (
     'You are Atlas, a site-selection engine for African builders.\n' +
-    'Find the best ' + humanVertical(req.vertical) + ' for: "' + req.question + '".\n' +
+    'Rank land or redevelopment opportunities for the stated ' + humanVertical(req.vertical) + ' development brief: "' + req.question + '". Do not recommend consumer locations.\n' +
     'Return JSON with this shape:\n' +
     '{"ranked_sites":[{"rank":1,"name":"suburb","suburb":"name","score":0.8,"confidence":0.9,"rationale":"1-2 sentences",' +
     '"advantages":{"economic":"1 paragraph: prices,business,spending","geographic":"1 paragraph: terrain,soil",' +
     '"logistical":"1 paragraph: roads,transport","demographic":"1 paragraph: population,income"},' +
     '"disadvantages":"1 paragraph: honest drawbacks","lat":0,"lng":0}]}\n' +
-    'Use real suburbs. Write full paragraphs. Be specific.'
+    'Use candidate areas or proxy sites, not fabricated parcel certainty. Write full paragraphs and include assumptions, evidence gaps, constraints, and the next diligence action.'
   );
   if (req.imageBase64) {
     return base + '\n\nThe user attached an image (' + (req.imageMime || 'file') + '). Use it as context for your recommendations.';
@@ -165,4 +165,3 @@ export const mistralFree: Model = makeOpenRouterModel(
   '#10b981',
   'M10 2a8 8 0 015.3 14L17 18H7l1.7-2A8 8 0 0110 2z'
 );
-

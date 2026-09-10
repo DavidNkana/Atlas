@@ -4153,7 +4153,7 @@ export const REAL_SITE_CATALOG: Record<
         lat: -25.7820,
         lng: 28.2820,
         rationale:
-          "Atterbury Boulevard retail corridor linking Menlyn Park to Lynnwood. Established mid-market tech and electronics cluster. 25,000+ vehicles/day and good visibility from passing tech-buyers.",
+          "Atterbury Boulevard retail corridor linking Menlyn Park to Lynnwood. Established mid-market tech and electronics cluster. 25,000+ vehicles/day and strong visibility, providing a retail-demand proxy for a potential development.",
         source: "OpenStreetMap + Tshwane CID",
         cornerStand: true,
         facing: "W",

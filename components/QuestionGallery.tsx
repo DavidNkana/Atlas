@@ -27,50 +27,50 @@ const SECTIONS: GallerySection[] = [
     label: "Gas station",
     vertical: "gas_station",
     questions: [
-      "Where in Sandton for a gas station?",
-      "Where in Soweto for a new fuel station?",
-      "Where in Cape Town Northern Suburbs for a fuel station?",
-      "Where in Durban along the N3 for a truck stop?",
+      "Identify 3–5 vacant or redevelopment sites within 5 km of Sandton for a new fuel-station development; prioritize commercial zoning, arterial access, traffic demand, competition gaps, and flag approval constraints.",
+      "Find candidate vacant land or redevelopment sites within 8 km of Soweto for a neighborhood fuel station; prioritize appropriate zoning, road access, underserved demand, nearby competition, and return diligence constraints.",
+      "Rank 3–5 vacant or redevelopment opportunities within 10 km of Cape Town's Northern Suburbs for a fuel-station project; assess zoning, visibility, access, traffic demand, competing stations, and required approvals.",
+      "Identify candidate vacant or redevelopment sites within 3 km of the Durban N3 corridor for a truck-stop development; prioritize heavy-vehicle access, logistics demand, suitable zoning, competition gaps, and site/entitlement constraints.",
     ],
   },
   {
     label: "Restaurant",
     vertical: "restaurant",
     questions: [
-      "Where in Sandton for an upmarket restaurant?",
-      "Where in Cape Town Bo-Kaap for a tourist-friendly bistro?",
-      "Where in Pretoria Hatfield for a student-friendly restaurant?",
-      "Where in Joburg Maboneng for a rooftop bar?",
+      "Identify 3–5 vacant or redevelopment sites within 5 km of Sandton for an upmarket restaurant development; prioritize mixed-use/commercial zoning, pedestrian access, affluent demand, competition gaps, and licensing or approval constraints.",
+      "Find vacant land or redevelopment opportunities within 2 km of Cape Town's Bo-Kaap for a tourist-oriented bistro scheme; assess zoning, walkability, visitor footfall, competing venues, heritage constraints, and the recommended diligence output.",
+      "Rank candidate vacant or redevelopment sites within 5 km of Pretoria Hatfield for a student-oriented restaurant project; prioritize commercial/mixed-use zoning, walkability to UP, transit access, student demand, competition, and approvals.",
+      "Identify vacant or redevelopment sites within 3 km of Joburg Maboneng for a rooftop dining and entertainment development; assess mixed-use entitlement, pedestrian footfall, demand, competing venues, structural/access constraints, and next diligence actions.",
     ],
   },
   {
     label: "Warehouse",
     vertical: "warehouse",
     questions: [
-      "Where in Johannesburg South for a logistics warehouse?",
-      "Where in Durban Cato Ridge for a distribution center?",
-      "Where in Cape Town Epping for a cold-storage facility?",
-      "Where in Port Elizabeth for an export warehouse?",
+      "Identify 3–5 vacant or redevelopment sites within 10 km of Johannesburg South for a logistics-warehouse development; prioritize industrial zoning, truck access, freight demand, competing logistics supply, and servicing or entitlement constraints.",
+      "Find vacant land or redevelopment opportunities within 8 km of Durban Cato Ridge for a distribution-center project; assess industrial zoning, highway/rail access, regional demand, competition, and return site-servicing and approval constraints.",
+      "Rank candidate vacant or redevelopment sites within 5 km of Cape Town Epping for a cold-storage facility; prioritize industrial entitlement, power and freight access, cold-chain demand, competing capacity, and infrastructure constraints.",
+      "Identify 3–5 vacant or redevelopment opportunities within 10 km of Port Elizabeth's port for an export-warehouse scheme; assess industrial zoning, port and road access, export demand, competing supply, and approval or servicing constraints.",
     ],
   },
   {
     label: "Retail shop",
     vertical: "retail_shop",
     questions: [
-      "Where in Sandton City for a luxury retail outlet?",
-      "Where in Menlyn for a tech retail store?",
-      "Where in Canal Walk for a flagship fashion store?",
-      "Where in uMhlanga for a beachwear boutique?",
+      "Identify vacant or redevelopment sites within 5 km of Sandton City for a luxury retail development; prioritize commercial/mixed-use zoning, pedestrian and vehicle access, high-spend demand, competition gaps, and flag entitlement constraints.",
+      "Find 3–5 candidate vacant or redevelopment sites within 4 km of Menlyn for a technology retail project; assess zoning, visibility, transit and parking access, demand, existing competition, and required approvals.",
+      "Rank vacant or redevelopment opportunities within 3 km of Canal Walk for a flagship fashion retail scheme; prioritize retail entitlement, footfall, affluent demand, competitive whitespace, and disclose access, lease, or approval constraints.",
+      "Identify candidate vacant or redevelopment sites within 5 km of uMhlanga for a beachwear retail development; assess commercial zoning, walkability and visitor access, seasonal demand, competition, and the next diligence action.",
     ],
   },
   {
     label: "Residential land",
     vertical: "custom:residential_land",
     questions: [
-      "Where in Pretoria East for family residential development?",
-      "Where in Constantia for luxury residential?",
-      "Where in Midrand for new residential estates?",
-      "Where in Stellenbosch for student housing?",
+      "Identify 3–5 vacant or redevelopment sites within 8 km of Pretoria East for a family residential scheme; prioritize residential/mixed-use zoning, schools and road access, household demand, competing supply, and flag approval constraints.",
+      "Find vacant land or redevelopment opportunities within 5 km of Constantia for a low-density luxury residential development; assess residential entitlement, access, buyer demand proxies, competing projects, environmental constraints, and next diligence steps.",
+      "Rank 3–5 vacant or redevelopment sites within 10 km of Midrand for a new residential-estate project; prioritize residential/mixed-use zoning, transit and serviced access, demand-supply gaps, competition, and development approvals.",
+      "Identify vacant or redevelopment sites within 5 km of Stellenbosch for student-oriented residential development; prioritize residential/mixed-use zoning, walkability to Stellenbosch University, serviced access, unmet demand, competing beds, and entitlement constraints.",
     ],
   },
 ];
@@ -188,3 +188,6 @@ export const GALLERY_QUESTION_COUNT = SECTIONS.reduce(
   (n, s) => n + s.questions.length,
   0,
 );
+
+/** Exported for lightweight copy checks without coupling tests to the UI. */
+export const GALLERY_QUESTIONS = SECTIONS.flatMap((section) => section.questions);

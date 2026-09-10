@@ -75,7 +75,7 @@ function humanVertical(v: string): string {
   return stripped.replace(/_/g, ' ');
 }
 
-function buildSynthesisPrompt(req: ModelRequest, tavily: TavilyResponse): string {
+export function buildSynthesisPrompt(req: ModelRequest, tavily: TavilyResponse): string {
   const contextLines = tavily.results
     .map(
       (r, i) =>
@@ -88,9 +88,9 @@ function buildSynthesisPrompt(req: ModelRequest, tavily: TavilyResponse): string
     'USER QUESTION: "' + req.question + '"\n' +
     'VERTICAL: ' + humanVertical(req.vertical) + '\n\n' +
     'WEB SEARCH RESULTS (from Tavily, last 24-48h):\n' + contextLines + '\n\n' +
-    'Your job: read the web sources above. Identify up to 5 real place names (suburbs, streets, neighbourhoods) that fit the user\'s question. ' +
+    'Your job: read the web sources above. Identify up to 5 candidate areas or proxy sites (suburbs, streets, neighbourhoods) that fit the development brief, not consumer locations. ' +
     'For each place, write a 2-3 sentence rationale citing SPECIFIC facts from the web sources (school names, prices, distances, demographics). ' +
-    'Score 0.0-1.0 based on fit.\n\n' +
+    'Score 0.0-1.0 based on development fit, and state assumptions, evidence gaps, constraints, and the next diligence action. Do not imply parcel-level certainty.\n\n' +
     'Return STRICT JSON only (no markdown fences, no commentary):\n' +
     '{\n' +
     '  "answer": "<one paragraph summary synthesising the Tavily sources>",\n' +

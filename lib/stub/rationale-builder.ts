@@ -78,17 +78,6 @@ function nearestSuburb(cityId: string, lat: number, lng: number): {
   };
 }
 
-const INTENT_VERB: Record<ParsedQuestion["intent"], string> = {
-  buy: "buy",
-  rent: "rent",
-  find: "find",
-  open: "open",
-  build: "build",
-  develop: "develop",
-  invest: "invest in",
-  explore: "explore",
-};
-
 /**
  * Build a context-aware rationale for a site based on the
  * parsed question + the site data + the city's suburb data.
@@ -105,7 +94,6 @@ export function buildRationale(
   city: City,
   site: RealSite,
 ): string {
-  const verb = INTENT_VERB[question.intent];
   const roadRef = extractRoadRef(site);
   const suburb = nearestSuburb(city.id, site.lat, site.lng);
   const distFromCentre = distanceKm(city.lat, city.lng, site.lat, site.lng);
@@ -126,7 +114,7 @@ export function buildRationale(
   // Helper for the size hint
   const sizeSentence = question.sizeHint
     ? question.sizeHint === "smallholding"
-      ? `Sized for smallholder buyers — typically 1-5 ha parcels.`
+      ? `Sized for a smallholder development brief — typically 1-5 ha parcels.`
       : question.sizeHint === "estate"
       ? `Estate-scale — typically 5-20 ha parcels suitable for a lifestyle estate.`
       : question.sizeHint === "small"
@@ -152,7 +140,7 @@ export function buildRationale(
     ? question.distanceHint === "near-city"
       ? `Within the city edge — short commute into the CBD.`
       : question.distanceHint === "outskirts"
-      ? `On the urban-rural fringe — the right balance for most buyers.`
+      ? `On the urban-rural fringe — a potentially workable balance for the proposed scheme.`
       : `Far enough from the city to feel rural, close enough to reach the market.`
     : "";
 
@@ -192,9 +180,9 @@ export function buildRationale(
   // matching token wasn't parsed.
   const sentences: string[] = [];
 
-  // Sentence 1: lead with the user's intent + what the site is
+  // Sentence 1: lead with the development brief + candidate area
   sentences.push(
-    `To ${verb} ${intentTarget(question, city)} in ${siteLocation}: ${headlineFact}`,
+    `For a ${intentTarget(question, city)} development brief in ${siteLocation}: ${headlineFact} This is a candidate area or proxy site, not parcel-level confirmation.`,
   );
 
   // Sentence 2: the most contextually-relevant fact for the

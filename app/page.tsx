@@ -502,7 +502,7 @@ export default function HomePage() {
   // neutral, non-city-specific hint. All city examples live
   // EXCLUSIVELY in the clickable chips below the input so it's
   // unambiguous what's a suggestion vs what's user-typed text.
-  const placeholder = "Describe a site you need, in any city…";
+  const placeholder = "What are you planning to develop? Include city, radius, zoning, access, demand, and constraints…";
 
   // Prevent Clerk hydration flicker — don't render until auth is loaded
   if (!isLoaded) return null;
@@ -617,7 +617,7 @@ export default function HomePage() {
               {/* Vertical picker */}
               <div className="mb-2 flex flex-wrap items-center gap-1.5">
                 <span className="text-[10px] font-semibold uppercase tracking-wider text-atlas-muted">
-                  I&apos;m looking for
+                  Development type
                 </span>
                   {BUILTIN_VERTICALS.map((v) => (
                     <button

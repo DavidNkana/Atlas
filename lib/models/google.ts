@@ -8,15 +8,15 @@ function humanVertical(v: string): string {
   return stripped.replace(/_/g, " ");
 }
 
-function buildPrompt(req: ModelRequest): string {
+export function buildPrompt(req: ModelRequest): string {
   // Day 17 v1: looser prompt. Tell Gemini we accept either structured
   // JSON OR natural prose. We're going to lenient-parse it anyway,
   // so even if it just talks about Observatory / Maitland / Goodwood
   // without emitting JSON, the answer will count.
   return (
-    'You are Atlas, a site-selection intelligence engine. The user wants to find the best location for a ' +
+    'You are Atlas, a development site-selection intelligence engine. Rank land or redevelopment opportunities against the stated development brief for a ' +
     humanVertical(req.vertical) +
-    ' given this question: "' +
+    ' project described by this question: "' +
     req.question +
     '".\n\n' +
     'If you can return structured data, use this JSON shape:\n' +
@@ -24,7 +24,7 @@ function buildPrompt(req: ModelRequest): string {
     'If you cannot return JSON, return a natural prose answer that names real suburbs / streets / sites by name. ' +
     'Mention up to 5 real place names with their city context (e.g. "Observatory, Cape Town"). ' +
     'Use real-world coordinates where you know them; otherwise the Atlas parser will geocode the names from a known-cities catalog.\n\n' +
-    'Either way: be specific. Real suburb names. Real reasons.'
+    'Either way: rank candidate areas or proxy sites rather than consumer locations. Be specific about assumptions, evidence gaps, constraints, and the next diligence action. Do not imply parcel-level certainty.'
   );
 }
 

@@ -7,7 +7,7 @@ function humanVertical(v: string): string {
   return stripped.replace(/_/g, ' ');
 }
 
-function buildPrompt(req: ModelRequest): string {
+export function buildPrompt(req: ModelRequest): string {
   // v16: a research-grade prompt that mirrors the structure
   // users want from Perplexity. We ask for suburb-level
   // recommendations (the user wants to know WHERE to look,
@@ -15,7 +15,7 @@ function buildPrompt(req: ModelRequest): string {
   // each recommendation we ask for: name, suburb, why-it-
   // fits-the-question, real schools/amenities in the area,
   // property price band, and lat/lng for the map.
-  return `You are Atlas, an African land-development research engine. The user is searching for: "${req.question}".
+  return `You are Atlas, an African land-development research engine. Rank land or redevelopment opportunities against this development brief: "${req.question}".
 
 The user wants a SUBURB-LEVEL answer with real, detailed analysis. For each site, provide WHY it fits — not generic descriptions, but specific reasons based on real data about that location.
 
@@ -43,7 +43,7 @@ Return STRICT JSON (no markdown, just the JSON):
   }]
 }
 
-Provide up to 5 ranked sites. Use real suburb names, real property price bands, real school names, real landmarks. Write full paragraphs for each section. Be specific — not generic filler.`;
+Provide up to 5 ranked candidate areas or proxy sites. Use real suburb names, real property price bands, real school names, and real landmarks where evidenced. Write full paragraphs for each section and include assumptions, evidence gaps, constraints, and the next diligence action. Do not imply parcel-level certainty or a confirmed entitlement.`;
 }
 
 /**

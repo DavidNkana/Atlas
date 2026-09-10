@@ -82,18 +82,18 @@ const VERTICAL_LANDMARKS: Record<string, string[]> = {
 
 const VERTICAL_REASONS: Record<string, string[]> = {
   gas_station: [
-    "High traffic volume on the {city} arterial road makes this a natural refuel stop for through-traffic and last-mile delivery.",
-    "Commercial demand cluster in {city}: offices, retail, and services drive consistent weekday fuel demand.",
-    "Residential catchment in {city} with limited nearby competition means loyal repeat customers.",
-    "Industrial and logistics activity near {city} generates fleet refuel demand from trucks and vans.",
-    "Tourist and commuter mixed demand around {city} centre keeps footfall high across dayparts.",
+    "High traffic volume on the {city} arterial road supports access and demand for a potential refuelling development; verify frontage and entitlement.",
+    "Commercial demand cluster in {city}: offices, retail, and services provide a demand proxy for a potential fuel-station scheme.",
+    "Residential catchment in {city} with limited nearby competition indicates a potential supply gap; confirm zoning and competing approvals.",
+    "Industrial and logistics activity near {city} creates a fleet-demand proxy for a fuel-station development; validate truck access and environmental constraints.",
+    "Tourist and commuter movement around {city} centre supports a footfall proxy; confirm site access, land use, and approval feasibility.",
   ],
   restaurant: [
-    "Tourist foot traffic in {city} creates a steady stream of one-off diners willing to pay premium.",
-    "Captive audience at the {city} shopping destination — diners already in a spending mood.",
-    "Office workers in {city} business district produce predictable weekday lunch and after-work demand.",
-    "Family residential catchment in {city} suburb supports weekend casual dining.",
-    "Student and young-professional density in {city} drives a high-frequency casual-dining market.",
+    "Tourist foot traffic in {city} is a demand proxy for a potential dining development; confirm permitted use and heritage constraints.",
+    "The {city} shopping destination provides a footfall and spending proxy for a restaurant scheme; verify access, competition, and entitlement.",
+    "Office density in {city} business district is a weekday demand proxy for a dining development; test supply gaps and servicing constraints.",
+    "Family residential catchment in {city} supports a potential casual-dining scheme; confirm zoning, access, and competing pipeline.",
+    "Student and young-professional density in {city} indicates demand for a dining development; validate walkability, approvals, and competition.",
   ],
   warehouse: [
     "Industrial zoning in {city} permits 24/7 heavy-vehicle operations and lower land costs.",
