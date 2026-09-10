@@ -42,13 +42,13 @@ const BUILTIN_VERTICALS = [
 ] as const;
 
 const PLACEHOLDER_PHRASES = [
-  "a mixed-use development",
-  "student housing",
-  "a logistics warehouse",
-  "a retail centre",
-  "a fuel station",
-  "residential land",
-  "a hospitality development",
+  "Hey Atlas, find me a mixed-use development site",
+  "Hey Atlas, identify residential land in Sandton",
+  "Hey Atlas, rank warehouse sites near Durban",
+  "Hey Atlas, find a retail development opportunity",
+  "Hey Atlas, assess a fuel station site in Gauteng",
+  "Hey Atlas, surface redevelopment opportunities in Cape Town",
+  "Hey Atlas, compare investment sites for my next project",
 ] as const;
 
 type BuiltinVertical = (typeof BUILTIN_VERTICALS)[number]["value"];
