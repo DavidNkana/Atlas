@@ -41,6 +41,16 @@ const BUILTIN_VERTICALS = [
   { value: "retail_shop", label: "Retail shop" },
 ] as const;
 
+const PLACEHOLDER_PHRASES = [
+  "a mixed-use development",
+  "student housing",
+  "a logistics warehouse",
+  "a retail centre",
+  "a fuel station",
+  "residential land",
+  "a hospitality development",
+] as const;
+
 type BuiltinVertical = (typeof BUILTIN_VERTICALS)[number]["value"];
 type Vertical = BuiltinVertical | `custom:${string}`;
 
@@ -207,6 +217,69 @@ export default function HomePage() {
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const customInputRef = useRef<HTMLInputElement | null>(null);
   const [listening, setListening] = useState(false);
+  const [placeholder, setPlaceholder] = useState<string>(PLACEHOLDER_PHRASES[0]);
+
+  // Keep the prompt compact and useful without ever changing the input's
+  // dimensions. User text remains the source of truth; the animation only
+  // runs while the input is empty.
+  useEffect(() => {
+    if (question) return;
+
+    const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let phraseIndex = 0;
+    let displayed: string = PLACEHOLDER_PHRASES[0];
+    let deleting = false;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+    const tick = () => {
+      if (mediaQuery.matches) {
+        setPlaceholder(PLACEHOLDER_PHRASES[0]);
+        return;
+      }
+
+      const phrase = PLACEHOLDER_PHRASES[phraseIndex];
+      if (deleting) {
+        displayed = displayed.slice(0, -1);
+        setPlaceholder(displayed);
+        if (!displayed) {
+          deleting = false;
+          phraseIndex = (phraseIndex + 1) % PLACEHOLDER_PHRASES.length;
+          timeoutId = setTimeout(tick, 450);
+          return;
+        }
+        timeoutId = setTimeout(tick, 35);
+        return;
+      }
+
+      displayed = phrase.slice(0, displayed.length + 1);
+      setPlaceholder(displayed);
+      if (displayed === phrase) {
+        deleting = true;
+        timeoutId = setTimeout(tick, 1600);
+      } else {
+        timeoutId = setTimeout(tick, 55);
+      }
+    };
+
+    const restart = () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      phraseIndex = 0;
+      displayed = PLACEHOLDER_PHRASES[0];
+      deleting = false;
+      setPlaceholder(displayed);
+      if (!mediaQuery.matches) timeoutId = setTimeout(tick, 1600);
+    };
+
+    const onMotionChange = () => restart();
+    setPlaceholder(displayed);
+    if (!mediaQuery.matches) timeoutId = setTimeout(tick, 1600);
+    mediaQuery.addEventListener("change", onMotionChange);
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      mediaQuery.removeEventListener("change", onMotionChange);
+    };
+  }, [question]);
 
   /** Speech-to-text via Web Speech API */
   const startListening = useCallback(() => {
@@ -493,17 +566,6 @@ export default function HomePage() {
     (m) => m.id === modelId
   );
 
-  // Day 12 v4 follow-up v2: removed rotating placeholder entirely.
-  // The rotating placeholder (added in 2884e29) made things WORSE
-  // because users were reading the placeholder, mentally merging
-  // it with the example chips below, and submitting blended
-  // versions ("Nairobi industrial warehouse" when DB shows
-  // "Durban logistics warehouse"). The placeholder is now a
-  // neutral, non-city-specific hint. All city examples live
-  // EXCLUSIVELY in the clickable chips below the input so it's
-  // unambiguous what's a suggestion vs what's user-typed text.
-  const placeholder = "What are you planning to develop? Include city, radius, zoning, access, demand, and constraints…";
-
   // Prevent Clerk hydration flicker — don't render until auth is loaded
   if (!isLoaded) return null;
 
@@ -758,7 +820,7 @@ export default function HomePage() {
                       }}
                       placeholder={placeholder}
                       rows={1}
-                      className="min-w-0 flex-1 resize-none overflow-hidden bg-transparent px-2 py-1.5 text-sm text-atlas-text placeholder:text-atlas-muted focus:outline-none"
+                      className="min-w-0 flex-1 resize-none overflow-hidden bg-transparent px-2 py-1.5 text-sm text-atlas-text placeholder:whitespace-nowrap placeholder:text-atlas-muted focus:outline-none"
                       required
                       disabled={loading}
                       onKeyDown={(e) => {
