@@ -23,7 +23,8 @@
  * this is enough to make the analytics feel "real".
  */
 
-import { useState } from "react";
+import { createPortal } from "react-dom";
+import { useLayoutEffect, useRef, useState } from "react";
 
 type Signal = {
   id: string;
@@ -347,7 +348,42 @@ function FactorChart({ sites }: { sites: Site[] }) {
   const [hoveredFactor, setHoveredFactor] = useState<{
     factorName: string;
     siteIndex: number;
+    anchor: HTMLButtonElement;
   } | null>(null);
+  const popupRef = useRef<HTMLDivElement>(null);
+  const [popupPosition, setPopupPosition] = useState({ top: 8, left: 8 });
+
+  useLayoutEffect(() => {
+    if (!hoveredFactor || typeof window === "undefined") return;
+
+    const updatePopupPosition = () => {
+      const anchorRect = hoveredFactor.anchor.getBoundingClientRect();
+      const popupRect = popupRef.current?.getBoundingClientRect();
+      const gap = 6;
+      const viewportPadding = 8;
+      const popupWidth = popupRect?.width ?? Math.min(340, window.innerWidth - viewportPadding * 2);
+      const popupHeight = popupRect?.height ?? 140;
+      const left = Math.min(
+        Math.max(viewportPadding, anchorRect.left + anchorRect.width / 2 - popupWidth / 2),
+        Math.max(viewportPadding, window.innerWidth - popupWidth - viewportPadding),
+      );
+      const preferredTop = anchorRect.bottom + gap;
+      const top = Math.min(
+        preferredTop,
+        Math.max(viewportPadding, window.innerHeight - popupHeight - viewportPadding),
+      );
+
+      setPopupPosition({ top, left });
+    };
+
+    updatePopupPosition();
+    window.addEventListener("resize", updatePopupPosition);
+    window.addEventListener("scroll", updatePopupPosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePopupPosition);
+      window.removeEventListener("scroll", updatePopupPosition, true);
+    };
+  }, [hoveredFactor]);
 
   // If no site has a score breakdown, hide this section entirely.
   if (sites.every((s) => !s.scoreBreakdown || s.scoreBreakdown.factors.length === 0)) {
@@ -471,17 +507,18 @@ function FactorChart({ sites }: { sites: Site[] }) {
             const width = Math.abs(valuePosition - zeroPosition);
             const isSelected = hoveredFactor?.factorName === name && hoveredFactor.siteIndex === siteIndex;
             const detailId = `factor-detail-${factorIndex}-${siteIndex}`;
+            const popupId = `factor-popup-${factorIndex}-${siteIndex}`;
 
             return (
               <button
                 key={`${name}-${siteIndex}`}
                 type="button"
                 className={`relative min-w-0 bg-atlas-surface px-1.5 py-2 text-left transition-colors hover:bg-atlas-surface2 focus:z-10 focus:outline-none focus:ring-1 focus:ring-atlas-accent ${isSelected ? "bg-atlas-surface2" : ""}`}
-                onMouseEnter={() => setHoveredFactor({ factorName: name, siteIndex })}
+                onMouseEnter={(event) => setHoveredFactor({ factorName: name, siteIndex, anchor: event.currentTarget })}
                 onMouseLeave={() => setHoveredFactor(null)}
-                onFocus={() => setHoveredFactor({ factorName: name, siteIndex })}
+                onFocus={(event) => setHoveredFactor({ factorName: name, siteIndex, anchor: event.currentTarget })}
                 onBlur={() => setHoveredFactor(null)}
-                aria-describedby={detailId}
+                aria-describedby={`${detailId} ${popupId}`}
                 aria-label={`${site.name}, ${labelForFactor(name)}, contribution ${formatContribution(value)}${factor ? `, weight ${factor.weight.toFixed(2)}, evidence ${factor.evidence}` : ", no value"}`}
               >
                 <span className="mb-1 block text-center font-mono text-[9px] text-atlas-text">{formatContribution(value)}</span>
@@ -507,12 +544,20 @@ function FactorChart({ sites }: { sites: Site[] }) {
         <span>0 baseline</span>
         <span>positive</span>
       </div>
-      {selectedFactor && selectedSite && hoveredFactor && (
-        <div className="mt-2 rounded-md border border-atlas-border bg-atlas-surface2 px-2.5 py-2 text-[10px] text-atlas-muted" role="status" aria-live="polite">
+      {hoveredFactor && selectedSite && typeof document !== "undefined" && createPortal(
+        <div
+          ref={popupRef}
+          id={`factor-popup-${factorNames.indexOf(hoveredFactor.factorName)}-${hoveredFactor.siteIndex}`}
+          role="status"
+          aria-live="polite"
+          style={{ top: popupPosition.top, left: popupPosition.left }}
+          className="pointer-events-none fixed z-[100] w-[min(340px,calc(100vw-1rem))] max-h-44 overflow-auto rounded-md border border-atlas-border bg-atlas-surface2 px-2.5 py-2 text-[10px] text-atlas-muted shadow-xl shadow-black/40"
+        >
           <span className="font-medium text-atlas-text">{labelForFactor(hoveredFactor.factorName)}</span>{" "}
-          <span>({hoveredFactor.factorName}) · {selectedSite.name} · contribution {formatContribution(selectedFactor.contribution)} · weight {selectedFactor.weight.toFixed(2)}</span>
-          <span className="mt-1 block">{selectedFactor.evidence}</span>
-        </div>
+          <span>({hoveredFactor.factorName}) · {selectedSite.name} · contribution/value {selectedFactor ? formatContribution(selectedFactor.contribution) : "no value"} · weight {selectedFactor ? selectedFactor.weight.toFixed(2) : "n/a"}</span>
+          <span className="mt-1 block">{selectedFactor ? selectedFactor.evidence : "No factor data for this site."}</span>
+        </div>,
+        document.body,
       )}
     </div>
   );
