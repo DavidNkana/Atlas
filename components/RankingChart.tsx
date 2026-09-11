@@ -344,13 +344,18 @@ function ChartTooltip({
 }
 
 function FactorChart({ sites }: { sites: Site[] }) {
+  const [hoveredFactor, setHoveredFactor] = useState<{
+    factorName: string;
+    siteIndex: number;
+  } | null>(null);
+
   // If no site has a score breakdown, hide this section entirely.
   if (sites.every((s) => !s.scoreBreakdown || s.scoreBreakdown.factors.length === 0)) {
     return null;
   }
 
-  // Collect the union of factor names across the displayed sites so the
-  // x-axis is consistent.
+  // Collect the union of factor names across the displayed sites so every
+  // site has an aligned cell in the matrix.
   const factorNames = Array.from(
     new Set(
       sites.flatMap((s) =>
@@ -360,8 +365,8 @@ function FactorChart({ sites }: { sites: Site[] }) {
   );
   if (factorNames.length === 0) return null;
 
-  // Contribution range across all displayed data so the y-axis is
-  // shared.
+  // Share one scale across every cell, while keeping zero as the common
+  // baseline. This preserves the old chart's contribution comparison.
   let minC = 0;
   let maxC = 0;
   for (const s of sites) {
@@ -374,133 +379,141 @@ function FactorChart({ sites }: { sites: Site[] }) {
   const range = maxC - minC || 1;
   const yMin = minC - range * 0.1;
   const yMax = maxC + range * 0.1;
-
-  const FW = 640;
-  const FH = 160;
-  const FP = { top: 16, right: 16, bottom: 36, left: 100 };
-  const FW_INNER = FW - FP.left - FP.right;
-  const FH_INNER = FH - FP.top - FP.bottom;
-  const xFor = (i: number) =>
-    FP.left + (factorNames.length === 1 ? FW_INNER / 2 : (i / (factorNames.length - 1)) * FW_INNER);
-  const yFor = (v: number) =>
-    FP.top + (1 - (v - yMin) / (yMax - yMin || 1)) * FH_INNER;
+  const scale = yMax - yMin || 1;
+  const zeroPosition = ((0 - yMin) / scale) * 100;
 
   const siteColors = ["#ea7a1f", "#34d399", "#fbbf24"];
+  const factorLabels: Record<string, string> = {
+    amenity_density: "Amenities",
+    fuel_stations: "Fuel stations",
+    retail_density: "Retail density",
+    transport_access: "Transport access",
+    landuse_count: "Land use",
+    building_density: "Building density",
+    vacant_land: "Vacant land",
+    demographic_profile: "Demographics",
+    median_income: "Median income",
+    population_growth: "Population growth",
+    economic_zone: "Economic zone",
+    amenity_mix: "Amenity mix",
+    schools_count: "Schools",
+    transit_count: "Transit",
+    healthcare_count: "Healthcare",
+    roads_count: "Roads",
+    competitor_count: "Competitors",
+    env_risk: "Environmental risk",
+    traffic_aadt: "Traffic volume",
+    zoning_class: "Zoning",
+    services_density: "Services",
+    traffic_incidents: "Traffic incidents",
+    congestion_density: "Congestion",
+  };
+  const labelForFactor = (name: string) =>
+    factorLabels[name] ?? name.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  const getFactor = (site: Site, name: string) =>
+    (site.scoreBreakdown?.factors ?? []).find((factor) => factor.name === name);
+  const formatContribution = (value: number) => `${value >= 0 ? "+" : ""}${value.toFixed(2)}`;
+
+  const selectedFactor = hoveredFactor
+    ? getFactor(sites[hoveredFactor.siteIndex], hoveredFactor.factorName)
+    : undefined;
+  const selectedSite = hoveredFactor ? sites[hoveredFactor.siteIndex] : undefined;
 
   return (
     <div className="mt-4 border-t border-atlas-border pt-4">
-      <div className="mb-2 flex items-center justify-between">
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
         <h3 className="text-[10px] font-semibold uppercase tracking-wider text-atlas-muted">
           Score factors (top 3 sites)
         </h3>
-        <div className="flex items-center gap-2 text-[10px]">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px]" aria-label="Sites in factor chart">
           {sites.map((s, i) => (
             <span key={i} className="flex items-center gap-1 text-atlas-muted">
               <span
                 className="inline-block h-2 w-2 rounded-full"
                 style={{ backgroundColor: siteColors[i % siteColors.length] }}
               />
-              #{s.rank} {truncate(s.name, 16)}
+              <span>#{s.rank} {truncate(s.name, 16)}</span>
             </span>
           ))}
         </div>
       </div>
-      <svg
-        viewBox={`0 0 ${FW} ${FH}`}
-        width="100%"
-        height={FH}
-        className="block"
-        role="img"
-        aria-label="Score factor breakdown"
+      <div
+        className="grid gap-px overflow-hidden rounded-md border border-atlas-border bg-atlas-border text-[10px]"
+        style={{ gridTemplateColumns: `minmax(7rem, 1.15fr) repeat(${sites.length}, minmax(0, 1fr))` }}
+        role="table"
+        aria-label="Score factor breakdown by site"
       >
-        {/* y=0 grid line */}
-        <line
-          x1={FP.left}
-          x2={FW - FP.right}
-          y1={yFor(0)}
-          y2={yFor(0)}
-          stroke="currentColor"
-          strokeOpacity={0.15}
-          className="text-atlas-text"
-        />
-        <text
-          x={FP.left - 6}
-          y={yFor(0) + 3}
-          textAnchor="end"
-          fontSize="9"
-          fill="currentColor"
-          className="text-atlas-muted"
-        >
-          0
-        </text>
-
-        {/* X-axis labels */}
-        {factorNames.map((name, i) => (
-          <g key={name}>
-            <line
-              x1={xFor(i)}
-              x2={xFor(i)}
-              y1={FP.top}
-              y2={FH - FP.bottom}
-              stroke="currentColor"
-              strokeOpacity={0.06}
-              className="text-atlas-text"
-            />
-            <text
-              x={xFor(i)}
-              y={FH - FP.bottom + 14}
-              textAnchor="middle"
-              fontSize="9"
-              fill="currentColor"
-              className="text-atlas-muted"
-            >
-              {truncate(name, 14)}
-            </text>
-          </g>
+        <div className="bg-atlas-surface2 px-2 py-2 font-medium text-atlas-muted" role="columnheader">
+          Factor
+        </div>
+        {sites.map((site, siteIndex) => (
+          <div key={siteIndex} className="bg-atlas-surface2 px-1.5 py-2 text-center font-medium text-atlas-muted" role="columnheader">
+            <span className="block truncate" title={site.name}>#{site.rank}</span>
+          </div>
         ))}
 
-        {/* Per-site line + points */}
-        {sites.map((s, si) => {
-          const color = siteColors[si % siteColors.length];
-          const points = factorNames.map((fn, i) => {
-            const f = (s.scoreBreakdown?.factors ?? []).find((x) => x.name === fn);
-            const v = f?.contribution ?? 0;
-            return { x: xFor(i), y: yFor(v), v, name: fn };
-          });
-          const path = points
-            .map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`)
-            .join(" ");
+        {factorNames.map((name) => {
+          const label = labelForFactor(name);
           return (
-            <g key={si}>
-              <path
-                d={path}
-                fill="none"
-                stroke={color}
-                strokeWidth={2}
-                strokeOpacity={0.7}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              {points.map((p, i) => (
-                <g key={i}>
-                  <circle
-                    cx={p.x}
-                    cy={p.y}
-                    r={4}
-                    fill={color}
-                    stroke="currentColor"
-                    strokeWidth={1.5}
-                    className="text-atlas-bg"
-                  />
-                  <title>
-                    {`${s.name} · ${p.name}: ${p.v.toFixed(2)}`}
-                  </title>
-                </g>
-              ))}
-            </g>
+            <div key={name} className="bg-atlas-surface px-2 py-2.5 text-atlas-text" role="rowheader">
+              <span className="block break-words font-medium" title={name}>{label}</span>
+              <span className="sr-only">Raw factor name: {name}</span>
+            </div>
           );
-        })}
-      </svg>
+        }).flatMap((factorLabel, factorIndex) => [
+          factorLabel,
+          ...sites.map((site, siteIndex) => {
+            const name = factorNames[factorIndex];
+            const factor = getFactor(site, name);
+            const value = factor?.contribution ?? 0;
+            const valuePosition = ((value - yMin) / scale) * 100;
+            const left = Math.min(zeroPosition, valuePosition);
+            const width = Math.abs(valuePosition - zeroPosition);
+            const isSelected = hoveredFactor?.factorName === name && hoveredFactor.siteIndex === siteIndex;
+            const detailId = `factor-detail-${factorIndex}-${siteIndex}`;
+
+            return (
+              <button
+                key={`${name}-${siteIndex}`}
+                type="button"
+                className={`relative min-w-0 bg-atlas-surface px-1.5 py-2 text-left transition-colors hover:bg-atlas-surface2 focus:z-10 focus:outline-none focus:ring-1 focus:ring-atlas-accent ${isSelected ? "bg-atlas-surface2" : ""}`}
+                onMouseEnter={() => setHoveredFactor({ factorName: name, siteIndex })}
+                onMouseLeave={() => setHoveredFactor(null)}
+                onFocus={() => setHoveredFactor({ factorName: name, siteIndex })}
+                onBlur={() => setHoveredFactor(null)}
+                aria-describedby={detailId}
+                aria-label={`${site.name}, ${labelForFactor(name)}, contribution ${formatContribution(value)}${factor ? `, weight ${factor.weight.toFixed(2)}, evidence ${factor.evidence}` : ", no value"}`}
+              >
+                <span className="mb-1 block text-center font-mono text-[9px] text-atlas-text">{formatContribution(value)}</span>
+                <span className="relative block h-2 rounded-sm bg-atlas-bg/70" aria-hidden="true">
+                  <span className="absolute inset-y-[-2px] w-px bg-atlas-text/40" style={{ left: `${zeroPosition}%` }} />
+                  {value !== 0 && (
+                    <span
+                      className="absolute inset-y-0 rounded-sm"
+                      style={{ left: `${left}%`, width: `${width}%`, backgroundColor: siteColors[siteIndex % siteColors.length], opacity: isSelected ? 1 : 0.8 }}
+                    />
+                  )}
+                </span>
+                <span id={detailId} className="sr-only">
+                  {factor ? `Evidence: ${factor.evidence}. Weight: ${factor.weight.toFixed(2)}.` : "No factor data for this site."}
+                </span>
+              </button>
+            );
+          }),
+        ])}
+      </div>
+      <div className="mt-1 flex justify-between px-2 text-[9px] text-atlas-muted" aria-hidden="true">
+        <span>negative</span>
+        <span>0 baseline</span>
+        <span>positive</span>
+      </div>
+      {selectedFactor && selectedSite && hoveredFactor && (
+        <div className="mt-2 rounded-md border border-atlas-border bg-atlas-surface2 px-2.5 py-2 text-[10px] text-atlas-muted" role="status" aria-live="polite">
+          <span className="font-medium text-atlas-text">{labelForFactor(hoveredFactor.factorName)}</span>{" "}
+          <span>({hoveredFactor.factorName}) · {selectedSite.name} · contribution {formatContribution(selectedFactor.contribution)} · weight {selectedFactor.weight.toFixed(2)}</span>
+          <span className="mt-1 block">{selectedFactor.evidence}</span>
+        </div>
+      )}
     </div>
   );
 }
