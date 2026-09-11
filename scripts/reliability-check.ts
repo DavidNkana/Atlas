@@ -7,6 +7,8 @@ import { GALLERY_QUESTION_COUNT, GALLERY_QUESTIONS } from "@/components/Question
 import { buildPrompt as buildGooglePrompt } from "@/lib/models/google";
 import { buildPrompt as buildOpenRouterPrompt } from "@/lib/models/openrouter";
 import { buildPrompt as buildGeminiPrompt } from "@/lib/models/gemini-search";
+import { buildPrompt as buildOpenAIPrompt, openaiLuna, parseResponse as parseOpenAIResponse } from "@/lib/models/openai";
+import { getModel } from "@/lib/models/registry";
 import { buildMessages as buildPerplexityMessages } from "@/lib/models/perplexity";
 import { curatedStub } from "@/lib/models/stub";
 import { applyConfidenceGate, hasLabeledEmptyRanking } from "@/lib/reliability/empty-ranking";
@@ -49,11 +51,43 @@ for (const prompt of [
   buildGooglePrompt(developmentBrief),
   buildOpenRouterPrompt(developmentBrief),
   buildGeminiPrompt(developmentBrief),
+  buildOpenAIPrompt(developmentBrief),
   buildPerplexityMessages(developmentBrief)[1].content,
 ]) {
   assert.match(prompt, /development brief|development site-selection|land or redevelopment/i);
   assert.match(prompt, /assumptions|evidence gaps|constraints|diligence/i);
   assert.doesNotMatch(prompt, /find the best|best location|searching for a|best suburb/i);
+}
+
+// Luna is registered as the primary provider, but availability is strictly
+// server-side and depends only on OPENAI_API_KEY (never a client env var).
+assert.equal(getModel("gpt-5.6-luna"), openaiLuna);
+assert.match(buildOpenAIPrompt(developmentBrief), /Full natural-language question/);
+assert.match(buildOpenAIPrompt(developmentBrief), /ranked_sites/);
+const previousOpenAIKey = process.env.OPENAI_API_KEY;
+delete process.env.OPENAI_API_KEY;
+assert.equal(openaiLuna.isAvailable(), false);
+if (previousOpenAIKey !== undefined) process.env.OPENAI_API_KEY = previousOpenAIKey;
+
+// A malformed or empty structured response must be a provider failure so the
+// route can label the curated result as stub_demo rather than AI-backed.
+assert.equal(parseOpenAIResponse("not json").ok, false);
+assert.equal(parseOpenAIResponse('{"ranked_sites":[]}').ok, false);
+const zeroCoordinates = parseOpenAIResponse(JSON.stringify({
+  ranked_sites: [{ name: "Origin", rationale: "A hypothesis", lat: 0, lng: 0 }],
+}));
+assert.equal(zeroCoordinates.ok, true);
+if (zeroCoordinates.ok) {
+  assert.equal("lat" in zeroCoordinates.ranked_sites[0], false);
+  assert.equal("lng" in zeroCoordinates.ranked_sites[0], false);
+}
+const finiteCoordinates = parseOpenAIResponse(JSON.stringify({
+  ranked_sites: [{ name: "Meridian", rationale: "A hypothesis", lat: 0, lng: 18.4 }],
+}));
+assert.equal(finiteCoordinates.ok, true);
+if (finiteCoordinates.ok) {
+  assert.equal(finiteCoordinates.ranked_sites[0].lat, 0);
+  assert.equal(finiteCoordinates.ranked_sites[0].lng, 18.4);
 }
 
 // Zero-result reliability: low-confidence model output is erased, then the

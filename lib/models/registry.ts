@@ -2,6 +2,7 @@ import { geminiSearch } from './gemini-search';
 import { perplexity } from './perplexity';
 import { llamaFree, mistralFree } from './openrouter';
 import { curatedStub } from './stub';
+import { openaiLuna } from './openai';
 import type { Model, ModelInfo } from './types';
 
 // Day 25 — Model registry simplified.
@@ -30,6 +31,7 @@ import type { Model, ModelInfo } from './types';
 //   2. perplexity + openrouter (internal fallback, hidden)
 //   3. curatedStub (always available, always the final fallback)
 export const ALL_MODELS: Model[] = [
+  openaiLuna,
   geminiSearch,
   perplexity,
   llamaFree,

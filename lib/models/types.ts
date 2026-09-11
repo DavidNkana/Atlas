@@ -64,6 +64,15 @@ export interface ModelRequest {
   imageMime?: string;
 }
 
+export interface ModelInterpretation {
+  /** The model's understanding of the user's development brief. */
+  brief?: string;
+  assumptions?: string[];
+  evidenceGaps?: string[];
+  constraints?: string[];
+  nextDiligence?: string[];
+}
+
 /**
  * Day 5 hotfix v3 — ModelResponse now supports a union return shape.
  *
@@ -95,6 +104,7 @@ export type ModelResponse =
       answer?: string;
       /** v16: list of citation URLs returned by Gemini Search. */
       sources?: ModelCitation[];
+      interpretation?: ModelInterpretation;
     }
   | { ok: false; error: string };
 

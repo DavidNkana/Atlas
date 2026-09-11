@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { getModel, MODEL_INFO, ALL_MODELS } from "@/lib/models/registry";
 import type { Model } from "@/lib/models/types";
 import { curatedStub, type StubPayload } from "@/lib/models/stub";
-import type { Vertical, ModelInfo } from "@/lib/models/types";
+import type { Vertical, ModelInfo, ModelInterpretation } from "@/lib/models/types";
 import { getConnector } from "@/lib/connectors/registry";
 import type { Signal } from "@/lib/connectors/types";
 import { metadataForSource } from "@/lib/connectors/provenance";
@@ -256,6 +256,8 @@ type AskResponse = {
     spatial: string[];
     conversational: string[];
   };
+  /** Luna's non-factual interpretation of the development brief. */
+  interpretation?: ModelInterpretation;
 };
 
 /**
@@ -481,8 +483,11 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   partialVertical = vertical;
   partialQuestionText = trimmedQuestion;
 
-  // 3. Resolve model — default to gemini-flash
-  const requestedModelId = (model && typeof model === "string") ? model : "curated-stub";
+  // 3. Resolve model — Luna is the primary when its server-side key exists.
+  // The client may still explicitly select another registered model.
+  const requestedModelId = (model && typeof model === "string")
+    ? model
+    : (process.env.OPENAI_API_KEY ? "gpt-5.6-luna" : "curated-stub");
   let activeModel: Model;
   let activeInfo: ModelInfo;
   let fallbackUsed = false;
@@ -556,6 +561,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   // these; the result page just hides the section if absent.
   let modelAnswer: string | undefined;
   let modelSources: Array<{ title?: string; url: string }> | undefined;
+  let modelInterpretation: ModelInterpretation | undefined;
 
   // Helper — keep the model-call try-block small and readable.
   // Day 5 hotfix v2: every model.call() is wrapped in a 25s per-model
@@ -579,6 +585,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
         // Optional — most models omit these.
         answer?: string;
         sources?: Array<{ title?: string; url: string }>;
+        interpretation?: ModelInterpretation;
       }
     | { ok: false; error: string }
   > => {
@@ -618,6 +625,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
         // and a prose summary.
         answer: r.answer,
         sources: r.sources,
+        interpretation: r.interpretation,
       };
     }
     // Day 22 v25 fix: if a model returned ok:false explicitly AND
@@ -637,10 +645,16 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
     return { ok: false, error: `model:${m.info.id} returned malformed response` };
   };
 
-  // Day 28 v3 — race ALL available AI models from the start.
-  const liveModels = ALL_MODELS.filter(
+  // Luna is attempted first. Only after it fails do optional providers race;
+  // this preserves the primary-provider contract without making Gemini a
+  // prerequisite. The final guard below is always the curated stub.
+  const availableModels = ALL_MODELS.filter(
     (m) => m.info.id !== "curated-stub" && m.isAvailable()
   );
+  const primaryModel = availableModels.find((m) => m.info.id === activeInfo.id) ?? availableModels[0];
+  const liveModels = primaryModel
+    ? [primaryModel, ...availableModels.filter((m) => m.info.id !== primaryModel.info.id)]
+    : [];
   
 
   try {
@@ -667,20 +681,40 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
       }
 
       if (liveModels.length === 0) { modelError = "No live models"; return; }
-      liveModels.forEach((m: Model) => pushAttempted(m.info.id));
 
-      const wrapped = liveModels.map(async (m: Model) => {
+      const primaryResult = await callModel(liveModels[0]);
+      pushAttempted(liveModels[0].info.id);
+      if (primaryResult.ok && primaryResult.sites.length > 0) {
+        rankedSites = enrichSitesWithCatalog(primaryResult.sites);
+        raw = primaryResult.raw;
+        modelAnswer = primaryResult.answer;
+        modelSources = primaryResult.sources;
+        modelInterpretation = primaryResult.interpretation;
+        activeInfo = liveModels[0].info; activeModel = liveModels[0];
+        console.log(`[/api/ask] primary model served by ${liveModels[0].info.id}`);
+        return;
+      }
+
+      modelError = primaryResult.ok
+        ? `${liveModels[0].info.id} returned 0 sites`
+        : primaryResult.error;
+      const fallbackModels = liveModels.slice(1);
+      fallbackModels.forEach((m: Model) => pushAttempted(m.info.id));
+      const wrapped = fallbackModels.map(async (m: Model) => {
         try { const r = await callModel(m); return { model: m, result: r }; }
         catch { return { model: m, result: { ok: false as const, error: `${m.info.id} timed out` } }; }
       });
 
+      if (wrapped.length === 0) return;
       const winner = await Promise.race(wrapped);
       if (winner.result.ok && winner.result.sites.length > 0) {
         rankedSites = enrichSitesWithCatalog(winner.result.sites);
         raw = winner.result.raw;
         if (winner.result.answer) modelAnswer = winner.result.answer;
         if (winner.result.sources && winner.result.sources.length > 0) modelSources = winner.result.sources;
+        modelInterpretation = winner.result.interpretation;
         activeInfo = winner.model.info; activeModel = winner.model;
+        fallbackUsed = true;
         if (winner.result.__stub) { stubMeta = winner.result.__stub; responseStatus = "stub_demo"; }
         console.log(`[/api/ask] raced model served by ${winner.model.info.id}`);
         return;
@@ -696,6 +730,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
           raw = r.raw;
           if (r.answer) modelAnswer = r.answer;
           if (r.sources && r.sources.length > 0) modelSources = r.sources;
+          modelInterpretation = r.interpretation;
           activeInfo = m.info; activeModel = m;
           if (!requestedIsStub) fallbackUsed = true;
           console.log(`[/api/ask] raced model served by ${m.info.id} (late)`);
@@ -704,7 +739,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
       }
 
       const winnerErr = winner.result.ok ? "returned 0 sites" : (winner.result as any).error || "timeout";
-      modelError = `All models failed: ${winner.model.info.id} - ${winnerErr}`;
+      modelError = `Primary/fallback models failed: ${winner.model.info.id} - ${winnerErr}`;
       console.error(`[/api/ask] all models failed: ${modelError}`);
     })(), STEP_A_TIMEOUT_MS, "step_a");
 
@@ -1464,6 +1499,9 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   }
   if (modelSources && modelSources.length > 0) {
     responseBody.sources = modelSources;
+  }
+  if (modelInterpretation) {
+    responseBody.interpretation = modelInterpretation;
   }
 
   // 7. Persist to Supabase via Prisma (best-effort).

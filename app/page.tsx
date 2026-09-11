@@ -133,6 +133,11 @@ function isBuiltinVertical(value: string): boolean {
  */
 function isModelAvailable(modelId: string): boolean {
   if (modelId === "curated-stub") return true;
+  // Luna's server key is never exposed to the browser. This public hint keeps
+  // both the registry id and an OpenAI-compatible provider-prefixed id honest.
+  if (modelId === "gpt-5.6-luna" || modelId === "openai/gpt-5.6-luna") {
+    return process.env.NEXT_PUBLIC_HAS_OPENAI !== "false";
+  }
   // Day 12 v16: gemini-search shares the same GEMINI_API_KEY as
   // gemini-flash — just a different request format (with the
   // google_search grounding tool). They live or die together.
