@@ -6,7 +6,18 @@ import type {
   RankedSite,
 } from './types';
 
-const OPENAI_CHAT_URL = 'https://api.openai.com/v1/chat/completions';
+const OPENAI_BASE_URL = 'https://api.openai.com/v1';
+
+/**
+ * OpenAI's direct API expects the vendor model id without a provider
+ * namespace. Custom OpenAI-compatible gateways may use that namespace, so
+ * leave their configured model string untouched.
+ */
+export function normalizeOpenAIModel(model: string, baseUrl?: string): string {
+  const normalizedBaseUrl = baseUrl?.replace(/\/+$/, '');
+  const isDirectOpenAI = !normalizedBaseUrl || normalizedBaseUrl === OPENAI_BASE_URL;
+  return isDirectOpenAI && model.startsWith('openai/') ? model.slice('openai/'.length) : model;
+}
 
 function humanVertical(v: string): string {
   const stripped = v.startsWith('custom:') ? v.slice('custom:'.length) : v;
@@ -119,11 +130,14 @@ export const openaiLuna: Model = {
   call: async (req: ModelRequest): Promise<ModelResponse> => {
     const key = process.env.OPENAI_API_KEY;
     if (!key) return { ok: false, error: 'OPENAI_API_KEY not set' };
-    const model = process.env.OPENAI_MODEL || 'openai/gpt-5.6-luna';
+    const baseUrl = process.env.OPENAI_BASE_URL || OPENAI_BASE_URL;
+    const endpoint = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
+    const configuredModel = process.env.OPENAI_MODEL || 'gpt-5.6-luna';
+    const model = normalizeOpenAIModel(configuredModel, baseUrl);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 7_500);
     try {
-      const response = await fetch(OPENAI_CHAT_URL, {
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
         body: JSON.stringify({
