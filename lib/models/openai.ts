@@ -143,8 +143,7 @@ export const openaiLuna: Model = {
         body: JSON.stringify({
           model,
           messages: [{ role: 'user', content: buildPrompt(req) }],
-          temperature: 0.2,
-          max_tokens: 1800,
+          max_completion_tokens: 1800,
           response_format: { type: 'json_object' },
         }),
         signal: controller.signal,

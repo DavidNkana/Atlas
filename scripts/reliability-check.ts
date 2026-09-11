@@ -69,6 +69,36 @@ assert.equal(
 );
 assert.match(buildOpenAIPrompt(developmentBrief), /Full natural-language question/);
 assert.match(buildOpenAIPrompt(developmentBrief), /ranked_sites/);
+const previousOpenAIBaseUrl = process.env.OPENAI_BASE_URL;
+const previousOpenAIModel = process.env.OPENAI_MODEL;
+const previousOpenAIKeyForRequest = process.env.OPENAI_API_KEY;
+const previousFetch = globalThis.fetch;
+let lunaRequestBody: Record<string, unknown> | undefined;
+process.env.OPENAI_API_KEY = "reliability-test-key";
+delete process.env.OPENAI_BASE_URL;
+delete process.env.OPENAI_MODEL;
+globalThis.fetch = (async (_input, init) => {
+  lunaRequestBody = JSON.parse(String(init?.body));
+  return new Response(JSON.stringify({ choices: [{ message: { content: '{"ranked_sites":[{"name":"Test","rationale":"A hypothesis"}]}' } }] }), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
+}) as typeof fetch;
+try {
+  assert.equal((await openaiLuna.call(developmentBrief)).ok, true);
+  assert.equal(lunaRequestBody?.max_completion_tokens, 1800);
+  assert.equal("max_tokens" in (lunaRequestBody ?? {}), false);
+  assert.equal("temperature" in (lunaRequestBody ?? {}), false);
+  assert.deepEqual(lunaRequestBody?.response_format, { type: "json_object" });
+} finally {
+  globalThis.fetch = previousFetch;
+  if (previousOpenAIBaseUrl === undefined) delete process.env.OPENAI_BASE_URL;
+  else process.env.OPENAI_BASE_URL = previousOpenAIBaseUrl;
+  if (previousOpenAIModel === undefined) delete process.env.OPENAI_MODEL;
+  else process.env.OPENAI_MODEL = previousOpenAIModel;
+  if (previousOpenAIKeyForRequest === undefined) delete process.env.OPENAI_API_KEY;
+  else process.env.OPENAI_API_KEY = previousOpenAIKeyForRequest;
+}
 const previousOpenAIKey = process.env.OPENAI_API_KEY;
 delete process.env.OPENAI_API_KEY;
 assert.equal(openaiLuna.isAvailable(), false);
