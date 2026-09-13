@@ -17,6 +17,7 @@ import { enrichSitesWithCatalog } from "@/lib/stub/enrich-sites";
 import { supplementMissingCatalogSites } from "@/lib/stub/enrich-sites";
 import { fetchLiveListings, parsePrice, type LiveListing } from "@/lib/connectors/tavily-listings";
 import { fetchNearbyCompetitors, geocodePlaceName } from "@/lib/connectors/google-places";
+import { applyCompetitorAuthority } from "@/lib/connectors/competitor-authority";
 import { withTimeout } from "@/lib/util/timeout";
 import { sanitizeForJson } from "@/lib/util/json-sanitize";
 import { detectCity } from "@/lib/stub/detect";
@@ -54,6 +55,7 @@ export const dynamic = "force-dynamic";
 // these at the top of every POST.
 let partialAttemptedChain: string[] = [];
 let partialModelError: string | null = null;
+let partialModelAttempts: ModelAttempt[] = [];
 let partialVertical: string = "";
 let partialQuestionText: string = "";
 let partialUserId: string = "";
@@ -211,6 +213,17 @@ type ModelBlock = {
   modelError?: string;
 };
 
+type ModelAttempt = {
+  modelId: string;
+  configured: boolean;
+  started: boolean;
+  outcome: "success" | "failure";
+  category?: "configuration" | "timeout" | "http" | "parse" | "empty" | "network" | "unknown";
+  status?: number;
+  message?: string;
+  latencyMs: number;
+};
+
 type AskResponse = {
   id: string;
   status: string;
@@ -258,8 +271,10 @@ type AskResponse = {
   };
   /** Luna's non-factual interpretation of the development brief. */
   interpretation?: ModelInterpretation;
-  /** Additive warning for a valid AI ranking that needs verification. */
+/** Additive warning for a valid AI ranking that needs verification. */
   confidenceWarning?: string;
+  modelAttempts?: ModelAttempt[];
+  modelErrors?: string[];
 };
 
 /**
@@ -321,6 +336,29 @@ function modelInfoToBlock(info: ModelInfo, fallbackUsed: boolean, modelError?: s
     block.attemptedChain = attemptedChain;
   }
   return block;
+}
+
+function safeModelMessage(error: string): string {
+  return error
+    .replace(/Bearer\s+[^\s]+/gi, "Bearer [redacted]")
+    .replace(/(?:api[_-]?key|authorization|token|secret)\s*[:=]\s*[^\s,;]+/gi, "[redacted]")
+    .replace(/https?:\/\/[^\s]+/gi, "[upstream]")
+    .replace(/\s+/g, " ")
+    .slice(0, 160);
+}
+
+function classifyModelError(error: string): ModelAttempt["category"] {
+  if (/not set|not available|missing|configured/i.test(error)) return "configuration";
+  if (/timeout|timed out|abort/i.test(error)) return "timeout";
+  if (/HTTP\s+\d+|\b(?:4|5)\d\d\b/i.test(error)) return "http";
+  if (/JSON|parse|malformed|empty|0 sites/i.test(error)) return /empty|0 sites/i.test(error) ? "empty" : "parse";
+  if (/request failed|network|fetch/i.test(error)) return "network";
+  return "unknown";
+}
+
+function modelErrorStatus(error: string): number | undefined {
+  const match = error.match(/\b([45]\d\d)\b/);
+  return match ? Number(match[1]) : undefined;
 }
 
 /**
@@ -506,6 +544,8 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   // when constructing the partial_timeout stub. This avoids
   // threading the chain through 7 different code paths.
   const attemptedChain: string[] = [];
+  const modelAttempts: ModelAttempt[] = [];
+  partialModelAttempts = modelAttempts;
   // Override Array.push so every local push also updates the
   // module-level var. We do this by reassigning .push (it works
   // because we don't need to call it before or after, just
@@ -528,6 +568,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
       // Requested model has no key set — fall back to curated stub
       console.warn(`[/api/ask] model ${requestedModelId} not available, falling back to curated-stub`);
       pushAttempted(requestedModelId);
+      modelAttempts.push({ modelId: requestedModelId, configured: false, started: false, outcome: "failure", category: "configuration", message: "model not configured", latencyMs: 0 });
       activeModel = curatedStub;
       activeInfo = curatedStub.info;
       fallbackUsed = true;
@@ -537,6 +578,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
     // Unknown model id — fall back to curated stub
     console.warn(`[/api/ask] unknown model ${requestedModelId}, falling back to curated-stub`);
     pushAttempted(requestedModelId);
+    modelAttempts.push({ modelId: requestedModelId, configured: false, started: false, outcome: "failure", category: "configuration", message: "unknown model", latencyMs: 0 });
     activeModel = curatedStub;
     activeInfo = curatedStub.info;
     fallbackUsed = true;
@@ -544,9 +586,9 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   }
 
   // Day 5 hotfix — if primary is the stub, don't bother cascading.
-  if (!requestedIsStub && activeInfo.id !== "curated-stub") {
-    pushAttempted(activeInfo.id);
-  }
+  // The chain is recorded at the point an attempt starts. This avoids the
+  // old duplicate Luna entry and does not claim providers that were never
+  // started.
 
   // 4. Step A — call the model (with 35s budget). If this throws or
   // times out, the outer POST returns 200 + partial_timeout. The model
@@ -647,9 +689,59 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
     return { ok: false, error: `model:${m.info.id} returned malformed response` };
   };
 
-  // Luna is attempted first. Only after it fails do optional providers race;
-  // this preserves the primary-provider contract without making Gemini a
-  // prerequisite. The final guard below is always the curated stub.
+  const runModel = async (m: Model) => {
+    const startedAt = Date.now();
+    pushAttempted(m.info.id);
+    const attempt: ModelAttempt = {
+      modelId: m.info.id,
+      configured: m.isAvailable(),
+      started: true,
+      outcome: "failure",
+      latencyMs: 0,
+    };
+    modelAttempts.push(attempt);
+    const result = await callModel(m);
+    attempt.latencyMs = Date.now() - startedAt;
+    if (result.ok && result.sites.length > 0) {
+      attempt.outcome = "success";
+      return result;
+    }
+    const error = result.ok ? `${m.info.id} returned 0 sites` : result.error;
+    attempt.category = classifyModelError(error);
+    attempt.status = modelErrorStatus(error);
+    attempt.message = safeModelMessage(error);
+    partialModelError = attempt.message;
+    return result;
+  };
+
+  const runCurated = async (attemptedLabel: string) => {
+    const startedAt = Date.now();
+    pushAttempted(attemptedLabel);
+    const attempt: ModelAttempt = {
+      modelId: "curated-stub",
+      configured: true,
+      started: true,
+      outcome: "failure",
+      latencyMs: 0,
+    };
+    modelAttempts.push(attempt);
+    const result = await callModel(curatedStub);
+    attempt.latencyMs = Date.now() - startedAt;
+    if (result.ok && result.sites.length > 0) {
+      attempt.outcome = "success";
+    } else {
+      const error = result.ok ? "curated-stub returned 0 sites" : result.error;
+      attempt.category = classifyModelError(error);
+      attempt.status = modelErrorStatus(error);
+      attempt.message = safeModelMessage(error);
+      partialModelError = attempt.message;
+    }
+    return result;
+  };
+
+  // Luna is attempted first. Only after it fails do optional providers run;
+  // this preserves the primary-provider contract without making another
+  // provider a prerequisite. The final guard below is always the curated stub.
   const availableModels = ALL_MODELS.filter(
     (m) => m.info.id !== "curated-stub" && m.isAvailable()
   );
@@ -666,8 +758,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
       // wastes 30s, pushing the total pipeline past the 58s handler
       // timeout and returning partial_timeout with 0 sites.
       if (requestedIsStub) {
-        pushAttempted("curated-stub");
-        const stubResult = await callModel(curatedStub);
+        const stubResult = await runCurated("curated-stub");
         if (stubResult.ok && stubResult.sites.length > 0) {
           rankedSites = enrichSitesWithCatalog(stubResult.sites);
           raw = stubResult.raw;
@@ -684,8 +775,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
 
       if (liveModels.length === 0) { modelError = "No live models"; return; }
 
-      const primaryResult = await callModel(liveModels[0]);
-      pushAttempted(liveModels[0].info.id);
+      const primaryResult = await runModel(liveModels[0]);
       if (primaryResult.ok && primaryResult.sites.length > 0) {
         rankedSites = enrichSitesWithCatalog(primaryResult.sites);
         raw = primaryResult.raw;
@@ -697,51 +787,27 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
         return;
       }
 
-      modelError = primaryResult.ok
+      modelError = safeModelMessage(primaryResult.ok
         ? `${liveModels[0].info.id} returned 0 sites`
-        : primaryResult.error;
-      const fallbackModels = liveModels.slice(1);
-      fallbackModels.forEach((m: Model) => pushAttempted(m.info.id));
-      const wrapped = fallbackModels.map(async (m: Model) => {
-        try { const r = await callModel(m); return { model: m, result: r }; }
-        catch { return { model: m, result: { ok: false as const, error: `${m.info.id} timed out` } }; }
-      });
-
-      if (wrapped.length === 0) return;
-      const winner = await Promise.race(wrapped);
-      if (winner.result.ok && winner.result.sites.length > 0) {
-        rankedSites = enrichSitesWithCatalog(winner.result.sites);
-        raw = winner.result.raw;
-        if (winner.result.answer) modelAnswer = winner.result.answer;
-        if (winner.result.sources && winner.result.sources.length > 0) modelSources = winner.result.sources;
-        modelInterpretation = winner.result.interpretation;
-        activeInfo = winner.model.info; activeModel = winner.model;
-        fallbackUsed = true;
-        if (winner.result.__stub) { stubMeta = winner.result.__stub; responseStatus = "stub_demo"; }
-        console.log(`[/api/ask] raced model served by ${winner.model.info.id}`);
-        return;
-      }
-
-      // Winner failed — check late successes
-      const all = await Promise.allSettled(wrapped);
-      for (const s of all) {
-        if (s.status !== "fulfilled") continue;
-        const { model: m, result: r } = s.value;
-        if (r.ok && r.sites.length > 0 && m.info.id !== winner.model.info.id) {
-          rankedSites = enrichSitesWithCatalog(r.sites);
-          raw = r.raw;
-          if (r.answer) modelAnswer = r.answer;
-          if (r.sources && r.sources.length > 0) modelSources = r.sources;
-          modelInterpretation = r.interpretation;
-          activeInfo = m.info; activeModel = m;
-          if (!requestedIsStub) fallbackUsed = true;
-          console.log(`[/api/ask] raced model served by ${m.info.id} (late)`);
+        : primaryResult.error);
+      const fallbackModels = liveModels.slice(1, MAX_FALLBACK_ATTEMPTS);
+      for (const fallbackModel of fallbackModels) {
+        const fallbackResult = await runModel(fallbackModel);
+        if (fallbackResult.ok && fallbackResult.sites.length > 0) {
+          rankedSites = enrichSitesWithCatalog(fallbackResult.sites);
+          raw = fallbackResult.raw;
+          if (fallbackResult.answer) modelAnswer = fallbackResult.answer;
+          if (fallbackResult.sources && fallbackResult.sources.length > 0) modelSources = fallbackResult.sources;
+          modelInterpretation = fallbackResult.interpretation;
+          activeInfo = fallbackModel.info; activeModel = fallbackModel;
+          fallbackUsed = true;
+          if (fallbackResult.__stub) { stubMeta = fallbackResult.__stub; responseStatus = "stub_demo"; }
+          console.log(`[/api/ask] fallback model served by ${fallbackModel.info.id}`);
           return;
         }
       }
 
-      const winnerErr = winner.result.ok ? "returned 0 sites" : (winner.result as any).error || "timeout";
-      modelError = `Primary/fallback models failed: ${winner.model.info.id} - ${winnerErr}`;
+      modelError = safeModelMessage("Primary/fallback models failed: " + modelAttempts.filter((a) => a.started && a.outcome === "failure").map((a) => `${a.modelId} - ${a.message ?? "failed"}`).join("; "));
       console.error(`[/api/ask] all models failed: ${modelError}`);
     })(), STEP_A_TIMEOUT_MS, "step_a");
 
@@ -766,8 +832,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
     console.warn(
       "[/api/ask] cascade exited with rankedSites.length === 0 — force-firing curatedStub as final guard",
     );
-    pushAttempted("curated-stub-final-guard");
-    const finalStubResult = await callModel(curatedStub);
+    const finalStubResult = await runCurated("curated-stub-final-guard");
     if (finalStubResult.ok && finalStubResult.sites.length > 0) {
       rankedSites = enrichSitesWithCatalog(finalStubResult.sites);
       if (finalStubResult.__stub) {
@@ -797,9 +862,8 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   // deliberately preserved for connectors and scoring.
   if (rankedSites.length === 0) {
     const emptyRankingReason = modelError ?? "The selected model returned no sites.";
-    console.warn(`[/api/ask] empty provider ranking — using curated fallback: ${emptyRankingReason}`);
-    pushAttempted("curated-stub-post-gate");
-    const fallbackResult = await callModel(curatedStub);
+console.warn(`[/api/ask] empty provider ranking — using curated fallback: ${emptyRankingReason}`);
+    const fallbackResult = await runCurated("curated-stub-post-gate");
     if (fallbackResult.ok && fallbackResult.sites.length > 0) {
       try {
         rankedSites = enrichSitesWithCatalog(fallbackResult.sites);
@@ -1146,17 +1210,36 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
           const r = results[i];
           if (r.status === "fulfilled") {
             (site as any).competitors = {
-              ok: true,
+              ok: r.value.ok,
               places: r.value.places ?? [],
               noCompetition: r.value.places && r.value.places.length === 0,
+              source: r.value.ok ? "google_places" : "osm_fallback",
+              radiusM: r.value.radiusM,
+              vertical: effectiveVertical,
             };
             // Override stub competition data with real Places results
-            if (r.value.places && r.value.places.length > 0) {
+            if (r.value.ok && r.value.places && r.value.places.length > 0) {
               (site as any).competition = r.value.places.map((p: any) =>
                 `${p.name} (${Math.round(p.distanceM)}m)`
               );
-            } else {
+            } else if (r.value.ok) {
               (site as any).competition = ["No direct competitors within 3km"];
+            }
+
+            if (r.value.ok) {
+              const signals = applyCompetitorAuthority(site.signals ?? [], r.value, effectiveVertical);
+              site.signals = signals;
+              const baseScore = site.scoreBreakdown?.baseScore ?? site.score;
+              const breakdown = combine({ id: String(site.id ?? site.rank), score: baseScore }, signals, effectiveVertical);
+              const distinctSources = new Set(signals.map((signal) => signal.source)).size;
+              const coverageMultiplier = distinctSources === 0 ? 0.4 : distinctSources <= 2 ? 0.65 : distinctSources <= 4 ? 0.75 : distinctSources <= 7 ? 0.85 : 1;
+              const finalConfidence = Math.min(0.99, breakdown.confidence * coverageMultiplier);
+              breakdown.coverageMultiplier = coverageMultiplier;
+              breakdown.distinctSources = distinctSources;
+              breakdown.confidence = finalConfidence;
+              site.score = finalConfidence;
+              site.confidence = finalConfidence;
+              site.scoreBreakdown = breakdown;
             }
           }
         });
@@ -1447,6 +1530,10 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
       spatial: intentResult.matchedSpatialPatterns,
       conversational: intentResult.matchedConversationalPatterns,
     },
+    modelAttempts,
+    modelErrors: modelAttempts
+      .filter((attempt) => attempt.outcome === "failure" && attempt.message)
+      .map((attempt) => `${attempt.modelId}: ${attempt.message}`),
   };
   if (allConnectorsFailed) {
     responseBody.connectorsError = "all connectors failed";
@@ -1538,6 +1625,7 @@ export async function POST(req: NextRequest) {
   // leak state across requests on the same worker.
   partialAttemptedChain = [];
   partialModelError = null;
+  partialModelAttempts = [];
   partialVertical = "";
   partialQuestionText = "";
   partialUserId = "";
@@ -1656,6 +1744,10 @@ export async function POST(req: NextRequest) {
       modelError: partialHasFallback
         ? `${partialModelError || "Request exceeded the time budget"}; curated fallback used`
         : partialFallbackError || partialModelError || partialUnavailableReason,
+      modelAttempts: partialModelAttempts,
+      modelErrors: partialModelAttempts
+        .filter((attempt) => attempt.outcome === "failure" && attempt.message)
+        .map((attempt) => `${attempt.modelId}: ${attempt.message}`),
       connectorsRun: [],
       city: partialStub?.city,
       country: partialStub?.country,

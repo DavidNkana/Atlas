@@ -66,6 +66,8 @@ export async function GET(_req: NextRequest) {
   const tavilyKey = process.env.TAVILY_API_KEY;
   const openrouterKey = process.env.OPENROUTER_API_KEY;
   const perplexityKey = process.env.PERPLEXITY_API_KEY;
+  const openaiConfigured = Boolean(process.env.OPENAI_API_KEY);
+  const openaiEndpoint = process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
 
   const checks: ModelHealth[] = [
     checkKey("GEMINI_API_KEY", geminiKey, ["AIzaSy", "AQ."]),
@@ -221,6 +223,17 @@ export async function GET(_req: NextRequest) {
       buildCommit: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 8) ?? "unknown",
       buildTime: process.env.VERCEL_DEPLOYMENT_ID ?? new Date().toISOString(),
       models: checks,
+      // Safe, non-probing Luna summary. Deliberately excludes key material,
+      // authorization headers, prompts, and upstream response bodies.
+      providerSummary: {
+        openai: {
+          configured: openaiConfigured,
+          modelId: process.env.OPENAI_MODEL || "gpt-5.6-luna",
+          endpointMode: process.env.OPENAI_BASE_URL ? "custom-compatible" : "direct-openai",
+          endpointStatus: openaiConfigured ? "configured-not-probed" : "not-configured",
+          endpointHost: (() => { try { return new URL(openaiEndpoint).hostname; } catch { return "invalid"; } })(),
+        },
+      },
       summary: {
         totalConfigured: checks.filter((c) => c.configured).length,
         total: checks.length,
