@@ -7,7 +7,7 @@ import { GALLERY_QUESTION_COUNT, GALLERY_QUESTIONS } from "@/components/Question
 import { buildPrompt as buildGooglePrompt } from "@/lib/models/google";
 import { buildPrompt as buildOpenRouterPrompt } from "@/lib/models/openrouter";
 import { buildPrompt as buildGeminiPrompt } from "@/lib/models/gemini-search";
-import { buildPrompt as buildOpenAIPrompt, normalizeOpenAIModel, openaiLuna, parseResponse as parseOpenAIResponse } from "@/lib/models/openai";
+import { buildPrompt as buildOpenAIPrompt, getOpenAITimeoutMs, normalizeOpenAIModel, openaiLuna, parseResponse as parseOpenAIResponse } from "@/lib/models/openai";
 import { getModel } from "@/lib/models/registry";
 import { buildMessages as buildPerplexityMessages } from "@/lib/models/perplexity";
 import { curatedStub } from "@/lib/models/stub";
@@ -91,6 +91,13 @@ for (const prompt of [
 // server-side and depends only on OPENAI_API_KEY (never a client env var).
 assert.equal(getModel("gpt-5.6-luna"), openaiLuna);
 assert.equal(normalizeOpenAIModel("openai/gpt-5.6-luna"), "gpt-5.6-luna");
+const previousOpenAITimeout = process.env.OPENAI_TIMEOUT_MS;
+delete process.env.OPENAI_TIMEOUT_MS;
+assert.equal(getOpenAITimeoutMs(), 15_000);
+process.env.OPENAI_TIMEOUT_MS = "20000";
+assert.equal(getOpenAITimeoutMs(), 15_000, "Luna timeout must remain bounded at 15 seconds");
+if (previousOpenAITimeout === undefined) delete process.env.OPENAI_TIMEOUT_MS;
+else process.env.OPENAI_TIMEOUT_MS = previousOpenAITimeout;
 assert.equal(
   normalizeOpenAIModel("openai/gpt-5.6-luna", "https://gateway.example/v1"),
   "openai/gpt-5.6-luna",

@@ -119,6 +119,7 @@ const MODEL_TIMEOUT_MS = 8_000;
 // not per-attempt. So we need 60s budget for the full
 // 3-attempt cascade.
 const MODEL_TIMEOUT_OVERRIDES: Record<string, number> = {
+  'gpt-5.6-luna': 15_000,  // Direct OpenAI responses can take ~10s
   'gemini-search': 30_000,   // Large site-selection responses need time
   'llama-free': 35_000,
   'mistral-free': 35_000,

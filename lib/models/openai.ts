@@ -7,6 +7,14 @@ import type {
 } from './types';
 
 const OPENAI_BASE_URL = 'https://api.openai.com/v1';
+export const OPENAI_TIMEOUT_MS_MAX = 15_000;
+
+/** Keep Luna responsive while allowing the direct provider's normal latency. */
+export function getOpenAITimeoutMs(): number {
+  const configured = Number(process.env.OPENAI_TIMEOUT_MS);
+  if (!Number.isFinite(configured) || configured <= 0) return OPENAI_TIMEOUT_MS_MAX;
+  return Math.min(configured, OPENAI_TIMEOUT_MS_MAX);
+}
 
 /**
  * OpenAI's direct API expects the vendor model id without a provider
@@ -135,7 +143,7 @@ export const openaiLuna: Model = {
     const configuredModel = process.env.OPENAI_MODEL || 'gpt-5.6-luna';
     const model = normalizeOpenAIModel(configuredModel, baseUrl);
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 7_500);
+    const timer = setTimeout(() => controller.abort(), getOpenAITimeoutMs());
     try {
       const response = await fetch(endpoint, {
         method: 'POST',
