@@ -12,6 +12,7 @@ import { getModel } from "@/lib/models/registry";
 import { buildMessages as buildPerplexityMessages } from "@/lib/models/perplexity";
 import { curatedStub } from "@/lib/models/stub";
 import { applyConfidenceGate, hasLabeledEmptyRanking } from "@/lib/reliability/empty-ranking";
+import { applyCompetitorAuthority } from "@/lib/connectors/competitor-authority";
 
 async function main() {
 const sites = [
@@ -40,6 +41,33 @@ const adverse = combine(
 assert.ok(adverse.signalScore < 0);
 assert.equal(metadataForSource("sa_traffic").provenance, "Curated");
 assert.equal(metadataForSource("tomtom_traffic").provenance, "Live");
+
+// Competitor authority: a successful named Places lookup must replace the
+// stale OSM count everywhere scoring reads it; a failed lookup must not erase
+// the OSM fallback signal.
+const osmCompetitor = {
+  id: "osm:competitor",
+  source: "competitors",
+  type: "competitor_count",
+  label: "0 restaurant competitors (OpenStreetMap)",
+  value: 0,
+  weight: 1,
+  fetchedAt: new Date().toISOString(),
+} as any;
+const googleResult = {
+  ok: true,
+  places: [{ name: "Named Place", placeId: "p1", lat: -33, lng: 18, types: ["restaurant"], distanceM: 100 }],
+  searchLat: -33,
+  searchLng: 18,
+  radiusM: 3000,
+  searchedKeyword: "restaurant",
+};
+const authoritativeSignals = applyCompetitorAuthority([osmCompetitor], googleResult, "restaurant");
+assert.equal(authoritativeSignals.filter((s) => s.type === "competitor_count")[0].value, 1);
+assert.equal(authoritativeSignals.filter((s) => s.type === "competitor_count")[0].source, "google_places");
+const osmFallbackSignals = applyCompetitorAuthority([osmCompetitor], { ...googleResult, ok: false, places: [] }, "restaurant");
+assert.equal(osmFallbackSignals[0].value, 0);
+assert.equal(osmFallbackSignals[0].source, "competitors");
 
 const developmentBrief = {
   vertical: "restaurant",
