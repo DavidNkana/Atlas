@@ -26,14 +26,14 @@ function downloadFile(filename: string, content: string, mime: string) {
 }
 
 function toCSV(sites: any[]): string {
-  const header = "rank,name,suburb,score,confidence,lat,lng,rationale";
+  const header = "rank,name,suburb,score,evidenceConfidence,lat,lng,rationale";
   const rows = sites.map((s) =>
     [
       s.rank,
       JSON.stringify(s.name ?? ""),
       JSON.stringify(s.suburb ?? ""),
       s.score ?? 0,
-      s.confidence ?? 0,
+      s.evidenceConfidence ?? s.confidence ?? 0,
       s.lat ?? 0,
       s.lng ?? 0,
       JSON.stringify((s.rationale ?? "").replace(/"/g, '""')),
@@ -64,7 +64,7 @@ function toMarkdown(d: ExportData): string {
   lines.push("");
   for (const s of d.rankedSites) {
     lines.push(`### ${s.rank}. ${s.name}${s.suburb ? ` — ${s.suburb}` : ""}`);
-    lines.push(`**Score:** ${(s.score * 100).toFixed(0)}% · **Confidence:** ${(s.confidence * 100).toFixed(0)}%`);
+    lines.push(`**Score:** ${(s.score * 100).toFixed(0)}% · **Evidence confidence:** ${((s.evidenceConfidence ?? s.confidence) * 100).toFixed(0)}%`);
     lines.push(`**Location:** ${s.lat?.toFixed(4)}, ${s.lng?.toFixed(4)}`);
     if (s.rationale) lines.push(`**Why:** ${s.rationale}`);
     if (s.advantages) {

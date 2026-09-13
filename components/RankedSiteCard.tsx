@@ -51,6 +51,9 @@ type ScoreBreakdown = {
   baseScore: number;
   signalScore: number;
   confidence: number;
+  modelConfidence?: number;
+  evidenceCoverage?: number;
+  evidenceConfidence?: number;
   factors: ScoreFactor[];
 };
 
@@ -59,6 +62,9 @@ type Site = {
   name: string;
   score: number;
   confidence: number;
+  modelConfidence?: number;
+  evidenceCoverage?: number;
+  evidenceConfidence?: number;
   rationale: string;
   advantages?: { economic?: string; geographic?: string; logistical?: string; demographic?: string; };
   disadvantages?: string;
@@ -230,7 +236,7 @@ export function RankedSiteCard({
               score {site.score?.toFixed?.(2) ?? "—"}
             </span>
             <span className="rounded bg-atlas-surface2 px-1.5 py-0.5 font-mono text-atlas-muted">
-              conf {site.confidence?.toFixed?.(2) ?? "—"}
+              evidence {site.evidenceConfidence?.toFixed?.(2) ?? site.confidence?.toFixed?.(2) ?? "—"}
             </span>
             <svg
               width="14"
@@ -253,6 +259,16 @@ export function RankedSiteCard({
             {site.rationale}
           </p>
         )}
+
+        <div className="ml-8 mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px]" data-testid="confidence-dimensions">
+          <span className="text-atlas-muted">
+            AI reasoning: {site.modelConfidence == null ? "unknown" : `${(site.modelConfidence * 100).toFixed(0)}%`}
+          </span>
+          <span className="text-amber-300">
+            Evidence coverage: {site.evidenceCoverage == null ? "unknown" : `${(site.evidenceCoverage * 100).toFixed(0)}%`}
+          </span>
+          <span className="text-atlas-muted">Unknown criteria remain unverified</span>
+        </div>
 
         {site.lat != null && site.lng != null && (
           <p className="ml-8 mt-1 font-mono text-[10px] text-atlas-muted">
@@ -358,11 +374,15 @@ export function RankedSiteCard({
                   {site.dataProvenance}
                 </p>
                 <p className="mt-1 text-[10px] text-atlas-muted">
-                  {(site.confidence ?? 0) >= 0.6 ? (
-                    <span className="text-emerald-400">✓ Confidence {(site.confidence * 100).toFixed(0)}% — sufficient</span>
-                  ) : (
-                    <span className="text-rose-400">⚠ Confidence {(site.confidence * 100).toFixed(0)}% — below threshold, treat with caution</span>
-                  )}
+                   <span className="text-atlas-muted">
+                     AI reasoning confidence: {site.modelConfidence == null ? "unknown" : `${(site.modelConfidence * 100).toFixed(0)}%`}
+                   </span>
+                   <span className="ml-2 text-amber-300">
+                     Evidence coverage: {site.evidenceCoverage == null ? "unknown" : `${(site.evidenceCoverage * 100).toFixed(0)}%`}
+                   </span>
+                   {(site.evidenceConfidence ?? site.confidence) < 0.6 && (
+                     <span className="ml-2 text-rose-400">· verification required</span>
+                   )}
                 </p>
               </div>
             )}

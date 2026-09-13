@@ -591,9 +591,9 @@ export function DecisionBlock({ site, vertical }: DecisionBlockProps) {
           )}
           {lowConfidence && (
             <ManualCheck>
-              Low confidence score ({Math.round((site.confidence ?? 0) * 100)}%)
-              — Atlas couldn&apos;t verify this site strongly. Treat with
-              caution.
+              Evidence confidence is limited ({Math.round((site.confidence ?? 0) * 100)}%)
+              — Atlas couldn&apos;t verify this site strongly. Treat unknown
+              criteria as unverified.
             </ManualCheck>
           )}
           {envRisky && (

@@ -7,8 +7,8 @@
  * analytics chart. Two visualizations side by side:
  *
  *   1. Score bar chart — horizontal bars of score (emerald) per site,
- *      with a translucent confidence bar underneath. Hover any bar to
- *      see a tooltip with the site name, rank, score, confidence, and
+ *      with a translucent evidence-confidence bar underneath. Hover any bar to
+ *      see a tooltip with the site name, rank, score, and evidence confidence,
  *      the top 1-2 signals that pushed the score.
  *
  *   2. Factor line chart — for the top-3 sites, shows how the 3-4 score
@@ -320,7 +320,7 @@ function ChartTooltip({
           score {(site.score * 100).toFixed(1)}%
         </span>
         <span className="rounded bg-atlas-surface2 px-1.5 py-0.5 font-mono text-atlas-muted">
-          conf {(site.confidence * 100).toFixed(1)}%
+           evidence {(site.confidence * 100).toFixed(1)}%
         </span>
       </div>
       {site.rationale && (

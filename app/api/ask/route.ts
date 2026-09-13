@@ -22,6 +22,7 @@ import { withTimeout } from "@/lib/util/timeout";
 import { sanitizeForJson } from "@/lib/util/json-sanitize";
 import { detectCity } from "@/lib/stub/detect";
 import { confidenceWarningForSites } from "@/lib/reliability/empty-ranking";
+import { coverageMultiplierForSources, evidenceCoverage } from "@/lib/reliability/confidence";
 
 /**
  * Day 5 hotfix — handler-level budget.
@@ -187,6 +188,9 @@ type RankedSite = {
   name: string;
   score: number;
   confidence: number;
+  modelConfidence?: number;
+  evidenceCoverage?: number;
+  evidenceConfidence?: number;
   rationale: string;
   lat?: number;
   lng?: number;
@@ -274,6 +278,11 @@ type AskResponse = {
   interpretation?: ModelInterpretation;
 /** Additive warning for a valid AI ranking that needs verification. */
   confidenceWarning?: string;
+  /** Explicit top-level labels for consumers that do not render site cards. */
+  confidenceDimensions?: {
+    model: "reasoning confidence";
+    evidence: "coverage and verification confidence";
+  };
   modelAttempts?: ModelAttempt[];
   modelErrors?: string[];
 };
@@ -1071,17 +1080,18 @@ console.warn(`[/api/ask] empty provider ranking — using curated fallback: ${em
       for (const site of rankedSites) {
         const siteId = String(site.id ?? site.rank);
         const signals = signalsBySite[siteId] ?? [];
+        // Preserve the provider's own reasoning confidence before evidence
+        // scoring updates the backwards-compatible `confidence` field.
+        const modelConfidence = Number.isFinite(site.modelConfidence)
+          ? site.modelConfidence
+          : site.confidence;
         const breakdown = combine(
           { id: siteId, score: site.score },
           signals,
           effectiveVertical,
         );
         const distinctSources = new Set(signals.map((s) => s.source)).size;
-        let coverageMultiplier = 1;
-        if (distinctSources === 0) coverageMultiplier = 0.4;
-        else if (distinctSources <= 2) coverageMultiplier = 0.65;
-        else if (distinctSources <= 4) coverageMultiplier = 0.75;
-        else if (distinctSources <= 7) coverageMultiplier = 0.85;
+        const coverageMultiplier = coverageMultiplierForSources(distinctSources);
         const finalConfidence = Math.min(
           0.99,
           breakdown.confidence * coverageMultiplier,
@@ -1091,6 +1101,9 @@ console.warn(`[/api/ask] empty provider ranking — using curated fallback: ${em
         breakdown.confidence = finalConfidence;
         site.score = finalConfidence;
         site.confidence = finalConfidence;
+        site.modelConfidence = modelConfidence;
+        site.evidenceCoverage = evidenceCoverage(signals, connectorsRun.length);
+        site.evidenceConfidence = finalConfidence;
         site.signals = signals;
         site.scoreBreakdown = breakdown;
 
@@ -1230,16 +1243,22 @@ console.warn(`[/api/ask] empty provider ranking — using curated fallback: ${em
             if (r.value.ok) {
               const signals = applyCompetitorAuthority(site.signals ?? [], r.value, effectiveVertical);
               site.signals = signals;
+              const modelConfidence = Number.isFinite(site.modelConfidence)
+                ? site.modelConfidence
+                : site.confidence;
               const baseScore = site.scoreBreakdown?.baseScore ?? site.score;
               const breakdown = combine({ id: String(site.id ?? site.rank), score: baseScore }, signals, effectiveVertical);
               const distinctSources = new Set(signals.map((signal) => signal.source)).size;
-              const coverageMultiplier = distinctSources === 0 ? 0.4 : distinctSources <= 2 ? 0.65 : distinctSources <= 4 ? 0.75 : distinctSources <= 7 ? 0.85 : 1;
+              const coverageMultiplier = coverageMultiplierForSources(distinctSources);
               const finalConfidence = Math.min(0.99, breakdown.confidence * coverageMultiplier);
               breakdown.coverageMultiplier = coverageMultiplier;
               breakdown.distinctSources = distinctSources;
               breakdown.confidence = finalConfidence;
               site.score = finalConfidence;
               site.confidence = finalConfidence;
+              site.modelConfidence = modelConfidence;
+              site.evidenceCoverage = evidenceCoverage(signals, connectorsRun.length);
+              site.evidenceConfidence = finalConfidence;
               site.scoreBreakdown = breakdown;
             }
           }
@@ -1517,6 +1536,10 @@ console.warn(`[/api/ask] empty provider ranking — using curated fallback: ${em
     liveListingsError: allLiveListings.length === 0 ? liveListingsError : undefined,
     connectorsRun,
     confidenceWarning,
+    confidenceDimensions: {
+      model: "reasoning confidence",
+      evidence: "coverage and verification confidence",
+    },
     // Day 17 v6: routing + chat surface. primaryEngine tells the UI
     // which engine answered. matchedPatterns shows the user why we
     // classified the question that way. chatViewUrl is the URL for

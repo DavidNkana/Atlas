@@ -110,6 +110,7 @@ export function parseResponse(text: string): ModelResponse {
       suburb: typeof site.suburb === 'string' ? site.suburb : undefined,
       score: typeof site.score === 'number' && Number.isFinite(site.score) ? Math.max(0, Math.min(1, site.score)) : 0.5,
       confidence: typeof site.confidence === 'number' && Number.isFinite(site.confidence) ? Math.max(0, Math.min(1, site.confidence)) : 0.5,
+      modelConfidence: typeof site.confidence === 'number' && Number.isFinite(site.confidence) ? Math.max(0, Math.min(1, site.confidence)) : 0.5,
       rationale: site.rationale.trim(),
       ...(lat !== undefined && lng !== undefined && (lat !== 0 || lng !== 0) ? { lat, lng } : {}),
     }];

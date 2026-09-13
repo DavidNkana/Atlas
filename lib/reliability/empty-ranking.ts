@@ -1,6 +1,11 @@
 export const CONFIDENCE_THRESHOLD = 0.6;
 
-export type ReliabilitySite = { confidence?: number; _catalogSupplement?: boolean };
+export type ReliabilitySite = {
+  confidence?: number;
+  modelConfidence?: number;
+  evidenceCoverage?: number;
+  _catalogSupplement?: boolean;
+};
 
 /**
  * Keep a valid ranking intact. Confidence is a signal for the UI and for
@@ -18,11 +23,20 @@ export function confidenceWarningForSites(
 ): string | undefined {
   const modelSites = sites.filter((site) => !site._catalogSupplement);
   if (modelSites.length === 0) return undefined;
-  const average =
-    modelSites.reduce((sum, site) => sum + (site.confidence ?? 0), 0) /
+  const modelAverage =
+    modelSites.reduce((sum, site) => sum + (site.modelConfidence ?? site.confidence ?? 0), 0) /
     modelSites.length;
-  if (average >= CONFIDENCE_THRESHOLD) return undefined;
-  return `AI confidence is low (average ${average.toFixed(2)}; verification recommended before acting).`;
+  const coverageValues = modelSites.filter((site) => site.evidenceCoverage != null);
+  const coverageAverage = coverageValues.length > 0
+    ? coverageValues.reduce((sum, site) => sum + (site.evidenceCoverage ?? 0), 0) / coverageValues.length
+    : undefined;
+  if (modelAverage < CONFIDENCE_THRESHOLD) {
+    return `AI reasoning confidence is low (average ${modelAverage.toFixed(2)}); evidence coverage and verification are limited. This valid AI result was not replaced.`;
+  }
+  if (coverageAverage != null && coverageAverage < CONFIDENCE_THRESHOLD) {
+    return `AI reasoning is separate from evidence: coverage is limited (average ${(coverageAverage * 100).toFixed(0)}%). Verify unknown criteria before acting.`;
+  }
+  return undefined;
 }
 
 /** Empty rankings must be explicitly unavailable/partial, never ordinary success. */

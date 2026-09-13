@@ -218,7 +218,7 @@ export default function ResultMapClient({
           )}</p>` +
           `<small style=\"font-size:11px;opacity:0.8;color:#a1a1aa;\">Score ${site.score.toFixed(
             2
-          )} &middot; Confidence ${site.confidence.toFixed(2)}</small>` +
+          )} &middot; Evidence confidence ${site.confidence.toFixed(2)}</small>` +
           `<br><a href=\"https://www.google.com/maps?q=${site.lat},${site.lng}\" target=\"_blank\" rel=\"noopener\" style=\"display:inline-block;margin-top:6px;padding:3px 8px;font-size:11px;font-weight:600;background:#4F46E5;color:#fff;border-radius:4px;text-decoration:none;\">View on Google Maps →</a>`;
         const marker = new mapboxgl.Marker({ color: "#ea7a1f" })
           .setLngLat(lngLat)
@@ -508,7 +508,7 @@ export default function ResultMapClient({
                         <span className={signalDelta >= 0 ? "text-emerald-400" : "text-rose-400"}>
                           {signalText}
                         </span>
-                        {" "}· Confidence{" "}
+                        {" "}· Evidence confidence{" "}
                         <span className="text-zinc-300">
                           {site.confidence.toFixed(2)}
                         </span>
@@ -583,7 +583,7 @@ export default function ResultMapClient({
             </div>
             <div className="rounded-md border border-zinc-800 bg-zinc-800 px-2.5 py-2">
               <div className="text-[9px] font-semibold uppercase tracking-wider text-zinc-500">
-                Avg confidence
+                 Avg evidence confidence
               </div>
               <div className="mt-0.5 font-mono text-sm font-semibold text-zinc-100">
                 {rankedSites.length > 0

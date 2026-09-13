@@ -127,6 +127,9 @@ type RankedSite = {
   name: string;
   score: number;
   confidence: number;
+  modelConfidence?: number;
+  evidenceCoverage?: number;
+  evidenceConfidence?: number;
   rationale: string;
   lat?: number;
   lng?: number;
@@ -193,6 +196,10 @@ type ResponseBody = {
     conversational: string[];
   };
   confidenceWarning?: string;
+  confidenceDimensions?: {
+    model: string;
+    evidence: string;
+  };
 };
 
 /**
@@ -585,6 +592,7 @@ export default async function ResultPage({
   const stubCountry = responseBody.country;
   const stubReason = responseBody.stubReason;
   const unavailableReason = responseBody.unavailableReason ?? responseBody.model?.modelError;
+  const isFallbackModel = Boolean(responseBody.model?.fallbackUsed) || responseStatus === "stub_demo" || responseStatus === "stub_fallback";
 
   return (
     <AppShell>
@@ -613,6 +621,14 @@ export default async function ResultPage({
               {stubCity && (
                 <span className="rounded-full bg-atlas-surface2 px-2 py-0.5 text-[10px] font-medium text-atlas-muted">
                   {stubCity}{stubCountry ? `, ${stubCountry}` : ""}
+                </span>
+              )}
+              {responseBody.model && (
+                <span
+                  data-testid="atlas-active-model"
+                  className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${isFallbackModel ? "border border-amber-700 bg-amber-500/10 text-amber-300" : "border border-emerald-700 bg-emerald-500/10 text-emerald-300"}`}
+                >
+                  {isFallbackModel ? "Fallback · " : "Primary · "}{responseBody.model.displayName}
                 </span>
               )}
             </div>
@@ -671,7 +687,7 @@ export default async function ResultPage({
             data-testid="atlas-confidence-warning"
             className="mb-6 rounded-md border border-amber-800 bg-amber-500/10 px-4 py-3 text-xs text-amber-200"
           >
-            <strong className="font-semibold text-amber-300">Verify this AI result:</strong>{" "}
+            <strong className="font-semibold text-amber-300">Evidence is limited:</strong>{" "}
             {responseBody.confidenceWarning}
           </div>
         )}
@@ -949,16 +965,19 @@ export default async function ResultPage({
                   className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded border border-atlas-border bg-atlas-surface2/60 px-3 py-2 text-[11px]"
                   data-testid="decision-coverage"
                 >
-                  <span className="text-atlas-text">
-                    <span className="font-semibold">{cov.fullSites}</span> of{" "}
+                   <span className="text-atlas-text">
+                     <span className="font-semibold">{cov.fullSites}</span> of{" "}
                     {cov.totalSites} site{cov.totalSites === 1 ? "" : "s"} have
                     full decision data
                   </span>
                   <span className="text-atlas-muted">·</span>
-                  <span className="text-amber-400">
+                   <span className="text-amber-400">
                     <span aria-hidden="true">⚠</span> {cov.manualChecks} manual
                     check{cov.manualChecks === 1 ? "" : "s"} flagged
-                  </span>
+                   </span>
+                   <span className="text-atlas-muted" title="AI reasoning confidence is separate from evidence coverage.">
+                     AI reasoning ≠ evidence coverage
+                   </span>
                   <span className="ml-auto text-atlas-muted">
                     expand any site below for its Decision Block
                   </span>
@@ -1048,7 +1067,10 @@ export default async function ResultPage({
                 rank: s.rank,
                 name: s.name,
                 score: s.score,
-                confidence: s.confidence,
+                 confidence: s.confidence,
+                 modelConfidence: s.modelConfidence,
+                 evidenceCoverage: s.evidenceCoverage,
+                 evidenceConfidence: s.evidenceConfidence,
                 rationale: s.rationale,
                 lat: s.lat,
                 lng: s.lng,
@@ -1106,7 +1128,10 @@ export default async function ResultPage({
                   rank: s.rank,
                   name: s.name,
                   score: s.score,
-                  confidence: s.confidence,
+                   confidence: s.confidence,
+                   modelConfidence: s.modelConfidence,
+                   evidenceCoverage: s.evidenceCoverage,
+                   evidenceConfidence: s.evidenceConfidence,
                   rationale: s.rationale,
                   lat: s.lat,
                   lng: s.lng,

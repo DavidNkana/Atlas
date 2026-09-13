@@ -13,6 +13,7 @@ import { buildMessages as buildPerplexityMessages } from "@/lib/models/perplexit
 import { curatedStub } from "@/lib/models/stub";
 import { applyConfidenceGate, confidenceWarningForSites, hasLabeledEmptyRanking } from "@/lib/reliability/empty-ranking";
 import { applyCompetitorAuthority } from "@/lib/connectors/competitor-authority";
+import { evidenceCoverage } from "@/lib/reliability/confidence";
 
 async function main() {
 const sites = [
@@ -167,8 +168,25 @@ const lowConfidence = [
   { rank: 2, name: "also weak", confidence: 0.3 },
 ];
 assert.deepEqual(applyConfidenceGate(lowConfidence), lowConfidence);
-assert.match(confidenceWarningForSites(lowConfidence) ?? "", /AI confidence is low/);
-assert.equal(confidenceWarningForSites([{ confidence: 0.9 }]), undefined);
+  assert.match(confidenceWarningForSites(lowConfidence) ?? "", /AI reasoning confidence is low/);
+  assert.equal(confidenceWarningForSites([{ confidence: 0.9 }]), undefined);
+  const lowConfidenceLuna = {
+    model: { id: "gpt-5.6-luna", displayName: "GPT-5.6 Luna", fallbackUsed: false },
+    ranked_sites: [{ ...lowConfidence[0], modelConfidence: 0.2, evidenceCoverage: 0.1, evidenceConfidence: 0.18 }],
+  };
+  assert.equal(lowConfidenceLuna.model.id, "gpt-5.6-luna", "valid low-confidence Luna output remains primary");
+  assert.equal(lowConfidenceLuna.model.fallbackUsed, false);
+  assert.notEqual(lowConfidenceLuna.ranked_sites[0].modelConfidence, lowConfidenceLuna.ranked_sites[0].evidenceCoverage);
+  assert.equal(
+    evidenceCoverage([
+      { source: "sa_traffic", provenance: "Curated" },
+      { source: "catalog", provenance: "Synthetic/Heuristic" },
+    ],
+      4,
+    ),
+    0.25,
+    "synthetic catalog hints must not inflate evidence coverage",
+  );
 const curatedResponse = await curatedStub.call({
   vertical: "retail_shop",
   question: "Find retail sites in Johannesburg",

@@ -22,6 +22,12 @@ export interface RankedSite {
   name: string;
   score: number;
   confidence: number;
+  /** Luna/model-reported reasoning confidence. Never replaced by connector scoring. */
+  modelConfidence?: number;
+  /** Fraction of planned connector sources that returned usable evidence. */
+  evidenceCoverage?: number;
+  /** Evidence-adjusted confidence; `confidence` remains this value for compatibility. */
+  evidenceConfidence?: number;
   rationale: string;
   lat?: number;
   lng?: number;
