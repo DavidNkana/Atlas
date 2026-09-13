@@ -192,6 +192,7 @@ type ResponseBody = {
     spatial: string[];
     conversational: string[];
   };
+  confidenceWarning?: string;
 };
 
 /**
@@ -663,6 +664,17 @@ export default async function ResultPage({
         </header>
 
         <div className="flex-1 px-4 sm:px-6 lg:px-8">
+
+        {responseBody.confidenceWarning && responseStatus !== "stub_demo" && (
+          <div
+            role="status"
+            data-testid="atlas-confidence-warning"
+            className="mb-6 rounded-md border border-amber-800 bg-amber-500/10 px-4 py-3 text-xs text-amber-200"
+          >
+            <strong className="font-semibold text-amber-300">Verify this AI result:</strong>{" "}
+            {responseBody.confidenceWarning}
+          </div>
+        )}
 
         {/* Model warning banner — only when NOT in stub_demo mode.
             In stub_demo mode, the stub banner below already says

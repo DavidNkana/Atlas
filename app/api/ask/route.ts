@@ -20,7 +20,7 @@ import { fetchNearbyCompetitors, geocodePlaceName } from "@/lib/connectors/googl
 import { withTimeout } from "@/lib/util/timeout";
 import { sanitizeForJson } from "@/lib/util/json-sanitize";
 import { detectCity } from "@/lib/stub/detect";
-import { applyConfidenceGate, CONFIDENCE_THRESHOLD } from "@/lib/reliability/empty-ranking";
+import { confidenceWarningForSites } from "@/lib/reliability/empty-ranking";
 
 /**
  * Day 5 hotfix — handler-level budget.
@@ -258,6 +258,8 @@ type AskResponse = {
   };
   /** Luna's non-factual interpretation of the development brief. */
   interpretation?: ModelInterpretation;
+  /** Additive warning for a valid AI ranking that needs verification. */
+  confidenceWarning?: string;
 };
 
 /**
@@ -789,41 +791,13 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   }
 
 
-  // LCP-critic-trust: Confidence gate. If the model returned sites
-  // but ALL of them have confidence below the threshold, refuse to
-  // score rather than present a polished-looking but unreliable
-  // recommendation. The critic specifically called out "a polished
-  // wrong answer is worse than no answer" — this is the
-  // no-answer half of that tradeoff. Users see an honest
-  // "insufficient confidence — we don't have enough data to score
-  // this" response instead of fabricated-looking rankings.
-  //
-  // Sep 2026 MVP fix: do NOT include catalog-supplement sites in the
-  // average. The curated stub returns 5 sites with confidence 0.72-0.88;
-  // supplementMissingCatalogSites() then appends catalog entries with
-  // hardcoded confidence 0.5. If we average everything, a healthy 5-site
-  // pool becomes 5×0.8 + 3×0.5 = 0.69 (just under the bar) or worse, and
-  // a perfectly fine response gets wiped. Gate only on sites that
-  // arrived from the model.
-  const gatedSites = applyConfidenceGate(rankedSites);
-  if (gatedSites.length === 0 && rankedSites.length > 0) {
-    const modelSites = rankedSites.filter((s: any) => !s._catalogSupplement);
-    const avgConfidence =
-      modelSites.reduce((sum: number, s: any) => sum + (s.confidence ?? 0), 0) /
-      modelSites.length;
-    if (avgConfidence < CONFIDENCE_THRESHOLD) {
-      rankedSites = []; // Trigger the no-data path below
-      modelError = `Low confidence: average ${avgConfidence.toFixed(2)} < ${CONFIDENCE_THRESHOLD} threshold. Atlas declined to score this query because supporting data was insufficient.`;
-    }
-  }
-
   // Reliability invariant: connector/scoring execution must never receive an
-  // unlabeled empty ranking. This also catches the case where the confidence
-  // gate erased every model site. Do not run the confidence gate again against
-  // the curated response: it is the deliberate, deterministic last resort.
+  // unlabeled empty ranking. Provider failures and empty provider output are
+  // handled here; a valid AI ranking, including a low-confidence one, is
+  // deliberately preserved for connectors and scoring.
   if (rankedSites.length === 0) {
     const emptyRankingReason = modelError ?? "The selected model returned no sites.";
-    console.warn(`[/api/ask] empty ranking after confidence gate — using curated fallback: ${emptyRankingReason}`);
+    console.warn(`[/api/ask] empty provider ranking — using curated fallback: ${emptyRankingReason}`);
     pushAttempted("curated-stub-post-gate");
     const fallbackResult = await callModel(curatedStub);
     if (fallbackResult.ok && fallbackResult.sites.length > 0) {
@@ -1440,6 +1414,10 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   // the primary one. The result page always links to the chat
   // view (and vice versa) so users can switch.
   const intentResult = classifyIntent(trimmedQuestion);
+  const confidenceWarning =
+    activeInfo.id !== "curated-stub"
+      ? confidenceWarningForSites(rankedSites)
+      : undefined;
   const responseBody: Omit<AskResponse, "id"> = {
     status: responseStatus,
     model: modelInfoToBlock(activeInfo, fallbackUsed, modelError, attemptedChain),
@@ -1454,6 +1432,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
     liveListings: allLiveListings.length > 0 ? allLiveListings : undefined,
     liveListingsError: allLiveListings.length === 0 ? liveListingsError : undefined,
     connectorsRun,
+    confidenceWarning,
     // Day 17 v6: routing + chat surface. primaryEngine tells the UI
     // which engine answered. matchedPatterns shows the user why we
     // classified the question that way. chatViewUrl is the URL for

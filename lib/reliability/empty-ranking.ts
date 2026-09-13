@@ -2,12 +2,27 @@ export const CONFIDENCE_THRESHOLD = 0.6;
 
 export type ReliabilitySite = { confidence?: number; _catalogSupplement?: boolean };
 
-/** Preserve the existing gate semantics, including catalog exclusions. */
+/**
+ * Keep a valid ranking intact. Confidence is a signal for the UI and for
+ * downstream scoring, not a provider-validity check. A low-confidence AI
+ * answer still contains useful model output and must not be replaced by the
+ * curated demo.
+ */
 export function applyConfidenceGate<T extends ReliabilitySite>(sites: T[]): T[] {
+  return sites;
+}
+
+/** Return an additive warning for a real, non-empty ranking when confidence is low. */
+export function confidenceWarningForSites(
+  sites: ReliabilitySite[],
+): string | undefined {
   const modelSites = sites.filter((site) => !site._catalogSupplement);
-  if (modelSites.length === 0) return sites;
-  const average = modelSites.reduce((sum, site) => sum + (site.confidence ?? 0), 0) / modelSites.length;
-  return average < CONFIDENCE_THRESHOLD ? [] : sites;
+  if (modelSites.length === 0) return undefined;
+  const average =
+    modelSites.reduce((sum, site) => sum + (site.confidence ?? 0), 0) /
+    modelSites.length;
+  if (average >= CONFIDENCE_THRESHOLD) return undefined;
+  return `AI confidence is low (average ${average.toFixed(2)}; verification recommended before acting).`;
 }
 
 /** Empty rankings must be explicitly unavailable/partial, never ordinary success. */

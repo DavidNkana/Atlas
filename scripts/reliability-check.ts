@@ -11,7 +11,7 @@ import { buildPrompt as buildOpenAIPrompt, normalizeOpenAIModel, openaiLuna, par
 import { getModel } from "@/lib/models/registry";
 import { buildMessages as buildPerplexityMessages } from "@/lib/models/perplexity";
 import { curatedStub } from "@/lib/models/stub";
-import { applyConfidenceGate, hasLabeledEmptyRanking } from "@/lib/reliability/empty-ranking";
+import { applyConfidenceGate, confidenceWarningForSites, hasLabeledEmptyRanking } from "@/lib/reliability/empty-ranking";
 
 async function main() {
 const sites = [
@@ -125,13 +125,15 @@ if (finiteCoordinates.ok) {
   assert.equal(finiteCoordinates.ranked_sites[0].lng, 18.4);
 }
 
-// Zero-result reliability: low-confidence model output is erased, then the
-// curated path is allowed through without applying that gate a second time.
+// Reliability: a valid low-confidence AI ranking remains AI-backed and gets
+// an additive warning; only provider failures/empty output use the curated path.
 const lowConfidence = [
   { rank: 1, name: "weak", confidence: 0.2 },
   { rank: 2, name: "also weak", confidence: 0.3 },
 ];
-assert.deepEqual(applyConfidenceGate(lowConfidence), []);
+assert.deepEqual(applyConfidenceGate(lowConfidence), lowConfidence);
+assert.match(confidenceWarningForSites(lowConfidence) ?? "", /AI confidence is low/);
+assert.equal(confidenceWarningForSites([{ confidence: 0.9 }]), undefined);
 const curatedResponse = await curatedStub.call({
   vertical: "retail_shop",
   question: "Find retail sites in Johannesburg",
