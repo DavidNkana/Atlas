@@ -68,6 +68,8 @@ export interface ModelRequest {
   question: string;
   imageBase64?: string;
   imageMime?: string;
+  /** Resolved server-side location; never supplied by the browser. */
+  locationAnchor?: { label: string; parent: string; lat: number; lng: number };
 }
 
 export interface ModelInterpretation {

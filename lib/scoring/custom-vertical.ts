@@ -37,6 +37,9 @@ import type { Vertical } from "@/lib/models/types";
  * then substring either direction.
  */
 export const CUSTOM_VERTICAL_KEYWORDS: Record<string, Vertical> = {
+  // Explicit canonical token: custom:residential_land must not inherit the
+  // retail fallback merely because it is entered through the custom field.
+  residential_land: "residential_land",
   // civic/community/institutional
   hospital: "civic_land",
   clinic: "civic_land",

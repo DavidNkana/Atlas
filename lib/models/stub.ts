@@ -127,13 +127,22 @@ export const curatedStub: Model = {
       if (match) effectiveVertical = match;
     }
 
-    const city: City = detectCity(req.question ?? '');
+    const detectedCity = detectCity(req.question ?? '');
+    const city: City = req.locationAnchor ? {
+      ...detectedCity,
+      id: detectedCity.id === "johannesburg" && req.locationAnchor.parent !== "Johannesburg"
+        ? req.locationAnchor.parent.toLowerCase().replace(/[^a-z0-9]+/g, "_")
+        : detectedCity.id,
+      name: req.locationAnchor.label,
+      lat: req.locationAnchor.lat,
+      lng: req.locationAnchor.lng,
+    } : detectedCity;
 
     // Day 12 v13: parse the question for intent tokens
     const parsed = parseQuestion(req.question ?? '');
 
     // Day 12 v12: prefer the REAL site catalog.
-    const realSites = getRealSiteCandidates(city.id, effectiveVertical as Vertical);
+    const realSites = req.locationAnchor ? undefined : getRealSiteCandidates(city.id, effectiveVertical as Vertical);
     // Sep 2026 MVP fix: cap the curated stub at TOP 5 sites. The real
     // catalog often has 8-15 entries per (city, vertical). Previously
     // we mapped all of them, which pushed the average confidence down

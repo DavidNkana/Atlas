@@ -25,6 +25,7 @@ import { confidenceWarningForSites } from "@/lib/reliability/empty-ranking";
 import { coverageMultiplierForSources, evidenceCoverage } from "@/lib/reliability/confidence";
 import { validatePrompt } from "@/lib/intent/validate";
 import { resolveCustomVertical } from "@/lib/scoring/custom-vertical";
+import { filterCandidatesToAnchor, resolveLocationAnchorAsync, validCoordinates, type LocationAnchor } from "@/lib/location/registry";
 import {
   CUSTOM_VERTICAL_RE,
   VERTICALS,
@@ -293,6 +294,7 @@ type AskResponse = {
   };
   modelAttempts?: ModelAttempt[];
   modelErrors?: string[];
+  locationInterpretation?: LocationAnchor;
 };
 
 /**
@@ -500,6 +502,22 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   }
 
   const trimmedQuestion = question.trim();
+  const locationResolution = await resolveLocationAnchorAsync(trimmedQuestion);
+  if (locationResolution.status === "needs_clarification") {
+    return NextResponse.json(
+      {
+        ok: false,
+        status: "needs_clarification",
+        code: "needs_clarification",
+        error: locationResolution.reason,
+        locationInterpretation: { rawName: locationResolution.rawName },
+        vertical,
+        question: trimmedQuestion,
+      },
+      { status: 422 },
+    );
+  }
+  const locationAnchor = locationResolution.status === "resolved" ? locationResolution.anchor : undefined;
   const validation = validatePrompt(vertical, trimmedQuestion);
   if (!validation.ok) {
     return NextResponse.json(
@@ -647,6 +665,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
           question: trimmedQuestion,
           imageBase64,
           imageMime,
+          locationAnchor,
         }),
         modelTimeoutMs,
         "model:" + m.info.id,
@@ -908,7 +927,7 @@ console.warn(`[/api/ask] empty provider ranking — using curated fallback: ${em
     rankedSites = supplementationSites;
     rankedSites = supplementMissingCatalogSites(
       rankedSites,
-      detectCity(question).id,
+      locationAnchor?.parentCityId ?? detectCity(question).id,
       effectiveVertical,
     );
     // Re-enrich so catalog-supplement sites get property data too
@@ -918,14 +937,25 @@ console.warn(`[/api/ask] empty provider ranking — using curated fallback: ${em
     // AI models often provide approximate lat/lng (e.g., suburb centroid)
     // rather than the exact location of the named place. This uses
     // Google Places Text Search to find the real position.
-    const cityForGeocode = detectCity(question).name;
+    const cityForGeocode = locationAnchor?.parent ?? detectCity(question).name;
     await Promise.all(
       rankedSites.map(async (s: any) => {
-        if (!s?.name || typeof s.lat !== "number" || typeof s.lng !== "number") return;
+        const candidateName = s?.name;
+        if (!candidateName) return;
+        // A named model candidate without coordinates is only usable after a
+        // contextual geocode. Never use a candidate itself as the query anchor.
+        if (!validCoordinates(s)) {
+          const geo = await geocodePlaceName(candidateName, cityForGeocode);
+          if (geo) {
+            s.lat = geo.lat;
+            s.lng = geo.lng;
+          }
+          return;
+        }
         // Skip if already very precise (e.g., 4+ decimal places)
         const decimals = (s.lat.toString().split(".")[1] || "").length;
         if (decimals >= 5) return;
-        const geo = await geocodePlaceName(s.name, cityForGeocode);
+        const geo = await geocodePlaceName(candidateName, cityForGeocode);
         if (geo) {
           // Only update if the geocoded result is reasonably close to the original
           // (within ~50km). Otherwise the AI's region is different from the
@@ -941,6 +971,14 @@ console.warn(`[/api/ask] empty provider ranking — using curated fallback: ${em
         }
       })
     );
+    rankedSites = rankedSites.filter((site) => validCoordinates(site)) as RankedSite[];
+    if (locationAnchor) {
+      rankedSites = filterCandidatesToAnchor(rankedSites, locationAnchor) as RankedSite[];
+      if (rankedSites.length === 0) {
+        responseStatus = "unavailable";
+        modelError = `${modelError ?? "No candidates"}; no located candidates within ${locationAnchor.radiusKm}km of ${locationAnchor.label}`;
+      }
+    }
   }
 
   // 5. Step B — connectors + scoring (12s budget).
@@ -964,7 +1002,7 @@ console.warn(`[/api/ask] empty provider ranking — using curated fallback: ${em
 
   if (rankedSites.length > 0) try {
     await withTimeout((async () => {
-      const location = deriveLocation(rankedSites);
+      const location = locationAnchor ?? deriveLocation(rankedSites);
       const builtPlan: Plan = buildPlan(effectiveVertical, location, rankedSites);
 
       // Run every plan step. Each step carries its explicit site owner; the
@@ -1328,7 +1366,7 @@ console.warn(`[/api/ask] empty provider ranking — using curated fallback: ${em
   //      (e.g. "Sandton CBD, Johannesburg" → "Sandton CBD")
   //   3. detectCity(question).name — city-only fallback
   try {
-    const location = deriveLocation(rankedSites);
+    const location = locationAnchor ?? deriveLocation(rankedSites);
     // deriveLocation returns {lat, lng, label} — use label, not name
     const cityName = (location?.label ?? null)?.replace(/\s*\(fallback\)\s*$/i, '') ?? null;
 
@@ -1553,6 +1591,7 @@ console.warn(`[/api/ask] empty provider ranking — using curated fallback: ${em
     modelErrors: modelAttempts
       .filter((attempt) => attempt.outcome === "failure" && attempt.message)
       .map((attempt) => `${attempt.modelId}: ${attempt.message}`),
+    locationInterpretation: locationAnchor,
   };
   if (allConnectorsFailed) {
     responseBody.connectorsError = "all connectors failed";

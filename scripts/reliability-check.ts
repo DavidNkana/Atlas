@@ -15,8 +15,52 @@ import { applyConfidenceGate, confidenceWarningForSites, hasLabeledEmptyRanking 
 import { applyCompetitorAuthority } from "@/lib/connectors/competitor-authority";
 import { evidenceCoverage } from "@/lib/reliability/confidence";
 import { validatePrompt } from "@/lib/intent/validate";
+import { filterCandidatesToAnchor, resolveLocationAnchor, resolveLocationAnchorAsync, validCoordinates } from "@/lib/location/registry";
+import { mapCustomVertical } from "@/lib/scoring/custom-vertical";
 
 async function main() {
+  const laudium = resolveLocationAnchor("Find residential land in Laudium");
+  assert.equal(laudium.status, "resolved");
+  if (laudium.status === "resolved") {
+    assert.equal(laudium.anchor.label, "Laudium");
+    assert.match(laudium.anchor.parent, /Pretoria|Tshwane/);
+    assert.equal(laudium.anchor.approximate, true);
+    assert.equal(laudium.anchor.source, "approximate_registry");
+    const candidates = [
+      { name: "Laudium candidate", lat: laudium.anchor.lat, lng: laudium.anchor.lng },
+      { name: "Johannesburg candidate", lat: -26.2041, lng: 28.0473 },
+      { name: "unlocated" },
+      { name: "outside fence", lat: -25.6, lng: 28.8 },
+    ];
+    const fenced = filterCandidatesToAnchor(candidates, laudium.anchor);
+    assert.deepEqual(fenced.map((candidate) => candidate.name), ["Laudium candidate"]);
+    assert.ok(fenced.every(validCoordinates), "ranked candidates must have coordinates");
+    assert.equal(fenced.some((candidate) => candidate.name.includes("Johannesburg")), false);
+  }
+  const unresolved = resolveLocationAnchor("Find a site in Atlantisia");
+  assert.equal(unresolved.status, "needs_clarification");
+  const radiusLocation = resolveLocationAnchor("Find a site within 5 km of Laudium");
+  assert.equal(radiusLocation.status, "resolved");
+  if (radiusLocation.status === "resolved") assert.equal(radiusLocation.anchor.radiusKm, 5);
+  const previousFetchForGeocoder = globalThis.fetch;
+  globalThis.fetch = (async () => new Response(JSON.stringify([{
+    lat: "-26.65", lon: "27.93", type: "suburb", display_name: "Vereeniging, Gauteng, South Africa",
+    address: { suburb: "Vereeniging", municipality: "Emfuleni Local Municipality", country_code: "za" },
+  }]), { status: 200, headers: { "Content-Type": "application/json" } })) as typeof fetch;
+  try {
+    const geocoded = await resolveLocationAnchorAsync("Find a site in Vereeniging");
+    assert.equal(geocoded.status, "resolved");
+    if (geocoded.status === "resolved") {
+      assert.equal(geocoded.anchor.source, "nominatim");
+      assert.equal(geocoded.anchor.parent, "Emfuleni Local Municipality");
+      assert.equal(geocoded.anchor.lat, -26.65);
+    }
+  } finally {
+    globalThis.fetch = previousFetchForGeocoder;
+  }
+  assert.equal(mapCustomVertical("residential_land"), "residential_land");
+  assert.equal(mapCustomVertical("cold_storage"), "warehouse");
+
 // Prompt validation is server-side and must happen before any model/stub path.
 const unrelated = validatePrompt("gas_station", "what is pussy");
 assert.equal(unrelated.ok, false);
