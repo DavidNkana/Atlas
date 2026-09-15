@@ -208,6 +208,12 @@ export function RankedSiteCard({
   const factors = site.scoreBreakdown?.factors ?? [];
   const signals = site.signals ?? [];
 
+  function selectSite() {
+    window.dispatchEvent(new CustomEvent("atlas:select-ranked-site", {
+      detail: { rank: site.rank, lat: site.lat, lng: site.lng },
+    }));
+  }
+
   return (
     <li
       className={`overflow-hidden rounded-lg border bg-atlas-surface/40 backdrop-blur-md backdrop-saturate-150 transition-colors ${
@@ -218,7 +224,10 @@ export function RankedSiteCard({
     >
       <button
         type="button"
-        onClick={() => setExpanded((e) => !e)}
+        onClick={() => {
+          selectSite();
+          setExpanded((e) => !e);
+        }}
         aria-expanded={expanded}
         className="w-full p-4 text-left"
       >
@@ -255,9 +264,10 @@ export function RankedSiteCard({
         </div>
 
         {site.rationale && (
-          <p className="ml-8 mt-1 line-clamp-2 text-xs leading-relaxed text-atlas-muted">
-            {site.rationale}
-          </p>
+          <div className="ml-8 mt-1">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-atlas-accent">Why it ranks</p>
+            <p className="line-clamp-2 text-xs leading-relaxed text-atlas-muted">{site.rationale}</p>
+          </div>
         )}
 
         <div className="ml-8 mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px]" data-testid="confidence-dimensions">
@@ -436,6 +446,7 @@ export function RankedSiteCard({
                         href={l.url}
                         target="_blank"
                         rel="noopener noreferrer"
+                        onClick={(event) => event.stopPropagation()}
                         className="shrink-0 rounded border border-atlas-border px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-atlas-muted transition hover:border-atlas-accent hover:text-atlas-text"
                       >
                         View →

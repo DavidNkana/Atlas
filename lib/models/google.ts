@@ -24,7 +24,7 @@ export function buildPrompt(req: ModelRequest): string {
     'If you cannot return JSON, return a natural prose answer that names real suburbs / streets / sites by name. ' +
     'Mention up to 5 real place names with their city context (e.g. "Observatory, Cape Town"). ' +
     'Use real-world coordinates where you know them; otherwise the Atlas parser will geocode the names from a known-cities catalog.\n\n' +
-    'Either way: rank candidate areas or proxy sites rather than consumer locations. Be specific about assumptions, evidence gaps, constraints, and the next diligence action. Do not imply parcel-level certainty.'
+    'Either way: rank candidate areas or proxy sites rather than consumer locations. The first rationale sentence for every site must answer why Atlas picked it for this brief and mention the development type, location/constraint, and strongest evidence or an explicit gap. Be specific about assumptions, evidence gaps, constraints, and the next diligence action. Do not imply parcel-level certainty.'
   );
 }
 

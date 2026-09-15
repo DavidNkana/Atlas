@@ -57,13 +57,13 @@ Return one JSON object only. Use this shape:
     "suburb": "optional suburb label",
     "score": 0.0,
     "confidence": 0.0,
-    "rationale": "why this candidate fits the brief and what remains unverified",
+     "rationale": "Sentence 1 must directly answer why Atlas picked this site: mention the requested development type, location or key constraint, and strongest supporting evidence or an explicit gap. Sentence 2 may add tradeoffs and what remains unverified.",
     "lat": 0.0,
     "lng": 0.0
   }]
 }
 
-Return 1-5 non-empty ranked_sites. Scores and confidence must be between 0 and 1. Do not invent parcels, prices, zoning, traffic, demographics, named businesses, coordinates, URLs, or other factual source data. Only use facts explicitly present in the question; otherwise describe a candidate as a hypothesis and put the missing fact in evidenceGaps. Never imply confirmed entitlement. The selected vertical and the full question are both part of the brief.`;
+ Return 1-5 non-empty ranked_sites. Scores and confidence must be between 0 and 1. The first rationale sentence for every site must directly answer why Atlas picked it by mentioning the requested development type, location or key constraint, and strongest supporting evidence or an explicit gap. Do not invent parcels, prices, zoning, traffic, demographics, named businesses, coordinates, URLs, or other factual source data. Only use facts explicitly present in the question; otherwise describe a candidate as a hypothesis and put the missing fact in evidenceGaps. Never imply confirmed entitlement. The selected vertical and the full question are both part of the brief.`;
 }
 
 function asStringArray(value: unknown): string[] | undefined {

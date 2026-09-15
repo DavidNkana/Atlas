@@ -43,7 +43,7 @@ Return STRICT JSON (no markdown, just the JSON):
   }]
 }
 
-Provide up to 5 ranked candidate areas or proxy sites. Use real suburb names, real property price bands, real school names, and real landmarks where evidenced. Write full paragraphs for each section and include assumptions, evidence gaps, constraints, and the next diligence action. Do not imply parcel-level certainty or a confirmed entitlement.`;
+ Provide up to 5 ranked candidate areas or proxy sites. The first rationale sentence for every site must directly answer why Atlas picked it for the user's development type and location/constraints, citing the strongest evidenced fit or an explicit gap. Use real suburb names, real property price bands, real school names, and real landmarks where evidenced. Write full paragraphs for each section and include assumptions, evidence gaps, constraints, and the next diligence action. Do not imply parcel-level certainty or a confirmed entitlement.`;
 }
 
 /**

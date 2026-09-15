@@ -16,7 +16,7 @@ export function buildPrompt(req: ModelRequest): string {
     '"advantages":{"economic":"1 paragraph: prices,business,spending","geographic":"1 paragraph: terrain,soil",' +
     '"logistical":"1 paragraph: roads,transport","demographic":"1 paragraph: population,income"},' +
     '"disadvantages":"1 paragraph: honest drawbacks","lat":0,"lng":0}]}\n' +
-    'Use candidate areas or proxy sites, not fabricated parcel certainty. Write full paragraphs and include assumptions, evidence gaps, constraints, and the next diligence action.'
+     'The first rationale sentence for every site must directly answer why Atlas picked it for this development brief, mentioning the development type, requested location/constraint, and strongest evidence or an explicit gap. Use candidate areas or proxy sites, not fabricated parcel certainty. Write full paragraphs and include assumptions, evidence gaps, constraints, and the next diligence action.'
   );
   if (req.imageBase64) {
     return base + '\n\nThe user attached an image (' + (req.imageMime || 'file') + '). Use it as context for your recommendations.';

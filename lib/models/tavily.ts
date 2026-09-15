@@ -89,7 +89,7 @@ export function buildSynthesisPrompt(req: ModelRequest, tavily: TavilyResponse):
     'VERTICAL: ' + humanVertical(req.vertical) + '\n\n' +
     'WEB SEARCH RESULTS (from Tavily, last 24-48h):\n' + contextLines + '\n\n' +
     'Your job: read the web sources above. Identify up to 5 candidate areas or proxy sites (suburbs, streets, neighbourhoods) that fit the development brief, not consumer locations. ' +
-    'For each place, write a 2-3 sentence rationale citing SPECIFIC facts from the web sources (school names, prices, distances, demographics). ' +
+     'For each place, write a 2-3 sentence rationale. Sentence 1 must directly answer why Atlas picked it for the requested development type and location/constraint, citing the strongest specific fact from the web sources or an explicit gap. ' +
     'Score 0.0-1.0 based on development fit, and state assumptions, evidence gaps, constraints, and the next diligence action. Do not imply parcel-level certainty.\n\n' +
     'Return STRICT JSON only (no markdown fences, no commentary):\n' +
     '{\n' +

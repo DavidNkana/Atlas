@@ -166,8 +166,54 @@ export default function ResultMapClient({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
+  const rankedMarkersRef = useRef(new Map<number, mapboxgl.Marker>());
+  const pendingSelectionRef = useRef<{ rank?: number; lat?: number; lng?: number } | null>(null);
   const [missingCoords, setMissingCoords] = useState<number>(0);
   const [tokenMissing, setTokenMissing] = useState<boolean>(false);
+
+  function scrollMapIntoView() {
+    const anchor = containerRef.current?.parentElement;
+    if (!anchor) return;
+    let scrollParent: HTMLElement | null = anchor.parentElement;
+    while (scrollParent && scrollParent !== document.body) {
+      const style = window.getComputedStyle(scrollParent);
+      if (/(auto|scroll)/.test(style.overflowY) && scrollParent.scrollHeight > scrollParent.clientHeight) break;
+      scrollParent = scrollParent.parentElement;
+    }
+    if (scrollParent && scrollParent !== document.body) {
+      const parentRect = scrollParent.getBoundingClientRect();
+      const anchorRect = anchor.getBoundingClientRect();
+      scrollParent.scrollTo({ top: scrollParent.scrollTop + anchorRect.top - parentRect.top - 16, behavior: "smooth" });
+    } else {
+      anchor.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }
+
+  function flyToSite(site: RankedSite | { rank?: number; lat?: number; lng?: number }) {
+    if (typeof site.lat !== "number" || typeof site.lng !== "number" || Number.isNaN(site.lat) || Number.isNaN(site.lng)) return;
+    const map = mapRef.current;
+    if (!map) {
+      pendingSelectionRef.current = site;
+      return;
+    }
+    map.flyTo({ center: [site.lng, site.lat], zoom: 14, duration: 1200 });
+    const marker = site.rank == null ? undefined : rankedMarkersRef.current.get(site.rank);
+    if (marker) {
+      const popup = marker.getPopup();
+      if (popup && !popup.isOpen()) marker.togglePopup();
+    }
+  }
+
+  useEffect(() => {
+    function onSiteSelected(event: Event) {
+      const detail = (event as CustomEvent<{ rank?: number; lat?: number; lng?: number }>).detail;
+      if (typeof detail?.lat !== "number" || typeof detail?.lng !== "number" || Number.isNaN(detail.lat) || Number.isNaN(detail.lng)) return;
+      scrollMapIntoView();
+      flyToSite(detail ?? {});
+    }
+    window.addEventListener("atlas:select-ranked-site", onSiteSelected);
+    return () => window.removeEventListener("atlas:select-ranked-site", onSiteSelected);
+  }, []);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -192,6 +238,7 @@ export default function ResultMapClient({
       // Clear any prior markers (HMR / re-render safety).
       markersRef.current.forEach((m) => m.remove());
       markersRef.current = [];
+      rankedMarkersRef.current.clear();
 
       const bounds = new mapboxgl.LngLatBounds();
       let placed = 0;
@@ -225,6 +272,7 @@ export default function ResultMapClient({
            .setPopup(new mapboxgl.Popup({ offset: 18 }).setHTML(popupHtml))
            .addTo(map);
         markersRef.current.push(marker);
+        rankedMarkersRef.current.set(site.rank, marker);
         bounds.extend(lngLat);
         placed += 1;
       }
@@ -405,41 +453,24 @@ export default function ResultMapClient({
           duration: 1500,
         });
       }
+      if (pendingSelectionRef.current) {
+        const pending = pendingSelectionRef.current;
+        pendingSelectionRef.current = null;
+        flyToSite(pending);
+      }
     });
 
     return () => {
       markersRef.current.forEach((m) => m.remove());
       markersRef.current = [];
+      rankedMarkersRef.current.clear();
       map.remove();
       mapRef.current = null;
     };
   }, [rankedSites, plots, liveListings, catalogListings]);
 
-  function flyToSite(site: RankedSite) {
-    const map = mapRef.current;
-    if (
-      !map ||
-      typeof site.lat !== "number" ||
-      typeof site.lng !== "number"
-    ) {
-      return;
-    }
-    map.flyTo({
-      center: [site.lng, site.lat],
-      zoom: 14,
-      duration: 1200,
-    });
-    const marker = markersRef.current[site.rank - 1];
-    if (marker) {
-      const popup = marker.getPopup();
-      if (popup && !popup.isOpen()) {
-        marker.togglePopup();
-      }
-    }
-  }
-
   return (
-    <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-3 text-zinc-100">
+    <div id="atlas-results-map" data-testid="atlas-results-map-section" className="scroll-mt-4 rounded-lg border border-zinc-800 bg-zinc-900 p-3 text-zinc-100">
       {/* The stub_demo banner is shown ONCE on the result page (top of
           the content area). Showing it again inside the map would
           duplicate the same message. The map just renders the sites. */}

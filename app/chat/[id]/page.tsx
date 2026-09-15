@@ -185,9 +185,10 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
                       score {s.score.toFixed(2)}
                     </span>
                   </div>
-                  <p className="mt-1 text-xs leading-relaxed text-atlas-muted">
-                    {s.rationale}
-                  </p>
+                  <div className="mt-1">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-atlas-accent">Why it ranks</p>
+                    <p className="text-xs leading-relaxed text-atlas-muted">{s.rationale}</p>
+                  </div>
                   {s.payload?.sourceUrls && s.payload.sourceUrls.length > 0 && (
                     <div className="mt-2 text-[10px]">
                       <span className="text-atlas-muted">cited in: </span>

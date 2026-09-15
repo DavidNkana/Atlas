@@ -174,6 +174,7 @@ for (const prompt of [
 ]) {
   assert.match(prompt, /development brief|development site-selection|land or redevelopment/i);
   assert.match(prompt, /assumptions|evidence gaps|constraints|diligence/i);
+  assert.match(prompt, /first rationale sentence/i);
   assert.doesNotMatch(prompt, /find the best|best location|searching for a|best suburb/i);
 }
 

@@ -52,7 +52,7 @@ Please answer in TWO parts:
 
 PART 1 — Prose summary: A 2-3 sentence answer that ranks candidate areas or proxy sites against the stated brief, criteria, tradeoffs, assumptions, evidence gaps, and constraints.
 
-PART 2 — Ranked opportunities list: 3-5 ranked candidate areas or proxy sites that fit. For each, give: name (e.g. "Constantia, Cape Town"), suburb, 2-3 sentence rationale naming real evidence, property price band, constraints, and decimal lat/lng coordinates so we can plot it on a map. End with the next diligence action. Do not imply a confirmed parcel or entitlement.
+ PART 2 — Ranked opportunities list: 3-5 ranked candidate areas or proxy sites that fit. For each, give: name (e.g. "Constantia, Cape Town"), suburb, 2-3 sentence rationale naming real evidence. The first rationale sentence must directly answer why Atlas picked the site for this brief by mentioning the development type, location/constraint, and strongest evidence or an explicit gap. Include property price band, constraints, and decimal lat/lng coordinates so we can plot it on a map. End with the next diligence action. Do not imply a confirmed parcel or entitlement.
 
 End with a line that starts with "SOURCES:" followed by the URLs you used, one per line.`,
     },
