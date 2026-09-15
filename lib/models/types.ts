@@ -43,6 +43,8 @@ export interface RankedSite {
     attribution?: string;
     [key: string]: unknown;
   };
+  /** Optional citations to the supplied, server-normalized listing evidence. */
+  listingEvidenceRefs?: Array<{ id: string; url: string }>;
   // Day 22: live listings matched to this site by suburb name.
   // Filled by the Tavily listings connector running in parallel
   // with the signal connectors. Max 3 entries (free-tier cap).
@@ -63,6 +65,25 @@ export interface RankedSite {
   }>;
 }
 
+/** Server-normalized facts from a live property listing, safe to give Luna. */
+export interface ListingEvidence {
+  id: string;
+  portal: string;
+  url: string;
+  title: string;
+  city: string | null;
+  suburb: string | null;
+  address: string | null;
+  priceAmount: number | null;
+  priceDisplay: string | null;
+  currency: string | null;
+  erfSize: string | null;
+  erfSizeM2: number | null;
+  /** Intentionally absent unless a portal truly supplies listing coordinates. */
+  coordinates?: { lat: number; lng: number };
+  fetchedAt: string;
+}
+
 export interface ModelRequest {
   vertical: Vertical;
   question: string;
@@ -70,6 +91,7 @@ export interface ModelRequest {
   imageMime?: string;
   /** Resolved server-side location; never supplied by the browser. */
   locationAnchor?: { label: string; parent: string; lat: number; lng: number };
+  listingEvidence?: ListingEvidence[];
 }
 
 export interface ModelInterpretation {

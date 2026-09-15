@@ -29,6 +29,7 @@ interface LiveListing {
   title: string;
   snippet: string;
   matchTier: 1 | 2 | 3;
+  fetchedAt?: string;
 }
 
 const PORTAL_LABEL: Record<string, string> = {
@@ -181,6 +182,11 @@ export default function LiveListingsGrid({
                 View listing →
               </a>
             </div>
+            {l.fetchedAt && (
+              <span className="font-mono text-[9px] text-atlas-muted">
+                Fetched {new Date(l.fetchedAt).toLocaleString()}
+              </span>
+            )}
           </li>
         ))}
       </ul>

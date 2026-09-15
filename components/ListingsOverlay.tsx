@@ -57,6 +57,7 @@ export interface TavilyListing {
   address: string | null;
   title: string;
   matchTier: 1 | 2 | 3;
+  fetchedAt?: string;
 }
 
 const PORTAL_LABEL: Record<string, string> = {
@@ -583,7 +584,7 @@ function TavilyListingsGrid({ listings }: { listings: TavilyListing[] }) {
           From SA property portals
         </h3>
         <span className="font-mono text-[10px] text-atlas-muted">
-          {listings.length} listing{listings.length === 1 ? "" : "s"} · powered by Tavily
+          {listings.length} listing{listings.length === 1 ? "" : "s"} · supplied to Luna · powered by Tavily
         </span>
       </div>
       <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -638,8 +639,14 @@ function TavilyCard({ listing: l }: { listing: TavilyListing }) {
               {l.price}
             </span>
           )}
-          {l.erfSize && <span className="text-atlas-muted"> · {l.erfSize}</span>}
+        {l.erfSize && <span className="text-atlas-muted"> · {l.erfSize}</span>}
         </p>
+
+        {l.fetchedAt && (
+          <p className="font-mono text-[9px] text-atlas-muted">
+            Fetched {new Date(l.fetchedAt).toLocaleString()}
+          </p>
+        )}
 
         {(l.bedrooms || l.bathrooms) && (
           <p className="text-[10px] text-atlas-muted">

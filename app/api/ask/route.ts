@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { getModel, MODEL_INFO, ALL_MODELS } from "@/lib/models/registry";
 import type { Model } from "@/lib/models/types";
 import { curatedStub, type StubPayload } from "@/lib/models/stub";
-import type { Vertical, ModelInfo, ModelInterpretation } from "@/lib/models/types";
+import type { Vertical, ModelInfo, ModelInterpretation, ListingEvidence } from "@/lib/models/types";
 import { getConnector } from "@/lib/connectors/registry";
 import type { Signal } from "@/lib/connectors/types";
 import { metadataForSource } from "@/lib/connectors/provenance";
@@ -26,6 +26,7 @@ import { coverageMultiplierForSources, evidenceCoverage } from "@/lib/reliabilit
 import { validatePrompt } from "@/lib/intent/validate";
 import { resolveCustomVertical } from "@/lib/scoring/custom-vertical";
 import { filterCandidatesToAnchor, resolveLocationAnchorAsync, validCoordinates, type LocationAnchor } from "@/lib/location/registry";
+import { fetchListingEvidence } from "@/lib/listings/evidence";
 import {
   CUSTOM_VERTICAL_RE,
   VERTICALS,
@@ -104,12 +105,9 @@ let partialUserId: string = "";
 // budget for the model call + cascade.
 const STEP_A_TIMEOUT_MS = 30_000;
 const STEP_B_TIMEOUT_MS = 25_000;
-// Day 22 v12: Tavily live-listings needs its OWN budget because
-// 7 parallel portal searches + extracts take 6-10s. The original
-// STEP_B_TIMEOUT_MS=5_000 budget was killing the fetcher before
-// it returned anything — which is why the UI showed Gemini's
-// reasoning but no Live listings section. Listings get 15s.
-const TAVILY_LISTINGS_TIMEOUT_MS = 15_000;
+// Stage 1: any legacy post-ranking listing fetch is also bounded. The
+// preferred pre-ranking evidence snapshot uses the same 8s budget.
+const TAVILY_LISTINGS_TIMEOUT_MS = 8_000;
 
 // Day 12 v4: per-model timeout dropped from 25s to 8s. The 25s
 // cap was originally set to give slow models (e.g. Gemini 3.5 Flash
@@ -201,6 +199,7 @@ type RankedSite = {
   evidenceCoverage?: number;
   evidenceConfidence?: number;
   rationale: string;
+  listingEvidenceRefs?: Array<{ id: string; url: string }>;
   lat?: number;
   lng?: number;
   /** Day 5 — populated by the scoring engine. */
@@ -253,6 +252,8 @@ type AskResponse = {
   /** Day 22 — when live listings are unavailable (no TAVILY key, or
    * Tavily failed). UI surfaces "live listings unavailable" badge. */
   liveListingsError?: string;
+  listingEvidence?: ListingEvidence[];
+  listingEvidenceDiagnostic?: "listing_evidence_gap";
   /** Day 5 — the plan we actually executed. */
   plan?: Plan;
   /** Day 5 — per-connector status. */
@@ -546,11 +547,37 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
   partialVertical = vertical;
   partialQuestionText = trimmedQuestion;
 
-  // 3. Resolve model — Luna is the primary when its server-side key exists.
-  // The client may still explicitly select another registered model.
+  // Stage 1: make a small, bounded live-listing snapshot available to Luna
+  // before it ranks. Explicit curated-stub mode remains completely offline.
   const requestedModelId = (model && typeof model === "string")
     ? model
     : (process.env.OPENAI_API_KEY ? "gpt-5.6-luna" : "curated-stub");
+  const requestedIsStub = requestedModelId === "curated-stub";
+  let listingEvidence: ListingEvidence[] = [];
+  let listingEvidenceDiagnostic: "listing_evidence_gap" | undefined;
+  let prefetchedLiveListings: LiveListing[] = [];
+  let listingsPrefetchCompleted = requestedIsStub;
+  if (!requestedIsStub && locationAnchor) {
+    const detectedCity = detectCity(trimmedQuestion);
+    const evidenceResult = await fetchListingEvidence({
+      city: {
+        name: detectedCity.name || locationAnchor.parent,
+        country: detectedCity.country || "South Africa",
+      },
+      suburb: locationAnchor.label,
+      vertical: effectiveVertical,
+      question: trimmedQuestion,
+    });
+    listingEvidence = evidenceResult.evidence;
+    prefetchedLiveListings = evidenceResult.liveListings;
+    listingEvidenceDiagnostic = evidenceResult.diagnostic;
+    listingsPrefetchCompleted = true;
+  } else if (!requestedIsStub) {
+    listingEvidenceDiagnostic = "listing_evidence_gap";
+  }
+
+  // 3. Resolve model — Luna is the primary when its server-side key exists.
+  // The client may still explicitly select another registered model.
   let activeModel: Model;
   let activeInfo: ModelInfo;
   let fallbackUsed = false;
@@ -582,7 +609,6 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
 
   // Day 5 hotfix — if the user picks the curated stub explicitly, we skip
   // the entire chain (it's already a stub).
-  const requestedIsStub = requestedModelId === "curated-stub";
 
   try {
     activeModel = getModel(requestedModelId);
@@ -666,6 +692,7 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
           imageBase64,
           imageMime,
           locationAnchor,
+          listingEvidence,
         }),
         modelTimeoutMs,
         "model:" + m.info.id,
@@ -996,7 +1023,7 @@ console.warn(`[/api/ask] empty provider ranking — using curated fallback: ${em
   let allConnectorsFailed = false;
   let plan: Plan | undefined;
   /** Day 22 — live listings fetched in parallel with signal connectors. */
-  let allLiveListings: LiveListing[] = [];
+  let allLiveListings: LiveListing[] = prefetchedLiveListings.slice();
   /** Day 22 — when Tavily fails for any reason; UI surfaces a non-fatal badge. */
   let liveListingsError: string | undefined;
 
@@ -1366,6 +1393,10 @@ console.warn(`[/api/ask] empty provider ranking — using curated fallback: ${em
   //      (e.g. "Sandton CBD, Johannesburg" → "Sandton CBD")
   //   3. detectCity(question).name — city-only fallback
   try {
+    if (listingsPrefetchCompleted) {
+      // The pre-ranking snapshot is also the post-ranking UI data. Do not
+      // spend a second Tavily search for the same request.
+    } else {
     const location = locationAnchor ?? deriveLocation(rankedSites);
     // deriveLocation returns {lat, lng, label} — use label, not name
     const cityName = (location?.label ?? null)?.replace(/\s*\(fallback\)\s*$/i, '') ?? null;
@@ -1444,6 +1475,7 @@ console.warn(`[/api/ask] empty provider ranking — using curated fallback: ${em
       seen.add(l.url);
       return true;
     });
+    }
   } catch (tavilyErr) {
     console.warn("[/api/ask] tavily-listings failed (non-fatal):", tavilyErr);
     liveListingsError = String(tavilyErr instanceof Error ? tavilyErr.message : tavilyErr);
@@ -1500,15 +1532,13 @@ console.warn(`[/api/ask] empty provider ranking — using curated fallback: ${em
       }
       unassignedIndex += 1;
     }
-    // Apply map back to sites — and stamp each listing with the
-    // site's lat/lng so the map can plot real listing locations.
+    // Apply map back to sites. Listings have no coordinates unless the
+    // portal supplied them; a site anchor must never be copied onto a listing.
     for (const site of rankedSites) {
       const matched = siteListingsMap.get(site.rank);
       if (matched && matched.length > 0) {
         (site as any).liveListings = matched.slice(0, 3).map((l: any) => ({
           ...l,
-          lat: site.lat,
-          lng: site.lng,
         }));
       }
     }
@@ -1567,6 +1597,8 @@ console.warn(`[/api/ask] empty provider ranking — using curated fallback: ${em
     // all listings regardless of site.
     liveListings: allLiveListings.length > 0 ? allLiveListings : undefined,
     liveListingsError: allLiveListings.length === 0 ? liveListingsError : undefined,
+    listingEvidence: listingEvidence.length > 0 ? listingEvidence : undefined,
+    listingEvidenceDiagnostic,
     connectorsRun,
     confidenceWarning,
     confidenceDimensions: {

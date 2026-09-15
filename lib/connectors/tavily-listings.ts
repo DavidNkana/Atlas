@@ -44,6 +44,7 @@ export interface LiveListing {
   title: string; // raw listing title from portal
   snippet: string; // short excerpt from the page
   matchTier: 1 | 2 | 3; // exact, fuzzy, city-only
+  fetchedAt?: string;
 }
 
 export interface ListingsFetchOptions {
@@ -54,6 +55,8 @@ export interface ListingsFetchOptions {
   priceBand?: string | null;
   /** Optional plot size hint from REAL_SITE_CATALOG, e.g. 2.5 (hectares) */
   plotSizeHectares?: number | null;
+  /** Natural-language brief, including budget/location constraints. */
+  question?: string;
   /** Free-tier credit cap. Default 10. */
   creditBudget?: number;
   /** Max listings per suburb. Default 3. */
@@ -187,7 +190,10 @@ export function buildListingsQuery(opts: ListingsFetchOptions): {
     sizeHint = ` erf ${m2.toLocaleString()} m2`;
   }
 
-  const base = `${primaryKw} ${secondaryKw} ${locationParts}${sizeHint}`.trim();
+  const briefHint = opts.question
+    ? ` ${opts.question.replace(/[\r\n]+/g, " ").slice(0, 280)}`
+    : "";
+  const base = `${primaryKw} ${secondaryKw} ${locationParts}${sizeHint}${briefHint}`.trim();
 
   // Pick portals based on the detected country. South Africa uses the
   // site:-restricted SA portals (Property24, PrivateProperty, etc.).
@@ -886,7 +892,7 @@ async function tavilySearch(
     }),
   });
   if (!res.ok) {
-    console.warn(`[tavily] search ${res.status}: ${await res.text().catch(() => "")}`);
+    console.warn(`[tavily] search ${res.status}`);
     return [];
   }
   const data = await res.json();
@@ -911,7 +917,7 @@ async function tavilyExtract(
     }),
   });
   if (!res.ok) {
-    console.warn(`[tavily] extract ${res.status}: ${await res.text().catch(() => "")}`);
+    console.warn(`[tavily] extract ${res.status}`);
     return [];
   }
   const data = await res.json();

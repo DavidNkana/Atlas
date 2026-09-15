@@ -185,6 +185,8 @@ type ResponseBody = {
   // Day 12 v16 — research answer + citations from Gemini Search.
   answer?: string;
   sources?: Array<{ title?: string; url: string }>;
+  listingEvidence?: Array<{ id: string; portal: string; url: string; fetchedAt: string }>;
+  listingEvidenceDiagnostic?: "listing_evidence_gap";
   // Day 17 v6 — intent classification for routing to /chat/[id].
   intent?: "spatial" | "conversational";
   intentScore?: {
