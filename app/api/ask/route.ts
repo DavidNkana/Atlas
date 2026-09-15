@@ -23,6 +23,14 @@ import { sanitizeForJson } from "@/lib/util/json-sanitize";
 import { detectCity } from "@/lib/stub/detect";
 import { confidenceWarningForSites } from "@/lib/reliability/empty-ranking";
 import { coverageMultiplierForSources, evidenceCoverage } from "@/lib/reliability/confidence";
+import { validatePrompt } from "@/lib/intent/validate";
+import { resolveCustomVertical } from "@/lib/scoring/custom-vertical";
+import {
+  CUSTOM_VERTICAL_RE,
+  VERTICALS,
+  isSupportedVertical,
+  type AtlasVertical,
+} from "@/lib/verticals";
 
 /**
  * Day 5 hotfix — handler-level budget.
@@ -293,36 +301,9 @@ type AskResponse = {
  * (`as Vertical` in a few places) for downstream type compatibility
  * with lib/models/types.ts but accept any string at the edge.
  */
-type AskVertical = Vertical | `custom:${string}`;
+type AskVertical = AtlasVertical;
 
-const SUPPORTED_VERTICALS = new Set<Vertical>([
-  // Day 1-8 verticals (the 4 chip-buttons at the top of the home page)
-  "gas_station",
-  "restaurant",
-  "warehouse",
-  "retail_shop",
-  // Day 9: land verticals suggested by the vertical-mismatch modal
-  // when the user's question clearly points to a different vertical
-  // than the one selected. The mismatch modal's "Switch to {suggested}"
-  // button sets the vertical to one of these and auto-submits — if
-  // we don't accept them here, the route returns 401 "Unsupported
-  // vertical" which the page misinterprets as a sign-in error.
-  "residential_land",
-  "commercial_land",
-  "agricultural_land",
-  "industrial_land",
-  "mixed_use_land",
-  "civic_land",
-]);
-
-/**
- * Custom verticals are user-defined (e.g. "residential_land", "office_block").
- * They are opaque tokens the API forwards through to the model and the
- * scoring engine — neither knows how to score them, so the connectors
- * gracefully degrade to the cross-vertical query and the stub returns
- * generic templates. The user gets an answer, just not a vertical-tuned one.
- */
-const CUSTOM_VERTICAL_RE = /^custom:[a-z][a-z0-9_]{1,39}$/;
+const SUPPORTED_VERTICALS = new Set<Vertical>(VERTICALS as readonly Vertical[]);
 
 /**
  * Custom verticals are user-defined (e.g. "residential_land", "office_block").
@@ -518,16 +499,30 @@ async function handleAsk(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // For downstream code, narrow custom verticals to a generic "fallback"
-  // behaviour: connectors fire with their default radius / query and the
-  // stub generator uses generic town-centre templates. The user's custom
-  // value is preserved in the response.vertical field so the UI can
-  // display it correctly.
-  const effectiveVertical: Vertical =
-    (SUPPORTED_VERTICALS.has(vertical as Vertical) ? vertical : "retail_shop") as Vertical;
-  const isCustom = !SUPPORTED_VERTICALS.has(vertical as Vertical);
-
   const trimmedQuestion = question.trim();
+  const validation = validatePrompt(vertical, trimmedQuestion);
+  if (!validation.ok) {
+    return NextResponse.json(
+      {
+        ok: false,
+        code: validation.code,
+        error: validation.details.reason,
+        details: validation.details,
+        vertical,
+        question: trimmedQuestion,
+      },
+      { status: 422 },
+    );
+  }
+
+  // Keep the user's validated vertical in the response while routing known
+  // custom briefs through the closest built-in connector/scoring profile.
+  // Unknown custom values use the neutral retail profile rather than being
+  // silently treated as gas stations.
+  const effectiveVertical: Vertical = isSupportedVertical(vertical)
+    ? vertical
+    : (resolveCustomVertical(vertical) ?? "retail_shop");
+
   // Mirror to module-level vars so the outer POST can persist
   // a Question row on partial_timeout.
   partialVertical = vertical;

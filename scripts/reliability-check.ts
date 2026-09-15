@@ -14,8 +14,53 @@ import { curatedStub } from "@/lib/models/stub";
 import { applyConfidenceGate, confidenceWarningForSites, hasLabeledEmptyRanking } from "@/lib/reliability/empty-ranking";
 import { applyCompetitorAuthority } from "@/lib/connectors/competitor-authority";
 import { evidenceCoverage } from "@/lib/reliability/confidence";
+import { validatePrompt } from "@/lib/intent/validate";
 
 async function main() {
+// Prompt validation is server-side and must happen before any model/stub path.
+const unrelated = validatePrompt("gas_station", "what is pussy");
+assert.equal(unrelated.ok, false);
+if (!unrelated.ok) {
+  assert.equal(unrelated.status, "invalid_prompt");
+  assert.equal(unrelated.code, "invalid_prompt");
+}
+
+const restaurantBrief = validatePrompt(
+  "restaurant",
+  "Identify a restaurant development site in Pretoria Hatfield for a student-oriented scheme; assess zoning, access, demand, and competition.",
+);
+assert.equal(restaurantBrief.ok, true);
+if (restaurantBrief.ok) assert.equal(restaurantBrief.status, "valid");
+
+const warehouseMismatch = validatePrompt(
+  "gas_station",
+  "Where in Durban should I develop a warehouse and logistics facility?",
+);
+assert.equal(warehouseMismatch.ok, false);
+if (!warehouseMismatch.ok) {
+  assert.equal(warehouseMismatch.status, "vertical_mismatch");
+  assert.equal(warehouseMismatch.code, "vertical_mismatch");
+}
+
+const warehouseClarification = validatePrompt("gas_station", "I am considering a warehouse");
+assert.equal(warehouseClarification.ok, false);
+if (!warehouseClarification.ok) assert.equal(warehouseClarification.status, "needs_clarification");
+
+const customBrief = validatePrompt(
+  "custom:cold_storage",
+  "Develop a cold-storage project near Durban; identify suitable industrial sites and assess power, access, zoning, and demand.",
+);
+assert.equal(customBrief.ok, true);
+if (customBrief.ok) assert.equal(customBrief.status, "valid");
+
+for (const missing of [
+  validatePrompt("restaurant", "Find a restaurant site"),
+  validatePrompt("restaurant", "In Cape Town"),
+]) {
+  assert.equal(missing.ok, false);
+  if (!missing.ok) assert.equal(missing.code, "needs_clarification");
+}
+
 const sites = [
   { id: "alpha", rank: 1, name: "Alpha", lat: -33, lng: 18 },
   { id: "beta", rank: 2, name: "Beta", lat: -34, lng: 19 },

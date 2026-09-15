@@ -75,6 +75,15 @@ export const CUSTOM_VERTICAL_KEYWORDS: Record<string, Vertical> = {
   event_venue: "commercial_land",
   conference_centre: "commercial_land",
 
+  // logistics / storage
+  warehouse: "warehouse",
+  storage: "warehouse",
+  cold_storage: "warehouse",
+  cold_store: "warehouse",
+  logistics: "warehouse",
+  distribution: "warehouse",
+  depot: "warehouse",
+
   // agricultural / farm
   farm: "agricultural_land",
   "game farm": "agricultural_land",

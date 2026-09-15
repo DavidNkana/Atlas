@@ -11,7 +11,6 @@ import { AppShell } from "@/components/AppShell";
 import { ThinkingLoader } from "@/components/ThinkingLoader";
 import { ChatGPTThinking } from "@/components/ChatGPTThinking";
 import { ModelIcon } from "@/components/ModelIcon";
-import { suggestVertical } from "@/components/VerticalMismatchModal";
 import { AuthGateModal } from "@/components/AuthGateModal";
 import { QuestionGallery } from "@/components/QuestionGallery";
 import { TypewriterMoat } from "@/components/TypewriterMoat";
@@ -53,6 +52,18 @@ const PLACEHOLDER_PHRASES = [
 
 type BuiltinVertical = (typeof BUILTIN_VERTICALS)[number]["value"];
 type Vertical = BuiltinVertical | `custom:${string}`;
+
+type ValidationFeedback = {
+  code: "invalid_prompt" | "needs_clarification" | "vertical_mismatch";
+  error: string;
+  details?: {
+    reason?: string;
+    example?: string;
+    suggestedVertical?: string;
+    matchedVertical?: string;
+    signals?: string[];
+  };
+};
 
 const MAX_CUSTOM_VERTICAL_LEN = 40;
 const CUSTOM_VERTICAL_RE = /^[a-z][a-z0-9_]{1,39}$/;
@@ -203,6 +214,7 @@ export default function HomePage() {
   };
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [validationFeedback, setValidationFeedback] = useState<ValidationFeedback | null>(null);
   const [showThinkingLoader, setShowThinkingLoader] = useState<boolean>(
     DEFAULT_PREFS.showThinkingLoader
   );
@@ -395,6 +407,7 @@ export default function HomePage() {
     function onNew() {
       setQuestion("");
       setError(null);
+      setValidationFeedback(null);
       setLoading(false);
       if (typeof window !== "undefined")
         window.scrollTo({ top: 0, behavior: "smooth" });
@@ -472,25 +485,11 @@ export default function HomePage() {
     // a keyword list punished valid questions the list didn't know
     // about; a weak answer is a better failure mode than a wall.
 
-    // Vertical mismatch is now non-blocking: if the question clearly
-    // points at another vertical we silently switch to it and carry
-    // on. No modal, no decision to make. Custom verticals are
-    // user-defined, so we never second-guess those.
-    let effectiveVertical: Vertical = vertical;
-    if (!isCustomVertical(vertical)) {
-      const suggested = suggestVertical(question.trim(), vertical);
-      if (suggested) {
-        effectiveVertical = suggested as Vertical;
-        setVertical(effectiveVertical);
-      }
-    }
-
     setLoading(true);
     setError(null);
+    setValidationFeedback(null);
 
-    // Pass the vertical explicitly — setVertical() above won't have
-    // landed in this closure yet.
-    await doSubmit({ vertical: effectiveVertical });
+    await doSubmit();
   }
 
   // The actual request. Kept separate from onSubmit so the optional
@@ -530,6 +529,17 @@ export default function HomePage() {
           setError("Please sign in to ask questions");
         } else {
           setError(errData.error || `Request failed: ${res.status}`);
+        }
+        setLoading(false);
+        return;
+      }
+
+      if (res.status === 422) {
+        const validation = await res.json().catch(() => ({}));
+        if (validation?.code) {
+          setValidationFeedback(validation as ValidationFeedback);
+        } else {
+          setError(validation?.error || `Request failed: ${res.status}`);
         }
         setLoading(false);
         return;
@@ -1040,6 +1050,7 @@ export default function HomePage() {
                       setQuestion(pick.question);
                       setVertical(pick.vertical as Vertical);
                       setError(null);
+                      setValidationFeedback(null);
                       setTimeout(() => inputRef.current?.focus(), 50);
                     }}
                   />
@@ -1048,6 +1059,45 @@ export default function HomePage() {
                 {error && (
                   <div className="mt-4 rounded-md border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
                     {error}
+                  </div>
+                )}
+                {validationFeedback && (
+                  <div className="mt-4 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-100" role="alert">
+                    <div className="font-medium">
+                      {validationFeedback.code === "vertical_mismatch"
+                        ? "This brief does not match the selected vertical."
+                        : validationFeedback.code === "needs_clarification"
+                          ? "Add a little more detail so Atlas can search the right sites."
+                          : "Atlas is focused on development and site selection."}
+                    </div>
+                    <p className="mt-1 text-xs text-amber-100/80">
+                      {validationFeedback.error || validationFeedback.details?.reason}
+                    </p>
+                    {validationFeedback.details?.example && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setQuestion(validationFeedback.details?.example ?? "");
+                          setValidationFeedback(null);
+                          inputRef.current?.focus();
+                        }}
+                        className="mt-2 block text-left text-xs text-atlas-accent hover:underline"
+                      >
+                        Try an example: “{validationFeedback.details.example}”
+                      </button>
+                    )}
+                    {validationFeedback.code === "vertical_mismatch" && validationFeedback.details?.suggestedVertical && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setVertical(validationFeedback.details?.suggestedVertical as Vertical);
+                          setValidationFeedback(null);
+                        }}
+                        className="mt-3 rounded-md bg-atlas-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-atlas-accent2"
+                      >
+                        Switch to {customVerticalLabel(validationFeedback.details.suggestedVertical)}
+                      </button>
+                    )}
                   </div>
                 )}
               </form>
